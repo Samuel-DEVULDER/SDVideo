@@ -1,8 +1,8 @@
 -- conversion fichier video en fichier sd-drive
 --
--- version alpha 0.05
+-- version alpha 0.07
 ---
--- Samuel DEVULDER Aout-Sept 2018
+-- Samuel DEVULDER Aout-Oct 2018
 
 -- code experimental. essaye de determiner
 -- les meilleurs parametres (fps, taille ecran
@@ -24,18 +24,30 @@ local function round(x)
 	return math.floor(x+.5)
 end
 
-local BUFFER_SIZE = 4096
-local FPS_MAX = 30
+local BUFFER_SIZE   = 4096
+local FPS_MAX       = 30
+local TIMEOUT       = 2
+local GRAY_THR      = .1 -- .07
+local FILTER_DEPTH  = 1
+local MAX_AUDIO_AMP = 16
+
 local tmp = 'tmp'
 local img_pattern =  tmp..'/img%05d.bmp'
 local cycles = 199 -- cycles par échantillons audio
 local hz = round(8000000/cycles)/8
-local fps = 13
+local fps = 12
 local gray = nil
-local interlace = false --gray	
-local dither = 2
+local interlace = nil	
+local dither = -8
 local ffmpeg = 'tools\\ffmpeg'
 local mode = 'p'
+
+local SPECIAL_4 = false -- true
+
+if SPECIAL_4 then
+	gray = true
+	dither = 3
+end
 
 local file = arg[1]:gsub('^/cygdrive/(%w)/','%1:/')
 
@@ -149,6 +161,19 @@ elseif mode=='3' then
 		table.insert(t, lines[i])
 	end
 	lines = t
+elseif mode=='I' then
+	local t = {}
+	for i=1,#lines,6 do
+		table.insert(t, lines[i])
+		table.insert(t, lines[i+1])
+		table.insert(t, lines[i+2])
+	end
+	for i=4,#lines,6 do
+		table.insert(t, lines[i])
+		table.insert(t, lines[i+1])
+		table.insert(t, lines[i+2])
+	end
+	lines = t
 elseif mode=='ipi' then
 	local t = {}
 	for i=1+math.floor(#lines/3),math.floor(2*#lines/3) do
@@ -231,9 +256,12 @@ end
 -- flux audio
 local AUDIO = {}
 function AUDIO:new(file, hz)
+	hz=round(8*hz)
 	local o = {
-		stream = assert(io.popen(ffmpeg..' -i "'..file ..'" -v 0 -f u8 -ac 1 -ar '..round(8*hz)..' -acodec pcm_u8 pipe:', 'rb')),
-		cor = {8,255}, -- volume auto
+		hz = hz,
+		stream = assert(io.popen(ffmpeg..' -i "'..file ..'" -v 0 -f u8 -ac 1 -ar '..hz..' -acodec pcm_u8 pipe:', 'rb')),
+		amp = MAX_AUDIO_AMP, -- volume auto
+		min = 255,
 		buf = '', -- buffer
 		running = true
 	}
@@ -254,16 +282,30 @@ function AUDIO:next_sample()
 		end
 		buf = buf .. t
 	end
+	function sample(offset)
+		return ((buf:byte(offset)+128)%256)-128
+	end
+	-- print(buf:byte(1), sample(1))
 	local v = (buf:byte(1) + buf:byte(2) + buf:byte(3) + buf:byte(4) +
-	           buf:byte(5) + buf:byte(6) + buf:byte(7) + buf:byte(8))*.125
+	           buf:byte(5) + buf:byte(6) + buf:byte(7) + buf:byte(8))*.125 
 	self.buf = buf:sub(9)
+
+	v = v - self.min
+	if v<0 then
+		self.min = .3*v + self.min
+		v = 0
+	else
+		self.min = v/self.hz + self.min
+	end
+	
 	-- auto volume
-	if v<self.cor[2]     then self.cor[2]=v end
-	v = v-self.cor[2]
-	if v*self.cor[1]>255 then self.cor[1]=255/v end
-	v = v*self.cor[1]
+	self.amp = self.amp*(1 + 1/self.hz)
+	if self.amp>MAX_AUDIO_AMP then self.amp = MAX_AUDIO_AMP end
+	local z=v*self.amp
+	if z>255 then z=255; self.amp = 255/v end
+	-- print(vv,self.amp)
 	-- dither
-	v = math.max(math.min(v/4 + math.random() + math.random() - 1, 63),0)
+	v = math.max(math.min(z/4 + math.random() + math.random() - 1, 63),0)
 	return math.floor(v)
 end
 
@@ -284,13 +326,17 @@ end
 function FILTER:flush()
 	-- for i=#self.t,1,-1 do self.t[i]=nil end
 	-- self.t = {}
-	for i=3,#self.t do table.remove(self.t,1) end
+	for i=FILTER_DEPTH,#self.t do table.remove(self.t,1) end
 end
 
 function FILTER:byte(offset)
 	local m = #self.t
 	if m==1 then
 		return self.t[1]:byte(offset)
+	elseif m==2 then
+		return math.floor(.5+(self.t[1]:byte(offset)+2*self.t[2]:byte(offset))*.3333333)
+	elseif m==3 then
+		return math.floor(.5+(self.t[1]:byte(offset)+2*self.t[2]:byte(offset)+3*self.t[3]:byte(offset))*.16666666)
 	else
 		local v,d = 0,0
 		for i=1,m do 
@@ -361,25 +407,161 @@ function VIDEO:init_dither()
 		end
 		return d
 	end
+	
+	local function vac(n,m)
+		math.randomseed(os.time())
+		local function mat(w,h)
+			local t={}
+			for i=1,h do
+				local r={}
+				for j=1,w do
+					table.insert(r,0)
+				end
+				table.insert(t,r)
+			end
+			t.mt={}
+			setmetatable(t, t.mt)
+			function t.mt.__tostring(t) 
+				local s=''
+				for i=1,#t do
+					for j=1,#t[1] do
+						if j>1 then s=s..',' end
+						s = s..string.format("%9.6f",t[i][j])
+					end
+					s = s..'\n'
+				end
+				return s
+			end
+			return t
+		end
+		local function rangexy(w,h)
+			local l = {}
+			for y=1,h do 
+				for x=1,w do
+					table.insert(l,{x,y})
+				end
+			end
+			local size = #l
+			for i = size, 2, -1 do
+				local j = math.random(i)
+				l[i], l[j] = l[j], l[i]
+			end
+			local i=0
+			return function() 
+				i = i + 1
+				if i<=size then
+					-- print(i, l[i][1], l[i][2]	)
+					return l[i][1], l[i][2]
+				else
+					-- print("")
+				end
+			end
+		end
+		local function makegauss(w,h)
+		    local w2 = math.ceil(w/2)
+			local h2 = math.ceil(h/2)
+			local m = mat(w,h)
+			for x,y in rangexy(w, h) do
+				local i = ((x-1+w2)%w)-w/2
+				local j = ((y-1+h2)%h)-h/2
+				m[y][x] = math.exp(-40*(i^2+j^2)/(w*h))
+			end
+			-- print(m)
+			return m
+		end
+		local function countones(m)
+			local t=0
+			for _,l in ipairs(m) do
+				for _,x in ipairs(l) do
+					if x>0.5 then t=t+1 end
+				end
+			end
+			return t
+		end
+		local GAUSS = makegauss(n,m)
+		local function getminmax(m, c)
+			local min,max,max_x,max_y,min_x,min_y=1e38,0
+			local h,w = #m, #m[1]
+			local z = mat(w,h)
+			for x,y in rangexy(w,h) do
+				if math.abs(m[y][x]-c)<0.5 then
+					local t=0
+					for i,j in rangexy(#GAUSS[1],#GAUSS) do
+						if m[1+((y+j-2)%h)][1+((x+i-2)%w)]>0.5 then
+							t = t + GAUSS[j][i]
+						end
+					end
+					z[y][x] = t
+					if t>max then max,max_x,max_y = t,x,y end
+					if t<min then min,min_x,min_y = t,x,y end
+				end
+			end
+			-- print(m)
+			-- print(z)
+			-- print(max,max_y,max_x, c)
+			-- print(min,min_y,min_x)
+			return min_x, min_y, max_x, max_y
+		end
+		local function makeuniform(n,m)
+			local t = mat(n,m)
+			for i=0,math.floor(m*n/10) do
+				t[math.random(n)][math.random(m)] = 1
+			end
+			for i=1,m*n*10 do
+				local a1,b1,x1,y1 = getminmax(t,1)
+				t[y1][x1] = 0
+				local x2,y2,a2,b2 = getminmax(t,0)
+				t[y2][x2] = 1
+				-- print(t)
+				if x1==x2 and y1==y2 then break end
+			end
+			return t
+		end
+		
+		local vnc = mat(n,m)
+		local m2  = mat(n,m)
+		local m1  = makeuniform(n,m)
+		local rank = countones(m1)
+		for x,y in rangexy(n,m) do m2[y][x] = m1[y][x] end
+		for r=rank,1,-1 do
+			local a,b,x,y = getminmax(m1,1)
+			m1[y][x] = 0
+			-- print(m1)
+			vnc[y][x] = r
+		end
+		for r=rank+1,n*m do
+			local x,y,a,b = getminmax(m2,0)
+			m2[y][x] = 1
+			-- print(m2)
+			vnc[y][x] = r
+		end
+		-- print(vnc)
+		return vnc
+	end
+	
 	local m = {{1}}
 	-- m={{1,3},{3,1}}
 	for i=1,dither do m = bayer(m) end
-	local x = 0
-	for i=1,#m do
-		for j=1,#m[1] do
-			x = math.max(x, m[i][j])
-		end
-	end
-	x = 1/(x + 1)
-	for i = 1,#m do
-		for j = 1,#m[1] do
-			m[i][j] = m[i][j]*x
-		end
-	end
+	if dither<0 then m = vac(-dither,-dither) end
+	
 	m.w = #m
 	m.h = #m[1]
 	function m:get(i,j)
 		return self[1+(i % self.w)][1+(j % self.h)]
+	end
+	
+	local x = 0
+	for i=1,m.w do
+		for j=1,m.h do
+			-- print(m[i][j])
+			x = math.max(x, m[i][j])
+		end
+	end
+	x = 1/(x + 1)
+	for i = 1,m.w do
+		for j = 1,m.h do
+			m[i][j] = m[i][j]*x
+		end
 	end
 	self.dither = m
 end
@@ -428,21 +610,38 @@ function VIDEO:pset(x,y, r,g,b)
 	end
 	
 	if self.gray then
-		r = (.2126*r + .7152*g + .0722*b)*9 + d
-		if     r>=4 then	v(3)
-		elseif r>=2 then	v(2)
-		elseif r>=1 then	v(1)
-		else 				v(0)	
-		end
-		if     r>=7 then	v(3)
-		elseif r>=5 then	v(2)
-		elseif r>=3 then	v(1)
-		else 				v(0)	
-		end
-		if     r>=9 then	v(3)
-		elseif r>=8 then	v(2)
-		elseif r>=6 then	v(1)
-		else 				v(0)	
+		if SPECIAL_4 then
+			r = (.2126*r + .7152*g + .0722*b)*3 + d
+			if     r>=2 then	v(3)
+			elseif r>=1 then	v(2)
+			else 				v(0)	
+			end
+			if     r>=3 then	v(3)
+			elseif r>=2 then	v(2)
+			elseif r>=1 then	v(1)
+			else 				v(0)	
+			end
+			if     r>=3 then	v(3)
+			elseif r>=2 then	v(1)
+			else 				v(0)	
+			end
+		else
+			r = (.2126*r + .7152*g + .0722*b)*9 + d
+			if     r>=4 then	v(3)
+			elseif r>=2 then	v(2)
+			elseif r>=1 then	v(1)
+			else 				v(0)	
+			end
+			if     r>=7 then	v(3)
+			elseif r>=5 then	v(2)
+			elseif r>=3 then	v(1)
+			else 				v(0)	
+			end
+			if     r>=9 then	v(3)
+			elseif r>=8 then	v(2)
+			elseif r>=6 then	v(1)
+			else 				v(0)	
+			end
 		end
 	else
 		v(math.floor(r*3 + d))
@@ -528,7 +727,7 @@ function VIDEO:next_image()
 		
 	-- si pas la bonne taille, on nourrit ffmpeg
 	-- jusqu'a obtenir un fichier BMP complet
-	local timeout = 5
+	local timeout = TIMEOUT
 	while buf:len() ~= self.expected_size and timeout>0 do
 		buf = self.streams.inp:read(BUFFER_SIZE)
 		if buf then
@@ -548,7 +747,7 @@ function VIDEO:next_image()
 		if f then 
 			buf = f:read(self.expected_size) or ''
 			f:close()
-			timeout = 5
+			timeout = TIMEOUT
 		else
 			buf = ''
 		end
@@ -676,14 +875,14 @@ if gray==nil then
 	e = e + math.sqrt(m.b2 - m.b1*m.b1)
 	e = e/3
 	
-	gray = e<.07
+	gray = e<GRAY_THR
 	-- print(gray,e)
 	-- print(m.r1, m.g1, m.b1)
 	-- if not gray then os.exit() end
 end
 
 local max_trames = 1000000/fps/cycles
-local avg_trames = (stat.trames/stat.cpt) * 1.08 -- 001 -- 0.11% safety margin
+local avg_trames = (stat.trames/stat.cpt) * 1.03 -- 001 -- 0.11% safety margin
 local ratio = max_trames / avg_trames
 -- print(ratio)
 if ratio>1 then
@@ -835,11 +1034,11 @@ while audio.running do
 	if video.cpt % video.fps == 0 then
 		tstamp = tstamp + 1
 		local d = os.time() - start
-		local t = "> %d%% %s (%3.1fx) e=%5.3f a=(x%+d)*%.1g"
+		local t = "> %d%% %s (%3.1fx) e=%5.3f a=(x%+d)*%-3.1f"
 		t = t:format(
 			percent(tstamp/duration), hms(tstamp),
 			round(100*tstamp/(d==0 and 100000 or d))/100, completed_imgs/video.cpt,
-			-audio.cor[2], audio.cor[1]
+			-audio.min, audio.amp
 			)
 		local etc = d*(duration-tstamp)/tstamp
 		local etr = etc>=90 and 10 or 5
