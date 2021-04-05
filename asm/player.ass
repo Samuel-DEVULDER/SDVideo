@@ -287,9 +287,15 @@ INIT8
   TFR   DP,A          valeur de DP dans A
   LDB   #$51          adresse de SD_LB0 version recente
   TFR   D,X           stockee dans le registre X   
+
   LDB   <$58          SD_SEL contient $55 depuis 20180702   
   CMPB  #$55          test version 20180702 ou plus recente
   BEQ   INIT9         version recente
+  
+  LDB   <$57          ; SD_SEL en $6057 b0-b7 depuis 20210212   
+  ANDB  #$7F          ; isole b0-b6 
+  CMPB  #$55          ; test version 20210212 ou plus recente
+  BEQ   INIT9         ; version 20210212 ou plus recente
   LDB   #$8E          adresse SD_LB0 des versions anciennes
   TFR   D,X           stockage dans le registre X
 

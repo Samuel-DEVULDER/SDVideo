@@ -38,7 +38,7 @@ local hz = round(8000000/cycles)/8
 local fps = 12
 local gray = nil
 local interlace = nil	
-local dither = -8
+local dither = 8 -- -8
 local ffmpeg = 'tools\\ffmpeg'
 local mode = 'p'
 
