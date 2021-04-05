@@ -1,0 +1,57 @@
+(main)BOOTBLK.ASM
+***************************************
+* Boot bloc. Il charge 4Ko dans les 
+* secteurs suivants de la diskette en
+* $9000-$9FFF, positionne la pile au
+* debut du code et saute en $9000.
+* Marche sur TO ou MO. En cas d'erreur
+* un reset est effectue.
+*
+* Compilation avec:
+* - c6809 (-c -am -oOP)
+*   http://www.pulsdemos.com/c6809.html
+* - macro assembler 3.6 (A/IM)
+*   http://tinyurl.com/btqz57a
+*
+* Samuel Devulder Aout 2018
+***************************************
+
+  SETDP $60
+  ORG   $6200
+  
+* 128 octets bien specifique sautant
+* en INI (offset $80) et etant reconnus
+* par le basic 1 ou le basic 2 comme 
+* un secteur de boot.
+  FCB   -$20    oppose de "bra ini"
+  FCB   -$7E    
+  RMB	126-8,0
+  FCC   /BASIC2/
+  FCB   0,$5F     checksum
+
+* offset $80: code libre
+INI
+  LDD   #$9100  adresse chargement
+  STD   <$604F
+  STB   <$60FE  commande le demarrage a froid
+  STB   <$60FF  commande le demarrage a froid
+  INC   <$60D1
+  TFR   D,S
+
+  LDA   #2		
+  STA   <$6048  lecture secteur
+  STA   <$604C  secteur suivant
+  LDA   #15
+LOOP
+  LBSR  $E004  charge secteur
+  BCS   RESET
+  INC   <$604C  secteur suivant
+  INC   <$604F  256 octets plus loin
+  DECA
+  BNE   LOOP
+  JMP   ,S      go
+RESET
+  JMP   [$FFFE]  
+  RMB   $6300-*,0
+
+  END
