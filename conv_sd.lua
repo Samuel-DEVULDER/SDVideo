@@ -26,7 +26,6 @@ end
 
 local BUFFER_SIZE = 4096
 local FPS_MAX = 30
-local VIDEO_FILTER = {1,1,1} -- {1,8,27,8,1} -- {1,4,10,4,1} -- {1,6,42,6,1} -- {1,4,10,30,10,4,1}
 local tmp = 'tmp'
 local img_pattern =  tmp..'/img%05d.bmp'
 local cycles = 199 -- cycles par échantillons audio
@@ -270,105 +269,37 @@ end
 
 -- filtre video
 local FILTER = {}
-function FILTER:new(weights)
-	local o = {w={}, t=nil, size=#weights}
+function FILTER:new()
+	local o = {t={}}
 	setmetatable(o, self)
-	self.__index = self
-	
-	local total = 0
-	for _,w in ipairs(weights) do total = total + w end
-	for i=1,o.size do o.w[i] = weights[i]/total end
-	
-	if o.size==1 then
-		function o:byte(offset)
-			return self.t[1][offset]
-		end
-	elseif o.size==2 then
-		function o:byte(offset)
-			return round(
-					self.t[2][offset]*self.w[2] + 
-					self.t[1][offset]*self.w[1])
-		end
-	elseif o.size==3 then
-		function o:byte(offset)
-			return round(
-					self.t[3][offset]*self.w[3] + 
-					self.t[2][offset]*self.w[2] + 
-					self.t[1][offset]*self.w[1])
-		end	
-	elseif o.size==4 then
-		function o:byte(offset)
-			return round(
-					self.t[4][offset]*self.w[4] + 
-					self.t[3][offset]*self.w[3] + 
-					self.t[2][offset]*self.w[2] + 
-					self.t[1][offset]*self.w[1])
-		end
-	elseif o.size==5 then
-		function o:byte(offset)
-			return round(
-					self.t[5][offset]*self.w[5] + 
-					self.t[4][offset]*self.w[4] + 
-					self.t[3][offset]*self.w[3] + 
-					self.t[2][offset]*self.w[2] + 
-					self.t[1][offset]*self.w[1])
-		end
-	elseif o.size==6 then
-		function o:byte(offset)
-			return round(
-					self.t[6][offset]*self.w[6] + 
-					self.t[5][offset]*self.w[5] + 
-					self.t[4][offset]*self.w[4] + 
-					self.t[3][offset]*self.w[3] + 
-					self.t[2][offset]*self.w[2] + 
-					self.t[1][offset]*self.w[1])
-		end
-	elseif o.size==7 then
-		function o:byte(offset)
-			return round(
-					self.t[7][offset]*self.w[7] + 
-					self.t[6][offset]*self.w[6] + 
-					self.t[5][offset]*self.w[5] + 
-					self.t[4][offset]*self.w[4] + 
-					self.t[3][offset]*self.w[3] + 
-					self.t[2][offset]*self.w[2] + 
-					self.t[1][offset]*self.w[1])
-		end
-	elseif o.size==8 then
-		function o:byte(offset)
-			return round(
-					self.t[8][offset]*self.w[8] + 
-					self.t[7][offset]*self.w[7] + 
-					self.t[6][offset]*self.w[6] + 
-					self.t[5][offset]*self.w[5] + 
-					self.t[4][offset]*self.w[4] + 
-					self.t[3][offset]*self.w[3] + 
-					self.t[2][offset]*self.w[2] + 
-					self.t[1][offset]*self.w[1])
-		end
-	end
-	
+	self.__index = self	
 	return o
 end
 
 function FILTER:push(bytecode)
-	local t,insert,byte={},table.insert,string.byte
-	for i=1,bytecode:len() do insert(t, byte(bytecode,i)) end
-
-	if not self.t then
-		self.t = {}
-		for i=1,self.size do insert(self.t, t) end
-	end
-	
-	table.remove(self.t, 1)
-	table.insert(self.t, t)
+	table.insert(self.t, bytecode)
 	return self
 end
 
+function FILTER:flush()
+	-- for i=#self.t,1,-1 do self.t[i]=nil end
+	-- self.t = {}
+	for i=3,#self.t do table.remove(self.t,1) end
+end
+
 function FILTER:byte(offset)
-	local val = 0.5
-	for i=1,#self.t do val = val + self.w[i]*self.t[i][offset] end
-	return math.floor(val)
+	local m = #self.t
+	if m==1 then
+		return self.t[1]:byte(offset)
+	else
+		local v,d = 0,0
+		for i=1,m do 
+			local t=i
+			v = v + self.t[i]:byte(offset)*t
+			d = d + t
+		end
+		return math.floor(.5 + v/d)
+	end
 end
 --	o.filter:new{1,4,10,30,10,4,1} -- {1,2,4,2,1} -- {1,4,10,4,1} -- {1,2,6,2,1} -- {1,1,2,4,2,1,1} -- {1,2,3,6,3,2,1} -- ,2,4,8,16,32}		
 
@@ -400,7 +331,7 @@ function VIDEO:new(file, w, h, fps, gray)
 	self.__index = self
 	for i=0,7999+3 do o.image[i]=0 end
 	
-	o.filter = FILTER:new(VIDEO_FILTER)
+	o.filter = FILTER:new()
 	
 	return o
 end
@@ -581,6 +512,7 @@ function VIDEO:read_bmp(bytecode) -- (https://www.gamedev.net/forums/topic/57278
 		end
 		oy = oy+1
 	end
+	self.filter:flush()
 end
 function VIDEO:next_image()
 	if not self.running then return end
@@ -645,7 +577,9 @@ function VIDEO:next_image()
 end
 function VIDEO:skip_image()
 	local bak = self.read_bmp
-	function self:read_bmp(bytecode) self.filter:push(bytecode) end
+	function self:read_bmp(bytecode)
+		self.filter:push(bytecode)
+	end
 	self:next_image()
 	self.read_bmp = bak
 end
@@ -893,7 +827,7 @@ io.stdout:write(string.format('> %dx%d %s (%s) %s at %d fps (%d%% zoom, %s)\n',
 	w, h, mode, aspect_ratio,
 	hms(duration, "%dh %dm %ds"), fps, percent(math.max(w/80,h/50)), gray and "gray" or "color"))
 io.stdout:flush()
-video:next_image()
+video:skip_image()
 current_cycle = current_cycle + cycles_per_img
 video:next_image()
 while audio.running do
@@ -908,9 +842,9 @@ while audio.running do
 			-audio.cor[2], audio.cor[1]
 			)
 		local etc = d*(duration-tstamp)/tstamp
-		local etr = etc>300 and 60 or etc>=60 and 15 or 5
+		local etr = etc>=90 and 10 or 5
 		etc = round(etc/etr)*etr
-		etc = etc>0 and d>15 and "ETC="..hms(etc) or ""
+		etc = etc>0 and d>10 and "ETC="..hms(etc) or ""
 		t = t .. string.rep(' ', math.max(0,79-t:len()-etc:len())) .. etc .. "\r"
 		io.stdout:write(t)
 		io.stdout:flush()
@@ -961,6 +895,8 @@ while audio.running do
 		end
 	end
 	completed_imgs = completed_imgs + 1
+
+	video.filter:flush()
 	
 	-- skip image if drift is too big
 	-- if current_cycle>cycles_per_img then print(current_cycle/cycles_per_img) end
