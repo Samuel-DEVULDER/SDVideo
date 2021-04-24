@@ -1,0 +1,845 @@
+(main)PLAYER
+****************************************************
+*            S D R I V E _ V I D E O               * 
+*           (c) 2018 - Daniel Coulom               *  
+*                                                  *
+*           Modifie par Samuel DEVULDER            *
+*                                                  *
+*           http://dcmoto.free.fr/                 *
+*           http://forum.system-cfg.com/           *
+*--------------------------------------------------*
+* Ce code est distribue gratuitement dans l'espoir *
+* qu'il sera utile, mais sans aucune  garantie  et *
+* sans  engager  la  responsabilite  de  l'auteur. *
+* Vous  pouvez  l' utiliser,  le  modifier  et  le *
+* diffuser librement, en conservant cette  licence *
+* et les references de l'auteur dans   toutes  les *
+* copies. L'exploitation commerciale est interdite.*
+****************************************************
+
+* Ce programme utilise le controleur et l'interface
+* SDDRIVE pour afficher une video en streaming.
+* Le chargement et le lancement du programme sont
+* realises grace a un secteur de boot.
+
+GRAY   set 0	Memoire forme: N&B
+COL1   set 1	Memoire forme: R/G/B
+COL2MO set 2	Memoire fond, pas transcodage
+COL2TO set 3    Memoire fond, transcodage
+COL3MO set 4    Memoire fond, palette, pas trans.
+COL3TO set 5    Memoire fond, palette, transcodage
+
+*MODE SET GRAY
+   
+****************************************************
+*                Version 2018.07.14                *
+****************************************************
+* Historique
+* 2018.07.14 adresse SD_LB0 calculee selon version 
+* 2018.07.02 deplacement de la zone SD_LB0 en <$51 
+* 2018.02.04 ajout du son
+* 2018.02.03 debut du developpement
+
+*------------------------------------------------------
+* DEBUT DU PROGRAMME
+*------------------------------------------------------
+  ORG   $9100
+START SET *
+  BRA   INIT          initialisations 
+
+*------------------------------------------------------
+* FONCTION D'ACCES A LA CARTE SD
+*------------------------------------------------------
+CMD18
+  FCB   $52           read multiple block
+  FDB   $0000         adresse bloc (poids fort)
+  FDB   $0000         adresse bloc (poids faible)
+  FCB   $FF           checksum non testee 
+  FCB   $00           code retour attendu  
+CMD12
+  FCB   $4C           stop transmission
+  FDB   $0000         dummy parameter
+  FDB   $0000         dummy parameter
+  FCB   $FF           checksum non testee 
+  FCB   $00           code retour attendu  
+  
+*------------------------------------------------------
+* MACRO de repetition
+*------------------------------------------------------
+REPT_MASK SET 0
+REPT_MASK SET REPT_MASK+(1<+(2-2))
+REPT_MASK SET REPT_MASK+(1<+(3-2))
+REPT_MASK SET REPT_MASK+(1<+(4-2))
+REPT_MASK SET REPT_MASK+(1<+(5-2))
+REPT_MASK SET REPT_MASK+(1<+(6-2))
+REPT_MASK SET REPT_MASK+(1<+(7-2))
+REPT_MASK SET REPT_MASK+(1<+(8-2))
+REPT_MASK SET REPT_MASK+(1<+(16-2))
+
+REPT MACRO 
+  IFNE REPT_MASK&(1<+((\0)-2))
+    REP\0 \1
+  ELSE
+    REPTn \0,\1
+  ENDC
+  ENDM
+REPTn MACRO
+  IFGE (\0)-1
+    IFNE (\0)&1
+      \1
+    ENDC
+    REPTn (\0)<-1,\1
+    REPTn (\0)<-1,\1
+  ENDC
+  ENDM
+REP16 MACRO
+  REP8 \0
+  REP8 \0
+  ENDM
+REP8 MACRO
+  REP4 \0
+  REP4 \0
+  ENDM
+REP7 MACRO
+  REP6 \0
+  \0
+  ENDM
+REP6 MACRO
+  REP4 \0
+  REP2 \0
+  ENDM
+REP5 MACRO
+  REP4 \0
+  \0
+  ENDM
+REP4 MACRO
+  REP2 \0
+  REP2 \0
+  ENDM
+REP3 MACRO
+  REP2 \0
+  \0
+  ENDM
+REP2 MACRO
+  \0
+  \0
+  ENDM
+
+*------------------------------------------------------
+* MACRO de variable dans code auto-modifie
+*------------------------------------------------------
+VAR MACRO
+\0 SET *+(\1)
+  ENDM
+  
+*------------------------------------------------------
+* MACRO D'ENVOI D'UN TOP D'HORLOGE
+* Le registre A doit contenir $7F avant l'appel
+*------------------------------------------------------
+GET_BIT MACRO
+  CMPA  <$BF          lecture bit 7                 (4)
+  ENDM
+
+*------------------------------------------------------
+* MACRO DE LECTURE D'UN BIT AVEC SDDRIVE
+* Le registre A doit contenir $7F avant l'appel
+* Le bit est ajoute a droite de B
+*------------------------------------------------------
+READ_BIT MACRO
+  GET_BIT             lecture bit                   (4)
+  ROLB                pousser dans B                (2)
+  ENDM
+  
+*------------------------------------------------------
+* DETECTION DU TYPE D'ORDINATEUR TO OU MO
+*------------------------------------------------------
+INIT
+  ORCC  #$50          desactive les interruptions 
+  LDA   >$FFF2        $FFF2: $F0(MO) et $70(TO)
+  LBPL  INIT3         TO detecte
+
+  IFEQ  (MODE-COL2TO)*(MODE-COL3TO)
+  JSR   ERRORMO
+  FCC   /Cette video requiert une machine TO/
+  FCB   0
+  ENDC
+
+*------------------------------------------------------
+* Initialisations communes MO5-MO6 
+*------------------------------------------------------
+  LDU   #$1F40        fin memoire video+1 ligne
+  LDX   #$A7C0        adresse selection banque video
+  
+  IFEQ  MODE-GRAY     gris
+  LDB   #1            memoire forme
+  ORB   ,X
+  STB   ,X            
+  JSR   ECRAN1        remplissage forme avec 0
+  FCB   %00000000
+  DEC   ,X            memoire fond
+  JSR   ECRAN1        remplissage fond
+  FCB   %01110000     blanc sur noir
+  INC   ,X            memoire forme  
+  ENDC
+
+  IFEQ  MODE-COL1     
+  LDB   #1            memoire forme
+  ORB   ,X
+  STB   ,X            
+  JSR   ECRAN1        remplissage forme avec 0
+  FCB   %00000000
+  DEC   ,X            memoire fond
+  JSR   ECRAN1        remplissage fond
+  FCB   %01110000     blanc sur noir
+  JSR   ECRAN3        remplissage fond 
+  FCB   %01000000
+  FCB   %00100000
+  FCB   %00010000
+  INC   ,X            memoire forme  
+  ENDC
+
+  IFEQ  (MODE-COL2MO)*(MODE-COL3MO)
+  LDB   #254          memoire forme
+  ANDB  ,X
+  STB   ,X            
+  JSR   ECRAN1        remplissage fond noir/noir
+  FCB   %00000000
+  INC   ,X            memoire fond
+  JSR   ECRAN1        remplissage forme XXXX----
+  FCB   %11110000
+  DEC   ,X            memoire forme
+  ENDC
+  
+  LDA   >$FFF0        type d'ordinateur
+  BNE  INIT2          MO6  
+
+  IFEQ  MODE-COL3MO
+  JSR   ERRORMO
+  FCC   /Cette video requiert un MO6/
+  FCB   0
+  ENDC
+
+*------------------------------------------------------
+* Initialisations MO5 
+* Attention aux differences PIA systeme MO5 et MO6
+*------------------------------------------------------
+  LDA   ,X            port A du PIA systeme
+  ANDA  #$E1          raz couleur cadre (noir)
+  STA   ,X            change couleur cadre
+  JMP   INIT8         suite des initialisations
+
+*------------------------------------------------------
+* Erreur MO
+*------------------------------------------------------
+ERRORMO
+  LDX   #ERRORMO0
+  BSR   MO_PUTS
+  
+  PULS  X             message
+  LDA   #-1
+ERRORMO1 
+  INCA
+  TST   A,X           calcule longueur message
+  BNE   ERRORMO1  
+  
+  LDB   #32
+  NEGA
+  ADDA  #40           centrage message
+  LSRA
+  BEQ   ERRORMO3
+ERRORMO2
+  SWI   
+  FCB   2
+  DECA
+  BNE   ERRORMO2
+  
+ERRORMO3
+  BSR   MO_PUTS       affichage message
+
+  SWI                 beep
+  FCB   8
+  
+ERRORMO4
+  SWI                 attente appui touche
+  FCB   10
+  BEQ   ERRORMO4
+  
+  SWI                 beep
+  FCB   8
+  
+  SWI
+  FCB   0             reset
+
+ERRORMO5
+  SWI
+  FCB   2
+MO_PUTS
+  LDB   ,X+
+  BNE   ERRORMO5
+  RTS
+  
+ERRORMO0
+  FCB   $14           cursor off
+  FCB   27,$50+1,27,$47 couleur
+  FCB   $1F,$40+11,$41 locate 0,12
+  FCB   $18,10        eff ligne descente
+  FCB   $18,10        eff ligne descente
+  FCB   $18,11        eff ligne remontee
+  FCB   $1B,$68       blocage couleur 
+  FCB   0
+  
+*------------------------------------------------------
+* Initialisations MO6 / TO8 / TO9+
+*------------------------------------------------------
+INIT2
+  CLR   $1D,X         change couleur cadre (noir)
+  LDA   ,X            PIA systeme 
+  ANDA  #$FB          clear mute bit 
+  STA   ,X            modification PIA
+  
+  IFEQ  (MODE-COL3MO)*(MODE-COL3TO)
+  JSR   PALETTE
+  ENDC
+
+  JMP   INIT8         suite des initialisations
+
+*------------------------------------------------------
+* Initialisations PALETTE
+*------------------------------------------------------  
+PALETTE
+  PSHS  D,X,U,DP
+  TFR   X,D
+  TFR   A,DP
+PALETTE1
+  TST   <$E7
+  BPL   PALETTE1
+PALETTE2
+  TST	<$E7
+  BMI	PALETTE2
+  LDX   #200
+PALETTE3
+  LEAX  -1,X
+  BNE   PALETTE3
+  LDX   #16
+  LDU   #PALDATA
+  CLR   <$DB
+PALETTE4
+  PULU  D
+  STB   <$DA
+  STA   <$DA
+  LEAX  -1,X
+  BNE   PALETTE4
+  PULS  D,X,U,DP,PC
+  
+*------------------------------------------------------
+* Initialisations communes TO7-TO8 
+*------------------------------------------------------
+INIT3
+  IFEQ  (MODE-COL2MO)*(MODE-COL3MO)
+  JSR   ERRORTO
+  FCC   /Cette video requiert une machine MO/
+  FCB   0
+  ENDC
+  
+  LDU   #$5F40        fin memoire video+1 ligne
+  LDX   #$E7C0        base regs TO
+  
+  IFEQ  MODE-GRAY     gris
+  LDB   #1            memoire forme
+  ORB   3,X
+  STB   3,X            
+  JSR   ECRAN1        remplissage forme avec 0
+  FCB   %00000000
+  DEC   3,X           memoire fond
+  JSR   ECRAN1        remplissage fond N/B
+  FCB   %11111000
+  INC   3,X           memoire forme  
+  ENDC
+
+  IFEQ  MODE-COL1     
+  LDB   #1            memoire forme
+  ORB   3,X
+  STB   3,X            
+  JSR   ECRAN1        remplissage forme avec 0
+  FCB   %00000000
+  DEC   3,X           memoire fond
+  JSR   ECRAN1
+  FCB   %11111000
+  JSR   ECRAN3        remplissage fond 
+  FCB   %11100000
+  FCB   %11010000
+  FCB   %11001000
+  INC   3,X           memoire forme  
+  ENDC
+
+  IFEQ  (MODE-COL2TO)*(MODE-COL3TO)
+  LDB   #254          memoire forme
+  ANDB  3,X
+  STB   3,X            
+  JSR   ECRAN1        remplissage fond noir
+  FCB   %11000000
+  INC   3,X           memoire fond
+  JSR   ECRAN1        remplissage forme XXXX----
+  FCB   %11110000
+  DEC   3,X           memoire forme
+  ENDC
+
+*------------------------------------------------------
+* Patch les adresses pour les TO
+*------------------------------------------------------
+PATCH_TO
+  LDB   #$E0          valeur adresse EXCMD (poids fort)
+  STB   PATCH_READ    adresse execution EXCMD (pour CMD18)
+  STB   PATCH_FIN     adresse execution EXCMD (pour CMD12)
+  TFR   U,D
+  STA   PATCH_EOF     patch sentinelle fin video
+  ANDA  #$40
+  STA   PATCH_ECR
+  REPT  5,LSRA
+  STA   PATCH_POS
+  
+  LDB   >$FFF0        type d'ordinateur
+
+  IFEQ  MODE-COL2TO
+  BNE   PATCH2
+  JSR   ERRORTO
+  FCC   %Cette video requiert un TO7/70 ou plus%
+  FCB   0
+PATCH2
+  ENDC
+
+  CMPB  #3
+  BNE  PATCH3
+  JMP  INIT2         TO8
+PATCH3
+
+  IFEQ  MODE-COL3TO
+  JSR   ERRORTO
+  FCC   %Cette video requiert un TO8/TO9+%
+  FCB   0
+  ENDC
+*------------------------------------------------------
+* Initialisations TO7 et TO7/70
+*------------------------------------------------------
+INIT4
+  LDB   3,X           port A du PIA systeme
+  ANDB  #$15          couleur cadre 0 (noir) 
+  STB   3,X           change couleur cadre
+  JMP   INIT8         suite des initialisations
+
+*------------------------------------------------------
+* Erreur TO
+*------------------------------------------------------
+ERRORTO
+  LDX   #ERRORTO0
+  BSR   TO_PUTS
+  
+  PULS  X             message
+  LDA   #-1
+ERRORTO1 
+  INCA
+  TST   A,X           calcule longueur message
+  BNE   ERRORTO1  
+  
+  LDB   #32
+  NEGA
+  ADDA  #40           centrage message
+  LSRA
+  BEQ   ERRORTO3
+ERRORTO2
+  JSR   $E803
+  DECA
+  BNE   ERRORTO2
+  
+ERRORTO3
+  BSR   TO_PUTS       affichage message
+  LDB   #7
+  JSR   $E803         beep
+  
+ERRORTO4
+  JSR   $E806         attente appui touche
+  TSTB
+  BEQ   ERRORTO4
+  LDB   #7
+  JSR   $E803         beep
+  JMP   [$FFFE]       reset
+
+ERRORTO5
+  JSR   $E803  
+TO_PUTS
+  LDB   ,X+
+  BNE   ERRORTO5
+  RTS
+  
+ERRORTO0
+  FCB   $14           cursor off
+  FCB   $1B,$51,27,$47 couleur
+  FCB   $1F,$40+11,$41 locate 0,12
+  FCB   $18,10        eff ligne descente
+  FCB   $18,10        eff ligne descente
+  FCB   $18,11        eff ligne remontee
+  FCB   $1B,$68       blocage couleur 
+  FCB   0
+  
+*------------------------------------------------------
+* Initialise la memoire video avec la valeur suivant
+* l'addresse d'appel
+*------------------------------------------------------
+ECRAN1
+  PSHS  D,X,Y,U
+  LDX   8,S
+  LDB   ,X+
+  STX   8,S
+  TFR   B,A
+  TFR   D,X
+  LEAY  ,X
+  LDA   #200
+ECRAN11
+  PSHU  B,X,Y         ecrit une ligne 
+  PSHU  B,X,Y         (5*8) avec "val"
+  PSHU  B,X,Y
+  PSHU  B,X,Y
+  PSHU  B,X,Y
+  PSHU  B,X,Y
+  PSHU  B,X,Y
+  PSHU  B,X,Y
+  DECA
+  BNE   ECRAN11
+  PULS  D,X,Y,U,PC
+
+*------------------------------------------------------
+* Initialise la memoire video avec les valeurs suivant
+* l'addresse d'appel
+*------------------------------------------------------
+ECRAN3
+  PSHS  D,X,Y,U
+  LDX   8,S           recuperation donnees
+  LEAU  -40,U  
+  BSR   ECRAN31       remplissage ecran
+  BSR   ECRAN31
+  BSR   ECRAN31
+  STX   8,S           restauration PC pour poursuite
+  PULS  D,X,Y,U,PC
+ECRAN31  
+  LDA   ,X            lecture "val"
+  LDB   ,X+           D="val" "val"
+  LEAU  -40,U
+  PSHS  U,X
+  TFR   D,Y           Y=D="val" "val"
+  LEAX  ,Y            X=Y=D="val" "val"
+  LDA   #66
+ECRAN32
+  PSHU  B,X,Y         ecrit une ligne 
+  PSHU  B,X,Y         (5*8) avec "val"
+  PSHU  B,X,Y
+  PSHU  B,X,Y
+  PSHU  B,X,Y
+  PSHU  B,X,Y
+  PSHU  B,X,Y
+  PSHU  B,X,Y
+  LEAU  -2*40,U       remontee de 3 lignes
+  DECA                repete 66 fois
+  BNE   ECRAN32
+  PULS  X,U,PC
+
+*------------------------------------------------------
+* Initialisations communes 
+*------------------------------------------------------
+* Calcul adresse SD_LB0 selon version controleur SDDRIVE  
+* L'adresse de SD_LB0 passe de $208E-$608E a $2051-$6051
+* pour tous les controleurs a partir de juillet 2018
+INIT8
+  TFR   DP,A          valeur de DP dans A
+  LDB   #$51          adresse de SD_LB0 version recente
+  TFR   D,X           stockee dans le registre X   
+  LDB   <$58          SD_SEL contient $55 depuis 20180702   
+  CMPB  #$55          test version 20180702 ou plus recente
+  BEQ   INIT9         version recente
+  LDB   #$8E          adresse SD_LB0 des versions anciennes
+  TFR   D,X           stockage dans le registre X
+
+* Initialisation adresse du fichier .sd pour CMD18
+INIT9
+  LDD   ,X            octets poids fort adresse
+  STD   CMD18+1       stockage pour commande CMD18
+  LDD   2,X           octets poids faible adresse
+  STD   CMD18+3       stockage pour commande CMD18
+
+* Initialisation CNA en sortie
+  TFR   DP,B          valeur actuelle de DP
+  ADDB  #$87          $A7 pour MO et $E7 pour TO
+  TFR   B,DP          initialisation DP
+  LDA   <$CF          lecture registre de controle B
+  ANDA  #$FB          raz bit 2 
+  STA   <$CF          selection DDRB
+  LDB   #$3F          set bits 0-5 
+  STB   <$CD          bits CNA en sortie
+  ORA   #$04          set b2
+  STA   <$CF          selection PB
+
+*-------------------------------------------------------
+* Lancement de la commande CMD18 et saut de huit blocs
+*-------------------------------------------------------
+READ_VID
+  LDU   #CMD18        adresse commande CMD18
+  JSR   $A028         EXCMD = execution commande
+  VAR   PATCH_READ,-2
+*  BCS   READ_VID
+  
+  LDA   #$7F          initialiser A pour lecture
+  BSR   SAUT          lecture bloc (secteur de boot)
+  BSR   SAUT          lecture bloc (secteur sdplay)
+  BSR   SAUT          lecture bloc (secteur sdplay)
+  BSR   SAUT          lecture bloc (secteur sdplay)
+  BSR   SAUT          lecture bloc (secteur sdplay)
+  BSR   SAUT          lecture bloc (secteur sdplay)
+  BSR   SAUT          lecture bloc (secteur sdplay)
+  BSR   SAUT          lecture bloc (secteur sdplay)
+  
+*------------------------------------------------------
+* PREPARATION PILE
+*------------------------------------------------------
+  PSHS  CC
+  STS   BAK_S         sauvegarde pile
+
+  ORCC  #$50          pas d'interupt pour ne pas poluer
+  LDS   #STACK        nouvelle pille
+
+  LDU   #FIN_BLOC     iteration 171 = fin de bloc
+  PSHS  U
+  
+  LDB   #169          empilage 169 fois TRAME  
+  LDU   #TRAME
+PREP_STACK
+  PSHS  U
+  DECB
+  BNE   PREP_STACK
+  
+  LDX   #$0000        adresse ecran
+  VAR   PATCH_ECR,-2
+  JMP   DEB_BLOC      1 bloc = 170 * 3 + 2
+    
+*------------------------------------------------------
+* Saut d'un bloc de la carte SD
+*------------------------------------------------------
+SAUT
+  REPT  8,READ_BIT    lecture d'un octet
+  CMPB  #$FE          comparaison avec $FE
+  BNE   SAUT          attente debut secteur
+  CLRB                initialisation compteur
+SAUT1
+  BSR   SAUT2         saut de 2 octets
+  DECB                decrementation compteur
+  BNE   SAUT1         pas termine?
+SAUT2
+  REPT  16,GET_BIT    saut du crc
+  RTS                 retour
+
+*------------------------------------------------------
+* FIN DU PROGRAMME
+*------------------------------------------------------
+FIN
+  LDS   #00000        restauration pile
+  VAR   BAK_S,-2
+  PULS  CC
+  
+* arret de la lecture
+STOP
+  LDU   #CMD12        adresse commande CMD12 
+  JSR   $A028         EXCMD = execution commande CMD12
+  VAR   PATCH_FIN,-2
+*  BCS   STOP
+  
+* recommencer la lecture du fichier
+  JMP   READ_VID
+
+*-----------------------------------------------------
+* Trame de deplacement 8 bits + 1 octet
+* s6 0 1 | DD DD DD DD | VV VV VV VV             (125)
+*-----------------------------------------------------
+TRAME_01
+  REPT  8,READ_BIT    lecture deplacement         (48)
+  BNE   DEP1                                       (3)
+  LEAX  $100,X        0=256                        (8)
+  BRA   DEP2                                       (3)
+DEP1
+  EXG   X,X           attente                      (8)
+  ABX                                              (3)
+DEP2
+  REPT  8,READ_BIT    lecture video               (48)
+  STB   ,X+           ecriture video               (6)
+  LEAX  ,X            attente                      (4)
+  RTS                                              (5)  
+
+*-----------------------------------------------------
+* Lit un bloc de 512 octets
+*-----------------------------------------------------
+DEB_BLOC
+  REPT  8,READ_BIT    lecture octet               (48)
+  CMPB  #$FE          test debut bloc              (2)
+  BNE   DEB_BLOC      attente debut de bloc        (3)
+  
+*-----------------------------------------------------
+* TRAITE UNE TRAME DE 3 OCTETS            (54+125=179)   
+*-----------------------------------------------------
+TRAME
+  REPT  6,READ_BIT    lecture donnee son          (36)
+  STB   <$CD          joue echantillon             (4)
+  
+  GET_BIT             lecture bit de position      (4)
+  BCS   TRAME_1X      trame de position            (3)
+  GET_BIT             lecture bit de deplacement   (4)
+  BCS   TRAME_01      trame de deplacement         (3)
+
+*-----------------------------------------------------
+* Trame de video 2 pixel
+* s6 0 0 | VV VV VV VV | VV VV VV VV             (125)
+*-----------------------------------------------------  
+TRAME_00
+  REPT  8,READ_BIT    lecture video               (48)
+  STB   ,X+                                        (6)
+  REPT  8,READ_BIT    lecture video               (48)
+  STB   ,X+                                        (6)
+  EXG   X,X           attente                      (8)
+  LEAX  ,X            attente                      (4)
+  RTS                                              (5)
+
+TRAME_1X
+  GET_BIT
+  BCS   TRAME_11
+  
+*-----------------------------------------------------
+* Trame de video 2 pixel
+* s6 1 0 | VV VV VV VV | VV VV VV VV             (125)
+*-----------------------------------------------------  
+TRAME_10
+  REPT  8,READ_BIT    lecture video               (48)
+  STB   ,X++                                       (7)
+  STB   ,X++                                       (7)
+  REPT  8,READ_BIT    lecture video               (48)
+  STB   -3,X                                       (5)
+  STB   -1,X                                       (5)
+  RTS                                              (5)
+
+*-----------------------------------------------------
+* Trame de position
+* s6 1 1 | 00 0P PP PP | PP PP PP PP             (125)
+*-----------------------------------------------------
+TRAME_11
+  REPT  3,GET_BIT     lecture bits poids fort     (12)
+  LDB   #$00          to/mo                        (2)
+  VAR   PATCH_POS,-1
+  REPT  5,READ_BIT    lecture bits poids fort     (30)
+  STB   <POS,PCR      debut nouvelle addr video    (5)
+  LDX   #$0000        chargement poids fort        (3)
+  VAR   POS,-2
+  REPT  8,READ_BIT    lecture bits poids faible   (48)
+  ABX                 ajout poids faible           (3)
+  CMPX  #$1FFF        sentinelle fin video ?       (4)
+  VAR   PATCH_EOF,-2
+  BNE   POS1                                       (3)
+  JMP   FIN           sortie
+POS1
+  EXG   X,X           attente                      (8)
+  NOP                 attente                      (2)
+  RTS                 nouvelle trame               (5)
+  
+*-----------------------------------------------------
+* FIN DE BLOC: 2 octets a lire 
+*              et 3 a combler (CRC + $FF)
+*-----------------------------------------------------
+FIN_BLOC
+  REPT  6,READ_BIT    lecture donnee son          (36)
+  STB   <$CD          joue echantillon             (4)  
+  REPT  5,READ_BIT    lecture donnee son          (30)
+  LSLB                6 bits en tout               (2)
+  STB   BUF1          mise en buffer               (5)
+  
+  REPT  5,READ_BIT    lecture donnee son          (30)
+  LSLB                6 bits en tout               (2)
+  STB   BUF2          mise en buffer               (5)
+  
+* Lecture CRC a toute vitesse
+  REPT  16,GET_BIT    lecture CRC                 (64)
+
+  CMPB  1,X           attente                      (5)
+  CMPB  1,X           attente                      (5)
+  CMPB  1,X           attente                      (5)
+  CMPB  1,X           attente                      (5)
+  CMPB  1,X           attente                      (5)
+  CMPB  1,X           attente                      (5)
+  CMPB  1,X           attente                      (5)
+  
+  LDB   #0            lecture buffer 1             (2)
+  VAR   BUF1,-1
+  STB   <$CD          joue echantillon             (4)
+  
+* Lecture $FF
+  REPT  8,READ_BIT    lecture octet $FF           (48)
+  CMPB  #$FE          $FF pas trouve?              (2)
+  BEQ   FIN_SPECIAL   cas particulier              (3)
+
+* On doit attendre 120 cycles pour se caler
+* sur le dernier echantillon audio. On pourrait en
+* profiter pour tester le clavier (41 cycles TO8/TO9+,
+* 25 cycles TO9/TO8proto#14/TO9DE), 32 cycles TO7, 
+* 181 cycles TO7/70).
+*
+* 120 = 3+2 + 23*(3+2)
+*
+  NOP                                              (2)
+  LDD   #$7F00+23                                  (3)
+WAIT1 
+  DECB                decompte                     (2)
+  BNE   WAIT1         pas termine                  (3)
+  LDB   #0                                         (2)
+  VAR   BUF2,-1
+  STB   <$CD          joue buffer2                 (4)
+  
+* attente 179-93-8-4 = 74 = 4 + 14*5
+  NOP                                              (2)
+  LDB   #14                                        (2)
+WAIT2
+  DECB                                             (2)
+  BNE   WAIT2                                      (3)
+
+* bouclage nouveau bloc
+  LEAS  -170*2,S                                   (8)
+  JMP   DEB_BLOC                                   (4)
+  
+* on a obtenu le $FE sans avoir lu $FF. 
+FIN_SPECIAL
+* attente 179-53-5-4 = 2 + 23*5
+  LDB   #23
+WAIT3
+  DECB
+  BNE   WAIT3
+
+  LDB   BUF2                                       (5)
+  STB   <$CD                                       (4)
+* attente 179-36-4-8-4 = 127 = 2+5*25
+  LDB   #25                                        (2)
+WAIT4
+  DECB                                             (2)
+  BNE   WAIT4                                      (3)
+  LEAS  -170*2,S                                   (8)
+  JMP   TRAME                                      (4)
+
+* pile permettant de boucler 170 trames
+  RMB 2*170,0
+STACK
+
+PALDATA
+*  FDB   $000,$00F,$0F0,$0FF
+*  FDB   $F00,$F0F,$FF0,$FFF
+*  FDB   $222,$006,$060,$066
+*  FDB   $600,$606,$660,$666
+  
+  ECHO *************************************
+  ECHO * B/W=&GRAY
+  ECHO * ORG=$START
+  ECHO * END=$STACK
+  ECHO * LEN=&(STACK-START)
+  ECHO *************************************
+
+  END START
