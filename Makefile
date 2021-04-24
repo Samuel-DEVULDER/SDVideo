@@ -23,9 +23,14 @@ ALL=$(LUA) $(C6809) bin/player0.raw bin/player1.raw bin/player30.raw bin/player3
 
 all: $(ALL)
 	ls -l .
-	
-tst: $(ALL)
+
+tst: tst_conv_sd tst_sdvideo
+
+tst_conv_sd: $(ALL)
 	$(LUA) conv_sd.lua  "test/MMD Bad Apple!! Now in 3D with more Color-.mp4"
+	
+tst_sdvideo: $(ALL)
+	$(LUA) sdvideo.lua  "test/Medley.mp4"
 
 
 clean:
