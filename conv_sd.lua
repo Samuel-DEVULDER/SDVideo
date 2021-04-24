@@ -39,7 +39,9 @@ local fps = 12
 local gray = nil
 local interlace = nil	
 local dither = 8 -- -8
-local ffmpeg = 'tools\\ffmpeg'
+local ffmpeg = 'tools\\ffmpeg.exe'
+local mkdir  = 'md'
+local del    = 'del >nul /s /q'
 local mode = 'p'
 
 local SPECIAL_4 = false -- true
@@ -47,6 +49,12 @@ local SPECIAL_4 = false -- true
 if SPECIAL_4 then
 	gray = true
 	dither = 3
+end
+
+if os.execute('cygpath -W >/dev/null 2>&1')==0 then
+	ffmpeg = 'tools/ffmpeg.exe' 
+	mkdir  = 'mkdir -p'
+	del    = 'rm -r'
 end
 
 local file = arg[1]:gsub('^/cygdrive/(%w)/','%1:/')
@@ -352,12 +360,9 @@ end
 -- flux video
 local VIDEO = {}
 function VIDEO:new(file, w, h, fps, gray)
-	if isdir(tmp) then
-		os.execute('del >nul /s /q '..tmp)
-	else
-		os.execute('md '..tmp)
-	end
-
+	if     isdir(tmp) then os.execute(del..' '..tmp) end
+	if not isdir(tmp) then os.execute(mkdir..' '..tmp) end
+	
 	local o = {
 		cpt = 1, -- compteur image
 		width = w,
