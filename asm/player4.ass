@@ -139,7 +139,7 @@ VAR MACRO
 GET_BIT MACRO
   CMPA  <$BF          lecture bit 7                 (4)
   ENDM
-
+  
 *------------------------------------------------------
 * MACRO DE LECTURE D'UN BIT AVEC SDDRIVE
 * Le registre A doit contenir $7F avant l'appel
@@ -391,6 +391,8 @@ PATCH_TO
   LDB   #$E0          valeur adresse EXCMD (poids fort)
   STB   PATCH_READ    adresse execution EXCMD (pour CMD18)
   STB   PATCH_FIN     adresse execution EXCMD (pour CMD12)
+  LDB   #$E7          Valeur espace I/O
+  STB   PATCH_CYC     pour compenser 1 cycle
   TFR   U,D
   STA   PATCH_EOF     patch sentinelle fin video
   ANDA  #$40
@@ -655,20 +657,14 @@ STOP
 
 *-----------------------------------------------------
 * Trame de deplacement 8 bits + 1 octet
-* s6 0 1 | DD DD DD DD | VV VV VV VV             (125)
+* s6 0 1 | DD DD DD DD | VV VV VV VV             (115)
 *-----------------------------------------------------
 TRAME_01
   REPT  8,READ_BIT    lecture deplacement         (48)
-  BNE   DEP1                                       (3)
-  LEAX  $100,X        0=256                        (8)
-  BRA   DEP2                                       (3)
-DEP1
-  EXG   X,X           attente                      (8)
+  LEAX  2,X                                        (5)
   ABX                                              (3)
-DEP2
   REPT  8,READ_BIT    lecture video               (48)
-  STB   ,X+           ecriture video               (6)
-  LEAX  ,X            attente                      (4)
+  STB   ,X+                                        (6)
   RTS                                              (5)  
 
 *-----------------------------------------------------
@@ -680,7 +676,7 @@ DEB_BLOC
   BNE   DEB_BLOC      attente debut de bloc        (3)
   
 *-----------------------------------------------------
-* TRAITE UNE TRAME DE 3 OCTETS            (54+125=179)   
+* TRAITE UNE TRAME DE 3 OCTETS            (54+115=169)   
 *-----------------------------------------------------
 TRAME
   REPT  6,READ_BIT    lecture donnee son          (36)
@@ -693,15 +689,14 @@ TRAME
 
 *-----------------------------------------------------
 * Trame de video 2 pixel
-* s6 0 0 | VV VV VV VV | VV VV VV VV             (125)
+* s6 0 0 | VV VV VV VV | VV VV VV VV             (115)
 *-----------------------------------------------------  
 TRAME_00
   REPT  8,READ_BIT    lecture video               (48)
   STB   ,X+                                        (6)
   REPT  8,READ_BIT    lecture video               (48)
   STB   ,X+                                        (6)
-  EXG   X,X           attente                      (8)
-  LEAX  ,X            attente                      (4)
+  NOP                 attente                      (2)
   RTS                                              (5)
 
 TRAME_1X
@@ -710,20 +705,21 @@ TRAME_1X
   
 *-----------------------------------------------------
 * Trame de video 2 pixel
-* s6 1 0 | VV VV VV VV | VV VV VV VV             (125)
+* s6 1 0 | VV VV VV VV | VV VV VV VV             (115)
 *-----------------------------------------------------  
 TRAME_10
   REPT  8,READ_BIT    lecture video               (48)
   STB   ,X++                                       (7)
-  STB   ,X++                                       (7)
-  REPT  8,READ_BIT    lecture video               (48)
-  STB   -3,X                                       (5)
-  STB   -1,X                                       (5)
+  REPT  7,READ_BIT    lecture video               (42)
+  CMPA  >$A7BF        lecture bit                  (5)
+  VAR   PATCH_CYC,-2
+  ROLB                mise a jour B                (2)
+  STB   ,X+                                        (6)
   RTS                                              (5)
 
 *-----------------------------------------------------
 * Trame de position
-* s6 1 1 | 00 0P PP PP | PP PP PP PP             (125)
+* s6 1 1 | 00 0P PP PP | PP PP PP PP             (115)
 *-----------------------------------------------------
 TRAME_11
   REPT  3,GET_BIT     lecture bits poids fort     (12)
@@ -740,8 +736,6 @@ TRAME_11
   BNE   POS1                                       (3)
   JMP   FIN           sortie
 POS1
-  EXG   X,X           attente                      (8)
-  NOP                 attente                      (2)
   RTS                 nouvelle trame               (5)
   
 *-----------------------------------------------------
@@ -767,8 +761,6 @@ FIN_BLOC
   CMPB  1,X           attente                      (5)
   CMPB  1,X           attente                      (5)
   CMPB  1,X           attente                      (5)
-  CMPB  1,X           attente                      (5)
-  CMPB  1,X           attente                      (5)
   
   LDB   #0            lecture buffer 1             (2)
   VAR   BUF1,-1
@@ -779,16 +771,16 @@ FIN_BLOC
   CMPB  #$FE          $FF pas trouve?              (2)
   BEQ   FIN_SPECIAL   cas particulier              (3)
 
-* On doit attendre 120 cycles pour se caler
+* On doit attendre 110 cycles pour se caler
 * sur le dernier echantillon audio. On pourrait en
 * profiter pour tester le clavier (41 cycles TO8/TO9+,
 * 25 cycles TO9/TO8proto#14/TO9DE), 32 cycles TO7, 
 * 181 cycles TO7/70).
 *
-* 120 = 3+2 + 23*(3+2)
+* 110 = 3+2 + 21*(3+2)
 *
   NOP                                              (2)
-  LDD   #$7F00+23                                  (3)
+  LDD   #$7F00+21                                  (3)
 WAIT1 
   DECB                decompte                     (2)
   BNE   WAIT1         pas termine                  (3)
@@ -796,9 +788,9 @@ WAIT1
   VAR   BUF2,-1
   STB   <$CD          joue buffer2                 (4)
   
-* attente 179-93-8-4 = 74 = 4 + 14*5
+* attente 169-93-8-4 = 64 = 4 + 12*5
   NOP                                              (2)
-  LDB   #14                                        (2)
+  LDB   #12                                        (2)
 WAIT2
   DECB                                             (2)
   BNE   WAIT2                                      (3)
@@ -809,16 +801,16 @@ WAIT2
   
 * on a obtenu le $FE sans avoir lu $FF. 
 FIN_SPECIAL
-* attente 179-53-5-4 = 2 + 23*5
-  LDB   #23
+* attente 169-53-5-4 = 2 + 21*5
+  LDB   #21
 WAIT3
   DECB
   BNE   WAIT3
 
   LDB   BUF2                                       (5)
   STB   <$CD                                       (4)
-* attente 179-36-4-8-4 = 127 = 2+5*25
-  LDB   #25                                        (2)
+* attente 169-36-4-8-4 = 117 = 2+5*23
+  LDB   #23                                        (2)
 WAIT4
   DECB                                             (2)
   BNE   WAIT4                                      (3)

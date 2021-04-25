@@ -30,7 +30,7 @@ tst_conv_sd: $(ALL)
 	$(LUA) conv_sd.lua  "test/MMD Bad Apple!! Now in 3D with more Color-.mp4"
 	
 tst_sdvideo: $(ALL)
-	for i in {0..11}; do \
+	for i in {0..15}; do \
 		echo "MODE=$$i"; \
 		MODE=$$i \
 		$(LUA) sdvideo.lua  "test/Medley.mp4"; \
