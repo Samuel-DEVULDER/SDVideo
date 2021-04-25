@@ -93,12 +93,15 @@ MODE=7 | [![MODE=7](https://img.youtube.com/vi/sKI7Ro2MoOs/0.jpg)](https://www.y
 MODE=9 | [![MODE=9](https://img.youtube.com/vi/ECxBXCi1PeU/0.jpg)](https://www.youtube.com/watch?v=ECxBXCi1PeU) 
 
 Here is how an MO6 machine can playback a well known [PC-demo](https://www.pouet.net/prod.php?which=63) of 1993:
+
 [![](https://img.youtube.com/vi/3PXrQAOnrnc/0.jpg)](https://www.youtube.com/watch?v=3PXrQAOnrnc)
 
 or a TO8 replaying with MODE=7 a [famous game](https://en.wikipedia.org/wiki/Another_World_(video_game)) intro:
+
 [![](https://img.youtube.com/vi/jIY-GlHY2e4/0.jpg)](https://www.youtube.com/watch?v=jIY-GlHY2e4)
 
 or its [remake](https://www.youtube.com/watch?v=1Nlmje-rUQs):
+
 [![](https://img.youtube.com/vi/jrnNccdIbkA/0.jpg)](https://www.youtube.com/watch?v=jrnNccdIbkA)
 
 
