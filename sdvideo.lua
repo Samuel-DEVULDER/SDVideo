@@ -1787,11 +1787,8 @@ function CONVERTER:_stat()
 end
 function CONVERTER:process()
     -- clean temporary files
-    if isdir(TMP) then
-        os.execute('del >nul /s /q '..TMP)
-    else
-        os.execute('md '..TMP)
-    end
+    if     isdir(TMP) then os.execute(DEL..' '..TMP) end
+	if not isdir(TMP) then os.execute(MKDIR..' '..TMP) end
 
     -- collect stats
     self:_stat()

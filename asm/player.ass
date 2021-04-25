@@ -296,6 +296,7 @@ INIT8
   ANDB  #$7F          ; isole b0-b6 
   CMPB  #$55          ; test version 20210212 ou plus recente
   BEQ   INIT9         ; version 20210212 ou plus recente
+
   LDB   #$8E          adresse SD_LB0 des versions anciennes
   TFR   D,X           stockage dans le registre X
 
