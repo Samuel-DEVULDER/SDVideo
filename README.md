@@ -17,6 +17,7 @@ This converter was originally discussed in the "[[Thomson] SDDrive Vidéo]((http
 * be fast enough to be enjoyable
 
 To achieve this, a pseudo-graphics mode of 80x50 pseudo-pixels is used. Each pseudopixel can take one color out of a 4³=64 colors palette. This mode was the one I used in the "[Oh la belle bleue!](http://dcmoto.free.fr/programmes/oh-la-belle-bleue/index.html)" demo by Puls ([pouet.net](https://www.pouet.net/prod.php?which=57343)), and was expected to be able to produce good looking animations.
+
 ![](https://www.cjoint.com/doc/15_06/EFctmoAbHxr_Kylie%20Minogue%20-%20Spinning%20Around.gif) ![](http://www.cjoint.com/doc/15_06/EFctpDY8IJr_Star%20Wars%20A%20New%20Hope%201977%20Trailer.gif)
 
 Each pixel needs 6 bits, meaning that one can pack 4 pixels in only 3 bytes. As a result, the [ASM player](asm/player.ass) outputs one audio sample every 199µs (5.025 khz) which is pretting good considering the bandwidth of SDDrive.
@@ -31,6 +32,7 @@ One can find an example of video made using this tool in the [Demonstration sect
 ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/01.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/02.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/03.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/04.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/05.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/06.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/07.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/08.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/09.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/10.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/11.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/12.png)
 
 You can also find some of my tests on Youtube
+
 [![](https://img.youtube.com/vi/ER5kgUM_VR4/0.jpg)](https://www.youtube.com/watch?v=ER5kgUM_VR4)
 
 # sdvideo
@@ -42,10 +44,15 @@ This is the second converter/player that I made in 2019 in an attempt to improve
 `conv_sd.lua` uses a 80x50 display which is nice, but the thomson can do better graphics.
 
 By the [end of 2018](https://forum.system-cfg.com/viewtopic.php?p=144980#p144980] I had an idea for another type of screen rendering which quadruples the vertical resolution resuling in pretty tempting gif mockups using the standard palette
+
 ![](https://www.cjoint.com/doc/18_11/HKnxpa65Pvr_Kylie-Minogue---Spinning-Around.gif) ![](https://www.cjoint.com/doc/18_11/HKnxkQwKgkr_MMD-Bad-Apple-Now-in-3D-with-more-Color-.gif) ![](https://www.cjoint.com/doc/18_11/HKowQ1fLZPr_David-Guetta---Dangerous-Official-video---radio-edit-ft-Sam-Martin.gif) ![](https://www.cjoint.com/doc/18_11/HKnxCBEjqjr_Commodore-Amiga-500-Best-Demo-Effects.gif)
+
 as well as modified palettes allowing to create even more pseudo-color using fine-tuned dithering.
+
 ![](https://www.cjoint.com/doc/18_11/HKpxISZ5oir_Creedence-Clearwater-Revival---Down-on-the-Corner-1969.gif) ![](https://www.cjoint.com/doc/18_11/HKpxKJDkbLr_Custom-Knight-rider-intro-1---Classic.gif)
+
 allowing to walk around the low-intensites color-issue caused by a gamma of 3.0 used by thomson's video-circuits.
+
 ![](https://forum.system-cfg.com/download/file.php?id=10968) ![](https://forum.system-cfg.com/download/file.php?id=10970)
  
 The issue was then to chekout if the bandwidth of SDDrive was able to cope with that many color changes for each frame. The solution that I found was to 
