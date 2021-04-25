@@ -19,7 +19,7 @@ BIN:=$(ASM:asm/%.ass=bin/%.bin)
 LUA=tools/luajit$(EXE)
 C6809=tools/c6809$(EXE)
 
-ALL=$(LUA) $(C6809) bin/player0.raw bin/player1.raw bin/player30.raw bin/player31.raw bin/bootblk.raw
+ALL=$(LUA) $(C6809) bin/player0.raw bin/player1.raw bin/bootblk.raw
 
 all: $(ALL)
 	ls -l .
@@ -30,7 +30,11 @@ tst_conv_sd: $(ALL)
 	$(LUA) conv_sd.lua  "test/MMD Bad Apple!! Now in 3D with more Color-.mp4"
 	
 tst_sdvideo: $(ALL)
-	$(LUA) sdvideo.lua  "test/Medley.mp4"
+	for i in {0..11}; do \
+		echo "MODE=$$i"; \
+		MODE=$$i \
+		$(LUA) sdvideo.lua  "test/Medley.mp4"; \
+	done
 
 
 clean:
