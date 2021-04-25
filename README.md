@@ -32,10 +32,6 @@ Each pixel needs 6 bits, meaning that one can pack 4 pixels in only 3 bytes. As 
 One can find an example of video made using this tool in the [Demonstration section](http://dcmoto.free.fr/programmes/sddrive-bad-apple/index.html) of the DCMOTO web site.
 ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/01.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/02.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/03.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/04.png)
 
-You can also find some of my tests on Youtube
-
-[![](https://img.youtube.com/vi/ER5kgUM_VR4/0.jpg)](https://www.youtube.com/watch?v=ER5kgUM_VR4)
-
 # sdvideo.lua
 
 This is the second converter/player that I made in 2019 in an attempt to improve video quality and playback speed if possible.
