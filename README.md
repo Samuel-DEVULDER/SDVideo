@@ -46,8 +46,6 @@ This is the second converter/player that I made in 2019 in an attempt to improve
 By the [end of 2018](https://forum.system-cfg.com/viewtopic.php?p=144980#p144980) I had an idea for another type of screen rendering which quadruples the vertical resolution resuling in pretty tempting gif mockups using the standard palette
 
 ![](https://www.cjoint.com/doc/18_11/HKnxpa65Pvr_Kylie-Minogue---Spinning-Around.gif) ![](https://www.cjoint.com/doc/18_11/HKnxkQwKgkr_MMD-Bad-Apple-Now-in-3D-with-more-Color-.gif) 
-![](https://www.cjoint.com/doc/18_11/HKowQ1fLZPr_David-Guetta---Dangerous-Official-video---radio-edit-ft-Sam-Martin.gif) 
-![](https://www.cjoint.com/doc/18_11/HKnxCBEjqjr_Commodore-Amiga-500-Best-Demo-Effects.gif)
 
 as well as modified palettes allowing to create even more pseudo-color using fine-tuned dithering.
 
@@ -92,7 +90,11 @@ One can find an example of video made using this tool in the [Demonstration sect
 
 
 You can also find some of my tests on Youtube
-[![MODE=5](https://img.youtube.com/vi/ZnYCgsjjhs4/0.jpg)](https://www.youtube.com/watch?v=ZnYCgsjjhs4) [![MODE=7](https://img.youtube.com/vi/sKI7Ro2MoOs/0.jpg)](https://www.youtube.com/watch?v=sKI7Ro2MoOs) [![MODE=9](https://img.youtube.com/vi/ECxBXCi1PeU/0.jpg)](https://www.youtube.com/watch?v=ECxBXCi1PeU) 
+MODE=N | Result
+----|----
+MODE=5 |[![MODE=5](https://img.youtube.com/vi/ZnYCgsjjhs4/0.jpg)](https://www.youtube.com/watch?v=ZnYCgsjjhs4) 
+MODE=7 | [![MODE=7](https://img.youtube.com/vi/sKI7Ro2MoOs/0.jpg)](https://www.youtube.com/watch?v=sKI7Ro2MoOs) 
+MODE=8 | [![MODE=9](https://img.youtube.com/vi/ECxBXCi1PeU/0.jpg)](https://www.youtube.com/watch?v=ECxBXCi1PeU) 
 
 Here is how an MO6 machine can playback a well known [PC-demo](https://www.pouet.net/prod.php?which=63) of 1993:
 [![](https://img.youtube.com/vi/3PXrQAOnrnc/0.jpg)](https://www.youtube.com/watch?v=3PXrQAOnrnc)
