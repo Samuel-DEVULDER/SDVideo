@@ -446,53 +446,7 @@ end
 function PALETTE.key(r,g,b)
     return string.format("%02x%02x%02x",round(r/8),round(g/8),round(b/8))
 end
-function PALETTE:index(r,g,b)
-    -- local k=self.key(self.unlinear(r),self.unlinear(g),self.unlinear(b))
-    -- local i=self.cache[k]
-    -- r = r<0 and 0 or r>1 and 1 or r
-    -- g = g<0 and 0 or g>1 and 1 or g
-    -- b = b<0 and 0 or b>1 and 1 or b
-
-    local i=0
-    -- if true or not i then
-        local f=self.linear
-        if not self.linearized then
-            self.linearized = true
-            for _,p in ipairs(self) do
-                p[1],p[2],p[3] = f(p[1]),f(p[2]),f(p[3])
-            end
-        end
-
-
-        local d=1e38
-        for j,p in ipairs(self) do
-            -- local t = 2*math.abs(r-p[1]) + 4*math.abs(g-p[2]) + math.abs(b-p[3])
-            -- local t = math.abs(r-p[1]) + math.abs(g-p[2]) + math.abs(b-p[3])
-            local t = (r-p[1])^2 + (g-p[2])^2 + (b-p[3])^2
-            -- local t = math.max(math.abs(r-p[1]),math.abs(g-p[2]),math.abs(b-p[3]))
-            if t<d then d,i=t,j end
-        end
-        -- self.cache[k] = i
-    -- end
-    return i
-end
 function PALETTE:compute(n, r,g,b)
-    r,g,b = self.linear(r),self.linear(g),self.linear(b)
-    local k = 0.7
-    local x,y,z=0,0,0
-    local t = {}
-    for i=1,n do
-        local j = self:index(r+x*k, g+y*k, b+z*k)
-        local p = self[j]
-        x,y,z = x+r-p[1],y+g-p[2],z+b-p[3]
-
-        t[i] = j-1
-    end
-    table.sort(t, function(a,b) return self:intens(a+1)<self:intens(b+1) end)
-    -- return t
-    return string.char(unpack(t))
-end
-function PALETTE:compute2(n, r,g,b)
 -- r=255 g=255 b=255
 	local EPS,push = 1e-12,table.insert
 	local tetras = self.tetras

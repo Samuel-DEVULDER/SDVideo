@@ -33,6 +33,7 @@ tst_sdvideo: $(ALL)
 	for i in {0..15}; do \
 		echo "MODE=$$i"; \
 		MODE=$$i \
+		nice -19 \
 		$(LUA) sdvideo.lua  "test/Medley.mp4"; \
 	done
 
