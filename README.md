@@ -43,7 +43,7 @@ This is the second converter/player that I made in 2019 in an attempt to improve
 
 `conv_sd.lua` uses a 80x50 display which is nice, but the thomson can do better graphics.
 
-By the [end of 2018](https://forum.system-cfg.com/viewtopic.php?p=144980#p144980] I had an idea for another type of screen rendering which quadruples the vertical resolution resuling in pretty tempting gif mockups using the standard palette
+By the [end of 2018](https://forum.system-cfg.com/viewtopic.php?p=144980#p144980) I had an idea for another type of screen rendering which quadruples the vertical resolution resuling in pretty tempting gif mockups using the standard palette
 
 ![](https://www.cjoint.com/doc/18_11/HKnxpa65Pvr_Kylie-Minogue---Spinning-Around.gif) ![](https://www.cjoint.com/doc/18_11/HKnxkQwKgkr_MMD-Bad-Apple-Now-in-3D-with-more-Color-.gif) ![](https://www.cjoint.com/doc/18_11/HKowQ1fLZPr_David-Guetta---Dangerous-Official-video---radio-edit-ft-Sam-Martin.gif) ![](https://www.cjoint.com/doc/18_11/HKnxCBEjqjr_Commodore-Amiga-500-Best-Demo-Effects.gif)
 
