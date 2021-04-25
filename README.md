@@ -2,11 +2,11 @@
 Convert video for the [SDDrive](http://dcmoto.free.fr/bricolage/sddrive/index.html) hardware by D.Coulom. 
 [![](http://dcmoto.free.fr/programmes/sddrive-medley3/c1.jpg)](http://dcmoto.free.fr/bricolage/sddrive/index.html)
 
-There are actually two programs which can be used!
-* [`conv_sd.lua`](#user-content-conv_sd) ([usage](#user-content-usage))
-* [`sdvideo.lua`](#user-content-sdvideo-1) ([usage](#user-content-usage-1))
+There are actually two programs which can be used:
+* [`conv_sd.lua`](#user-content-conv_sdlua) ([usage](#user-content-usage))
+* [`sdvideo.lua`](#user-content-sdvideolua) ([usage](#user-content-usage-1))
 
-# conv_sd
+# conv_sd.lua
 
 This is the first one that I made back in 2018.
 
@@ -29,40 +29,36 @@ Each pixel needs 6 bits, meaning that one can pack 4 pixels in only 3 bytes. As 
 ## Example
 
 One can find an example of video made using this tool in the [Demonstration section](http://dcmoto.free.fr/programmes/sddrive-bad-apple/index.html) of the DCMOTO web site.
-![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/01.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/02.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/03.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/04.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/05.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/06.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/07.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/08.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/09.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/10.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/11.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/12.png)
+![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/01.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/02.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/03.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/04.png)
 
 You can also find some of my tests on Youtube
 
 [![](https://img.youtube.com/vi/ER5kgUM_VR4/0.jpg)](https://www.youtube.com/watch?v=ER5kgUM_VR4)
 
-# sdvideo
+# sdvideo.lua
 
 This is the second converter/player that I made in 2019 in an attempt to improve video quality and playback speed if possible.
 
 ## History
 
-`conv_sd.lua` uses a 80x50 display which is nice, but the thomson can do better graphics.
+`conv_sd.lua` uses a 80x50 pixel screen which is nice, but the thomson can have more finer graphics.
 
-By the [end of 2018](https://forum.system-cfg.com/viewtopic.php?p=144980#p144980) I had an idea for another type of screen rendering which quadruples the vertical resolution resuling in pretty tempting gif mockups using the standard palette
+By the [end of 2018](https://forum.system-cfg.com/viewtopic.php?p=144980#p144980) I had an idea for another type of screen rendering which quadruples the vertical resolution resuling in pretty tempting gif mockups using the standard palette:
 
 ![](https://www.cjoint.com/doc/18_11/HKnxpa65Pvr_Kylie-Minogue---Spinning-Around.gif) ![](https://www.cjoint.com/doc/18_11/HKnxkQwKgkr_MMD-Bad-Apple-Now-in-3D-with-more-Color-.gif) 
 
-as well as modified palettes allowing to create even more pseudo-color using fine-tuned dithering.
+as well as modified palettes allowing to create even more pseudo-colors:
 
 ![](https://www.cjoint.com/doc/18_11/HKpxISZ5oir_Creedence-Clearwater-Revival---Down-on-the-Corner-1969.gif) ![](https://www.cjoint.com/doc/18_11/HKpxKJDkbLr_Custom-Knight-rider-intro-1---Classic.gif)
-
-allowing to walk around the low-intensites color-issue caused by a gamma of 3.0 used by thomson's video-circuits.
-
-![](https://forum.system-cfg.com/download/file.php?id=10968) ![](https://forum.system-cfg.com/download/file.php?id=10970)
  
-The issue was then to chekout if the bandwidth of SDDrive was able to cope with that many color changes for each frame. The solution that I found was to 
-* automatically reduce screen size and
+The issue was then to checkout if the bandwidth of SDDrive was able to cope with that many color changes for each frame. The solution that I found is to 
+* automatically reduce screen size (hence less color changes) and
 * use a kind of interlaced mode (changed one line out of N at each frame) 
-which allows playing most video between 11 to 13 frames per second which is pretty astonishing for Thomson's machines.
+which allows playing most video between 11 to 13 frames per second which is pretty astonishing for the poor mc6809@1mhz running the Thomson's machines.
 
 ## Usage
 
-	MODE=<N> tools/luajit sdvideo.lua <video-file.avi>
+	MODE=<N> tools/luajit sdvideo.lua <video-file>
 	
 `MODE=<N>` is actually a numerical parameter indicating the type of output to produce. To every machine is able do play each mode, but high-end machines (MO6, TO8, TO9+) can play all. Default mode (if omitted) is 7 which usually gives colorful result without sacrificing too much of the resolution.
 
@@ -88,19 +84,20 @@ Mode| Resolution | Colors | TO7 | MO5 | TO770 | MO6 | TO8(D), TO9+ | Comment
 One can find an example of video made using this tool in the [Demonstration section](http://dcmoto.free.fr/programmes/sddrive-medley3/index.html) of the DCMOTO web site.
 ![](http://dcmoto.free.fr/programmes/sddrive-medley3/02.png) ![](http://dcmoto.free.fr/programmes/sddrive-medley3/04.png) ![](http://dcmoto.free.fr/programmes/sddrive-medley3/09.png) ![](http://dcmoto.free.fr/programmes/sddrive-medley3/10.png) ![](http://dcmoto.free.fr/programmes/sddrive-medley3/11.png) ![](http://dcmoto.free.fr/programmes/sddrive-medley3/12.png)
 
+You can also find some of my tests on Youtube:
 
-You can also find some of my tests on Youtube.
 Mode | Converted video (click to view on YouTube)
 ----|----
 MODE=5 |[![MODE=5](https://img.youtube.com/vi/ZnYCgsjjhs4/0.jpg)](https://www.youtube.com/watch?v=ZnYCgsjjhs4) 
 MODE=7 | [![MODE=7](https://img.youtube.com/vi/sKI7Ro2MoOs/0.jpg)](https://www.youtube.com/watch?v=sKI7Ro2MoOs) 
-MODE=8 | [![MODE=9](https://img.youtube.com/vi/ECxBXCi1PeU/0.jpg)](https://www.youtube.com/watch?v=ECxBXCi1PeU) 
+MODE=9 | [![MODE=9](https://img.youtube.com/vi/ECxBXCi1PeU/0.jpg)](https://www.youtube.com/watch?v=ECxBXCi1PeU) 
 
 Here is how an MO6 machine can playback a well known [PC-demo](https://www.pouet.net/prod.php?which=63) of 1993:
 [![](https://img.youtube.com/vi/3PXrQAOnrnc/0.jpg)](https://www.youtube.com/watch?v=3PXrQAOnrnc)
 
 or a TO8 replaying with MODE=7 a [famous game](https://en.wikipedia.org/wiki/Another_World_(video_game)) intro:
 [![](https://img.youtube.com/vi/jIY-GlHY2e4/0.jpg)](https://www.youtube.com/watch?v=jIY-GlHY2e4)
+
 or its [remake](https://www.youtube.com/watch?v=1Nlmje-rUQs):
 [![](https://img.youtube.com/vi/jrnNccdIbkA/0.jpg)](https://www.youtube.com/watch?v=jrnNccdIbkA)
 
