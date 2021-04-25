@@ -45,7 +45,8 @@ This is the second converter/player that I made in 2019 in an attempt to improve
 
 By the [end of 2018](https://forum.system-cfg.com/viewtopic.php?p=144980#p144980) I had an idea for another type of screen rendering which quadruples the vertical resolution resuling in pretty tempting gif mockups using the standard palette
 
-![](https://www.cjoint.com/doc/18_11/HKnxpa65Pvr_Kylie-Minogue---Spinning-Around.gif) ![](https://www.cjoint.com/doc/18_11/HKnxkQwKgkr_MMD-Bad-Apple-Now-in-3D-with-more-Color-.gif) ![](https://www.cjoint.com/doc/18_11/HKowQ1fLZPr_David-Guetta---Dangerous-Official-video---radio-edit-ft-Sam-Martin.gif) ![](https://www.cjoint.com/doc/18_11/HKnxCBEjqjr_Commodore-Amiga-500-Best-Demo-Effects.gif)
+![](https://www.cjoint.com/doc/18_11/HKnxpa65Pvr_Kylie-Minogue---Spinning-Around.gif) ![](https://www.cjoint.com/doc/18_11/HKnxkQwKgkr_MMD-Bad-Apple-Now-in-3D-with-more-Color-.gif) 
+![](https://www.cjoint.com/doc/18_11/HKowQ1fLZPr_David-Guetta---Dangerous-Official-video---radio-edit-ft-Sam-Martin.gif) ![](https://www.cjoint.com/doc/18_11/HKnxCBEjqjr_Commodore-Amiga-500-Best-Demo-Effects.gif)
 
 as well as modified palettes allowing to create even more pseudo-color using fine-tuned dithering.
 
@@ -75,7 +76,7 @@ Mode| Resolution | Colors | TO7 | MO5 | TO770 | MO6 | TO8(D), TO9+ | Comment
 4/5  |  80x200   | 16     |     |  X  |   Y   |  X  | Y  | Specific palette designed for dithering
 6/7  |  80x100   | 60*    |     |     |       |  X  | Y  | Specific palette. R/G B one two separate rows. 16 Real colors (3*4 + 5 - 1) but 60 virtual (3*4*5).
 8/9  |  80x66     | 216*  |     |     |       |  X  | Y  | One of R/G/B component (6 levels each) set at every pixel, creating 6*6*6=216 virtual colors.
-10/11| 80x200     | 16    |     |     |       |  X  | Y  | Colors are created from a color-reduction algorithm running over all the frames of the video. *Slow* process!
+10/11| 80x200     | 16    |     |     |       |  X  | Y  | Colors are created from a color-reduction algorithm running over all the frames of the video. *Slow process!*
 12/13| 80x200     | 16    |     |     |       |  X  | Y  | Same as 2/3 but with another dither matrix.
 14/15| 80x200     | 16    |     |     |       |  X  | Y  | [Dawnbriger 16](http://www.logicielsmoto.com/phpBB/viewtopic.php?p=5317#p5317) palette with dithering.
 
