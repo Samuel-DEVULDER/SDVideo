@@ -27,6 +27,7 @@ all: $(ALL)
 tst: tst_conv_sd tst_sdvideo
 
 tst_conv_sd: $(ALL)
+	nice -19 \
 	$(LUA) conv_sd.lua  "test/MMD Bad Apple!! Now in 3D with more Color-.mp4"
 	
 tst_sdvideo: $(ALL)
@@ -34,9 +35,11 @@ tst_sdvideo: $(ALL)
 		echo "MODE=$$i"; \
 		MODE=$$i \
 		nice -19 \
-		$(LUA) sdvideo.lua  "test/Medley.mp4"; \
+		$(LUA) sdvideo.lua \
+			"test/Medley.mp4" \
+			"test/remember to breathe - Travel Alberta, Canada.flv" \
+			"test/spinning_a_mountain.mp4";\
 	done
-
 
 clean:
 	-$(RM) 2>/dev/null bin/* $(C6809) $(LUA)
