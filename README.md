@@ -13,7 +13,7 @@ This is the first one that I made back in 2018.
 
 ## History
 
-This converter was originally discussed in the "[[Thomson] SDDrive Vidéo]((https://forum.system-cfg.com/viewtopic.php?p=141650#p141650))" thread of system-cfg's forum. The idea was to 
+This converter was originally discussed in the "[[Thomson] SDDrive Vidéo](https://forum.system-cfg.com/viewtopic.php?p=141650#p141650)" thread of system-cfg's forum. The idea was to 
 * show lots of colors on the TO/MO machines in spite of color-clashes.
 * be fast enough to be enjoyable
 
