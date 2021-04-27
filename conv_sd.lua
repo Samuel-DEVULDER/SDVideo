@@ -39,9 +39,7 @@ local fps = 12
 local gray = nil
 local interlace = nil	
 local dither = 8 -- -8
-local ffmpeg = 'tools\\ffmpeg.exe'
-local mkdir  = 'md'
-local del    = 'del >nul /s /q'
+local ffmpeg = 'tools/ffmpeg.exe'
 local mode = 'p'
 
 local SPECIAL_4 = false -- true
@@ -51,11 +49,9 @@ if SPECIAL_4 then
 	dither = 3
 end
 
-if os.execute('cygpath -W >/dev/null 2>&1')==0 then
-	ffmpeg = 'tools/ffmpeg.exe' 
-	mkdir  = 'mkdir -p'
-	del    = 'rm -r'
-end
+-- if os.execute('cygpath -W >/dev/null 2>&1')==0 then
+	-- ffmpeg = 'tools/ffmpeg.exe' 
+-- end
 
 local file = arg[1]:gsub('^/cygdrive/(%w)/','%1:/')
 
@@ -360,26 +356,29 @@ end
 -- flux video
 local VIDEO = {}
 function VIDEO:new(file, w, h, fps, gray)
-	if     isdir(tmp) then os.execute(del..' '..tmp) end
-	if not isdir(tmp) then os.execute(mkdir..' '..tmp) end
-	
-	local o = {
-		cpt = 1, -- compteur image
-		width = w,
-		height = h,
-		fps = fps or 10,
+    local o = {
+        file = file,
+        cpt = 1, -- compteur image
+        width = w,
+        height = h,
+        screen_width = 80,
+        screen_height = 50,
+        interlace = interlace,
+        fps = fps or 10,
 		gray = gray or false,
-		image = {},
-		dither = nil,
-		expected_size = 54 + h*(math.floor((w*3+3)/4)*4),
-		running=true,
-		streams = {
-			inp = assert(io.open(file, 'rb')),
-			out = assert(io.popen(ffmpeg..' -i pipe: -v 0 -r '..fps..' -s '..w..'x'..h..' -an '..img_pattern, 'wb')),
-		}
-	}
-	setmetatable(o, self)
-	self.__index = self
+        image = {},
+        dither = nil,
+        expected_size = 3*h*w, -- --54 + h*(math.floor((w*3+3)/4)*4),
+        running=true,
+        input = assert(io.popen(ffmpeg..
+			' -i "'..file..'" -v 0 -r '..fps..
+			' -s '..w..'x'..h..
+			' -an -f rawvideo -pix_fmt rgb24 pipe:', 
+			'rb'))
+    }
+    setmetatable(o, self)
+    self.__index = self
+
 	for i=0,7999+3 do o.image[i]=0 end
 	
 	o.filter = FILTER:new()
@@ -387,8 +386,7 @@ function VIDEO:new(file, w, h, fps, gray)
 	return o
 end
 function VIDEO:close()
-	if io.type(self.streams.inp)=='file' then self.streams.inp:close() end
-	if io.type(self.streams.out)=='file' then self.streams.out:close() end
+	if io.type(self.input)=='file' then self.input:close() end
 end
 function VIDEO:init_dither()
 	local function bayer(t)
@@ -654,140 +652,51 @@ function VIDEO:pset(x,y, r,g,b)
 		v(math.floor(b*3 + d))
 	end
 end
-function VIDEO:read_bmp(bytecode) -- (https://www.gamedev.net/forums/topic/572784-lua-read-bitmap/)
-	-- Helper function: Parse a 16-bit WORD from the binary string
-	local function ReadWORD(str, offset)
-		local loByte = str:byte(offset);
-		local hiByte = str:byte(offset+1);
-		return hiByte*256 + loByte;
-	end
-
-	-- Helper function: Parse a 32-bit DWORD from the binary string
-	local function ReadDWORD(str, offset)
-		local loWord = ReadWORD(str, offset);
-		local hiWord = ReadWORD(str, offset+2);
-		return hiWord*65536 + loWord;
-	end
-	
-	-------------------------
-	-- Parse BITMAPFILEHEADER
-	-------------------------
-	local offset = 1;
-	local bfType = ReadWORD(bytecode, offset);
-	if(bfType ~= 0x4D42) then
-		error("Not a bitmap file (Invalid BMP magic value)");
-		return;
-	end
-	local bfOffBits = ReadWORD(bytecode, offset+10);
-
-	-------------------------
-	-- Parse BITMAPINFOHEADER
-	-------------------------
-	offset = 15; -- BITMAPFILEHEADER is 14 bytes long
-	local biWidth = ReadDWORD(bytecode, offset+4);
-	local biHeight = ReadDWORD(bytecode, offset+8);
-	local biBitCount = ReadWORD(bytecode, offset+14);
-	local biCompression = ReadDWORD(bytecode, offset+16);
-	if(biBitCount ~= 24) then
-		error("Only 24-bit bitmaps supported (Is " .. biBitCount .. "bpp)");
-		return;
-	end
-	if(biCompression ~= 0) then
-		error("Only uncompressed bitmaps supported (Compression type is " .. biCompression .. ")");
-		return;
-	end
-
-	---------------------
-	-- Parse bitmap image
-	---------------------
-	local ox = math.floor((80 - biWidth)/4)*2
-	local oy = math.floor((50 - biHeight)/2)
-	local oo = 4*math.floor((biWidth*biBitCount/8 + 3)/4)
-	local pr = self.filter:push(bytecode)
-	for y = biHeight-1, 0, -1 do
-		offset = bfOffBits + oo*y + 1;
-		for x = ox, ox+biWidth-1 do
-			self:pset(x, oy,
-						pr:byte(offset+2), -- r
-						pr:byte(offset+1), -- g
-						pr:byte(offset  )  -- b
-			);
-			offset = offset + 3;
-		end
-		oy = oy+1
+function VIDEO:clear()
+    for p=0,#self.image do self.image[p] = 0 end
+end
+function VIDEO:read_rgb24(raw)
+	self:clear()
+	local i,w,b,p = math.floor,self.width,FILTER.byte,self.pset
+	local ox = i((self.screen_width - w)/2)
+	local oy = i((self.screen_height - self.height)/2)
+	local pr = self.filter:push(raw)
+	for o=0,w*self.height-1 do
+		local x,y,o = ox+(o % w), i(o/w)+oy,o*3
+		p(self, x, y,
+			b(pr,o+1), -- r
+			b(pr,o+2), -- g
+			b(pr,o+3)  -- b
+		)
 	end
 	self.filter:flush()
 end
 function VIDEO:next_image()
-	if not self.running then return end
-	
-	-- nom nouvelle image
-	local name = img_pattern:format(self.cpt); self.cpt = self.cpt + 1
-	local buf = ''
-	local f = io.open(name,'rb')
-	if f then 
-		buf = f:read(self.expected_size) or buf
-		f:close()
+    if not self.running then return end
+	self.cpt = self.cpt + 1
+	local buf,len = '', self.expected_size
+	while len>0 do
+		local b = self.input:read(len)
+		if not b then break end
+		buf,len = buf .. b,len - b:len()
 	end
-		
-	-- si pas la bonne taille, on nourrit ffmpeg
-	-- jusqu'a obtenir un fichier BMP complet
-	local timeout = TIMEOUT
-	while buf:len() ~= self.expected_size and timeout>0 do
-		buf = self.streams.inp:read(BUFFER_SIZE)
-		if buf then
-			self.streams.out:write(buf)
-			self.streams.out:flush()
-		else 
-			if io.type(self.streams.out)=='file' then
-				self.streams.out:close()
-			end
-			-- io.stdout:write('wait ' .. name ..'\n')
-			-- io.stdout:flush()
-			local t=os.time()+1
-			repeat until os.time()>t
-			timeout = timeout - 1
-		end
-		f = io.open(name,'rb')
-		if f then 
-			buf = f:read(self.expected_size) or ''
-			f:close()
-			timeout = TIMEOUT
-		else
-			buf = ''
-		end
-	end
-	
-	-- effacement temporaire
-	os.remove(name)
-
-	if buf and buf:len()>0 then 
-		-- nettoyage de l'image précédente
-		-- for i=0,7999+3 do self.image[i]=0 end
-		-- lecture image
-		self:read_bmp(buf)
+	-- print(self.cpt, len) io.stdout:flush()
+	if len==0 then
+		self:read_rgb24(buf)
 	else
-		if self.cpt==2 and not self._avi_hack then
-			self:close()
-			self.streams.inp = assert(io.popen(ffmpeg..' -i "'..file..'" -v 0 -f avi pipe:','rb'))
-			self.streams.out = assert(io.popen(ffmpeg..' -i pipe: -v 0 -r '..self.fps..' -s '..self.width..'x'..self.height..' -an '..img_pattern, 'wb'))
-			self._avi_hack   = true
-			self.cpt = 1
-			self:next_image()
-		else
-			self.running = false
-		end
+		self.running = false
+		self.input:close()
+		self.input = nil
 	end
 end
 function VIDEO:skip_image()
-	local bak = self.read_bmp
-	function self:read_bmp(bytecode)
-		self.filter:push(bytecode)
-	end
-	self:next_image()
-	self.read_bmp = bak
+	local bak = self.read_rgb24
+    function self:read_rgb24(raw)
+        self.filter:push(raw)
+    end
+    self:next_image()
+    self.read_rgb24 = bak
 end
-
 -- auto determination des parametres
 local stat = VIDEO:new(file,w,h,round(fps/2),gray)
 stat.super_pset = stat.pset

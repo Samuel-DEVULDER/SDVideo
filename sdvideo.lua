@@ -15,7 +15,7 @@
 
 -- utiliser un fps<0 si la taille 100% doit etre conservee
 local MODE = loadstring('return ' .. (os.getenv('MODE') or '7'))();
-local FPS = 21 -- 17 -- 10 -- 15 -- 11
+local FPS = 13 -- 21 -- 17 -- 10 -- 15 -- 11
 
 -- ===========================================================================
 -- constants
@@ -28,21 +28,15 @@ local MAX_AUDIO_AMP = 13
 local EXPONENTIAL   = true
 local ZIGZAG        = true
 local LOOSY         = false
-local TIMEOUT       = 2
 local BUFFER_SIZE   = 4096*4*2
-local TMP           = 'TMP' -- .. os.time()
 local FFMPEG        = 'tools\\ffmpeg.exe'
 local C6809         = 'tools\\c6809.exe'
-local MKDIR         = 'md'
-local DEL           = 'del >nul /s /q'
 
 -- ===========================================================================
 -- helper functions
 if os.execute('cygpath -W >/dev/null 2>&1')==0 then
 	FFMPEG = 'tools/ffmpeg.exe' 
 	C6809  = 'tools/c6809.exe'
-	MKDIR  = 'mkdir -p'
-	DEL    = 'rm -r'
 end
 if not unpack then unpack = table.unpack end
 local function round(x)
@@ -440,13 +434,14 @@ function PALETTE.unlinear(u)
 end
 -- print(PALETTE.unlinear(.2), PALETTE.unlinear(.4), PALETTE.unlinear(.6), PALETTE.unlinear(.8))
 function PALETTE:intens(i)
-    local p = self[i]
-    return .2126*p[1] + .7152*p[2] + .0722*p[3]
+    local p,f = self[i], PALETTE.linear
+    return .2126*f(p[1]) + .7152*f(p[2]) + .0722*f(p[3])
 end
 function PALETTE.key(r,g,b)
     return string.format("%02x%02x%02x",round(r/8),round(g/8),round(b/8))
 end
 function PALETTE:compute(n, r,g,b)
+	-- for i,p in ipairs(self) do print(i,'=',unpack(p)) end
 -- r=255 g=255 b=255
 	local EPS,push = 1e-12,table.insert
 	local tetras = self.tetras
@@ -755,7 +750,7 @@ function PALETTE:compute(n, r,g,b)
 								local pert = {}
 								for k,v in pairs(pt) do pert[k]=v end
 								for j=1,3 do pert[j] = pert[j]*(1 + (pert[j]>=1 and -1 or 1)*math.random()/100000) end
-								print("pert", pt[1],pt[2],pt[3],"\n=>",pert[1],pert[2],pert[3])
+								-- print("pert", pt[1],pt[2],pt[3],"\n=>",pert[1],pert[2],pert[3])
 								return self:add(pert)
 							end
 						end
@@ -812,18 +807,74 @@ function PALETTE:compute(n, r,g,b)
 		local x,y,z,t = tetra.coord(p)
 		if x then 
 			if i>4 then table.insert(tetras,1,table.remove(tetras,i)) end
+			local sorted = {
+				{x,tetra.a.index},{y,tetra.b.index},
+				{z,tetra.c.index},{t,tetra.d.index}
+			}
+			table.sort(sorted, function(a,b) return a[1]>b[1] end)
+			x,y,z,t = sorted[1][1],sorted[2][1],sorted[3][1],sorted[4][1]
 			x,y,z,t = x*n,(x+y)*n,(x+y+z)*n,{}
-			while #t<x do push(t,tetra.a.index) end
-			while #t<y do push(t,tetra.b.index) end
-			while #t<z do push(t,tetra.c.index) end
-			while #t<n do push(t,tetra.d.index) end
+			while #t<x do push(t,sorted[1][2]) end
+			while #t<y do push(t,sorted[2][2]) end
+			while #t<z do push(t,sorted[3][2]) end
+			while #t<n do push(t,sorted[4][2]) end
 			table.sort(t, function(a,b) return self:intens(a+1)<self:intens(b+1) end)
 			return string.char(unpack(t))
 		end
 	end
 	error("no match for " .. p[1].." "..p[2].." "..p[3])
 end
-
+if false then
+	function PALETTE:index(r,g,b) 
+		local k=self.key(self.unlinear(r),self.unlinear(g),self.unlinear(b))
+		if not self.icache then self.icache = {} end
+		local i=self.icache[k]
+		if true or not i then
+			if not self.linearized then
+				local f=self.linear
+				self.linearized = {}
+				for i,p in ipairs(self) do
+					self.linearized[i] = {f(p[1]),f(p[2]),f(p[3])}
+				end
+			end
+			local d=1e38
+			for j,p in ipairs(self.linearized) do
+				local t = (r-p[1])^2 + (g-p[2])^2 + (b-p[3])^2
+				if t<d then d,i=t,j end
+			end
+			print(k,'=>',i)
+			self.icache[k] = i
+		end
+		return i
+	end
+	PALETTE.compute_ = PALETTE.compute
+	function PALETTE:compute(n, r,g,b)
+		local R,G,B = r,g,b
+		r,g,b = self.linear(r),self.linear(g),self.linear(b)
+		local k = 0.7
+		local x,y,z=0,0,0
+		local t = {}
+		for i=1,n do
+			local j = self:index(r+x*k, g+y*k, b+z*k)
+			local p = self[j]
+			x,y,z = x+r-p[1],y+g-p[2],z+b-p[3]
+			t[i] = j-1
+		end
+		table.sort(t, function(a,b) return self:intens(a+1)<self:intens(b+1) end)
+		
+		local z = self:compute_(n, R,G,B)
+		for i,v in ipairs(t) do
+			local b = z:byte(i)
+			if v~=b then
+				print(R,G,B)
+				for i,v in ipairs(t) do	print('***' , i, v, z:byte(i)) end
+				error()
+			end
+		end
+		
+		return string.char(unpack(t))
+	end
+end
 -- ===========================================================================-- PALETTE support
 -- flux audio
 local AUDIO = {}
@@ -937,11 +988,6 @@ end
 -- flux video
 local VIDEO = {}
 function VIDEO:new(file, fps, w, h, screen_width, screen_height, interlace)
-    if     isdir(TMP) then os.execute(DEL..' '..TMP) end
-	if not isdir(TMP) then os.execute(MKDIR..' '..TMP) end
-
-    local img_pattern =  TMP..'/img%05d.bmp'
-
     local o = {
         file = file,
         cpt = 1, -- compteur image
@@ -953,111 +999,155 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, interlace)
         fps = fps or 10,
         image = {},
         dither = nil,
-        expected_size = 54 + h*(math.floor((w*3+3)/4)*4),
+        expected_size = 3*h*w, -- --54 + h*(math.floor((w*3+3)/4)*4),
         running=true,
         img_pattern=img_pattern,
-        streams = {
-            inp = assert(io.open(file, 'rb')),
-            out = assert(io.popen(FFMPEG..' -i pipe: -v 0 -r '..fps..' -s '..w..'x'..h..' -an '..img_pattern, 'wb')),
-        }
+        input = assert(io.popen(FFMPEG..
+			' -i "'..file..'" -v 0 -r '..fps..
+			' -s '..w..'x'..h..
+			' -an -f rawvideo -pix_fmt rgb24 pipe:', 
+			'rb'))
     }
     setmetatable(o, self)
     self.__index = self
 
     -- initialise la progression dans les octets de l'image
-    local lines,indices = {},{}
-    for i=0,199 do
-        table.insert(lines, i)
-    end
+    local function inside(x,min,max) return min<=x and x<max end
+    local indices = {}
+	local function fill(steps)
+		local mod = 40*steps[#steps]
+		for _,k in ipairs(steps) do -- {1,5,3,7,2,6,4,8} do
+			k = k*40
+			for i=0,7999 do if inside(i%mod,k-40,k) then table.insert(indices, i) end end
+		end
+	end
     if interlace=='p' or interlace=='a' then
-        -- rien
+		fill{1}
     elseif interlace=='i' then
-        local t = {}
-        for i=1,#lines,2 do
-            table.insert(t, lines[i])
-        end
-        for i=2,#lines,2 do
-            table.insert(t, lines[i])
-        end
-        lines = t
-    elseif interlace=='ii' then
-        local t = {}
-        for i=1,#lines,4 do
-            table.insert(t, lines[i])
-        end
-        for i=3,#lines,4 do
-            table.insert(t, lines[i])
-        end
-        for i=2,#lines,4 do
-            table.insert(t, lines[i])
-        end
-        for i=4,#lines,4 do
-            table.insert(t, lines[i])
-        end
-        lines = t
-    elseif interlace=='iii' then
-        local t = {}
-        for i=1,#lines,4 do
-            table.insert(t, lines[i])
-        end
-        for i=3,#lines,4 do
-            table.insert(t, lines[i])
-        end
-        for i=2,#lines,2 do
-            table.insert(t, lines[i])
-        end
-        lines = t
+        fill{1,2}
+		local i1={}
+		for j=0,7999 do if inside(j%80,40,44) then table.insert(i1,j) end end
+		o.indices = function(prev,curr)
+			local i,bak = 0,{}
+			return function()
+				i = i+1
+				local val = indices[i]
+				if val==1 then
+					for _,j in ipairs(i1) do
+						bak[j],curr[j] = curr[j],prev[j] 
+					end
+				elseif val==40 then
+					for _,j in ipairs(i1) do
+						curr[j] = bak[j]
+					end
+				elseif val==nil then
+					i = nil
+				end
+				return i,val
+			end
+		end
     elseif interlace=='i3' then
-        local t = {}
-        for i=1,#lines,3 do
-            table.insert(t, lines[i])
-        end
-        for i=2,#lines,3 do
-            table.insert(t, lines[i])
-        end
-        for i=3,#lines,3 do
-            table.insert(t, lines[i])
-        end
-        lines = t
+		fill{1,2,3}
+		local i1,i2={},{}
+		for j=0,7999 do 
+			if     inside(j%120,40,44) then	table.insert(i1,j)
+			elseif inside(j%120,80,84) then table.insert(i2,j)
+			end
+		end
+		o.indices = function(prev,curr)
+			local i,bak = 0,{}
+			return function()
+				i = i+1
+				local val = indices[i]
+				-- print(i,val); io.stdout:flush()
+				if val==1 then
+					for _,j in ipairs(i1) do
+						bak[j],curr[j] = curr[j],prev[j] 
+					end
+				elseif val==40 then
+					for _,j in ipairs(i2) do
+						bak[j],curr[j-40],curr[j] = curr[j],bak[j-40],prev[j]
+					end
+				elseif val==80 then
+					for _,j in ipairs(i2) do
+						curr[j] = bak[j]
+					end
+				elseif val==nil then
+					return nil
+				end
+				return i,val
+			end
+		end
+    elseif interlace=='ii' then
+		fill{1,2,3,4}
+		local i1,i2,i3={},{},{}
+		for j=0,7999 do 
+			if     inside(j%160, 40, 44) then table.insert(i1,j)
+			elseif inside(j%160, 80, 84) then table.insert(i2,j)
+			elseif inside(j%160,120,124) then table.insert(i3,j)
+			end
+		end
+		o.indices = function(prev,curr)
+			local i,bak = 0,{}
+			return function()
+				i = i+1
+				local val = indices[i]
+				-- print(i,val); io.stdout:flush()
+				if val==1 then
+					for _,j in ipairs(i1) do
+						bak[j],curr[j] = curr[j],prev[j] 
+					end
+				elseif val==40 then
+					for _,j in ipairs(i2) do
+						bak[j],curr[j-40],curr[j] = curr[j],bak[j-40],prev[j]
+					end
+				elseif val==80 then
+					for _,j in ipairs(i3) do
+						bak[j],curr[j-40],curr[j] = curr[j],bak[j-40],prev[j]
+					end
+				elseif val==120 then
+					for _,j in ipairs(i3) do
+						curr[j] = bak[j]
+					end
+				elseif val==nil then
+					return nil
+				end
+				return i,val
+			end
+		end
+    elseif interlace=='iii' then
+		fill{2,4}
+        for i=0,7999 do if inside(i%80,00,40) then table.insert(indices, i) end end
+		local i1={}
+		for j=0,7999 do if inside(j%80,0,4) then table.insert(i1,j) end end
+		o.indices = function(prev,curr)
+			local i,bak = 0,{}
+			return function()
+				i = i+1
+				local val = indices[i]
+				if val==40 then
+					for _,j in ipairs(i1) do
+						bak[j],curr[j] = curr[j],prev[j] 
+					end
+				elseif val==0 then
+					for _,j in ipairs(i1) do
+						curr[j] = bak[j]
+					end
+				elseif val==nil then
+					i = nil
+				end
+				return i,val
+			end
+		end
     elseif interlace=='iiii' then
-        local t = {}
-        for i=1,#lines,8 do
-            table.insert(t, lines[i])
-        end
-        for i=5,#lines,8 do
-            table.insert(t, lines[i])
-        end
-        for i=3,#lines,8 do
-            table.insert(t, lines[i])
-        end
-        for i=7,#lines,8 do
-            table.insert(t, lines[i])
-        end
-        for i=2,#lines,8 do
-            table.insert(t, lines[i])
-        end
-        for i=6,#lines,8 do
-            table.insert(t, lines[i])
-        end
-        for i=4,#lines,8 do
-            table.insert(t, lines[i])
-        end
-        for i=8,#lines,8 do
-            table.insert(t, lines[i])
-        end
-        lines = t
+		fill{1,5,3,7,2,6,4,8}
     else
         error('Unknown interlace: ' .. interlace)
     end
-    for _,i in ipairs(lines) do
-        -- print(i)
-        for j=i*40,i*40+39 do
-            table.insert(indices, j)
-        end
-    end
-    o.indices = indices
 
-    o.zero = (MODE>=3) and ((MODE%2)==1) and 0xC0 or 0x00
+	if not o.indices then o.indices = function(prev,curr) return ipairs(indices) end end
+
+	o.zero = (MODE>=3) and ((MODE%2)==1) and 0xC0 or 0x00
     for i=0,7999+3 do o.image[i]=o.zero end
 
     o.filter = FILTER:new()
@@ -1065,8 +1155,7 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, interlace)
     return o
 end
 function VIDEO:close()
-    if io.type(self.streams.inp)=='file' then self.streams.inp:close() end
-    if io.type(self.streams.out)=='file' then self.streams.out:close() end
+    if io.type(self.input)=='file' then self.input:close() end
 end
 function VIDEO:init_dither()
     local m=CONFIG.dither
@@ -1091,67 +1180,53 @@ end
 if MODE==0 then
     -- GRAY
     function VIDEO:pset(x,y, r,g,b)
-        if not self.dither then VIDEO:init_dither() end
-        if not self._linear then
+        if not self.dither then 
+			self:init_dither()
             self._linear = {}
             for i=0,255 do self._linear[i]=PALETTE.linear(i) end
             self._mask = {}
-            for i=0,7 do self._mask[i]=2^(7-i) end
+            for i=0,319 do self._mask[i]=2^(7-(i%8)) end
         end
-        local f = self._linear
-        local v = .2126*f[r] + .7152*f[g] + .0722*f[b]
-		if v>self.dither:get(x,y) then
-            local p = math.floor(x/8) + y*40
-            self.image[p] = self.image[p] + self._mask[x%8]
-        end
+		local f = self._linear
+		if .2126*f[r]+.7152*f[g]+.0722*f[b]>=self.dither:get(x,y) then
+			f = math.floor((x+y*320)/8)
+			self.image[f] = self.image[f] + self._mask[x]
+		end
     end
 elseif MODE==1 then
     -- RGB
     function VIDEO:pset(x,y, r,g,b)
-        if not self.dither then VIDEO:init_dither() end
-        if not self._linear then
+        if not self.dither then 
+			self:init_dither()
             self._linear = {}
             for i=0,255 do self._linear[i]=PALETTE.linear(i) end
             self._mask = {}
-            for i=0,7 do self._mask[i]=2^(7-i) end
+            for i=0,319 do self._mask[i]=2^(7-(i%8)) end
         end
-        local f,d = self._linear,self.dither:get(x,y)
-        local m,p = self._mask[x%8],math.floor(x/8) + y*120
-        if f[r]>d then
-            self.image[p] = self.image[p] + m
-        end
-        p = p + 40
-        if f[g]>d then
-            self.image[p] = self.image[p] + m
-        end
-        p = p + 40
-        if f[b]>d then
-            self.image[p] = self.image[p] + m
-        end
+		local f,d = self._linear,self.dither:get(x,y)
+        local m,p,q = self._mask[x],math.floor((x+y*960)/8),self.image
+        if f[r]>d then q[p]    = q[p]    + m end
+        if f[g]>d then q[p+40] = q[p+40] + m end
+        if f[b]>d then q[p+80] = q[p+80] + m end
     end
 elseif MODE==2 or MODE==4 or MODE==10 or MODE==14 then
     -- MO (not transcode)
     function VIDEO:pset(x,y, r,g,b)
-        if not self.dither then VIDEO:init_dither() end
-        if not self._cache then self._cache = {} end
-
+        if not self.dither then	self:init_dither(); self._cache = {} end
         local k = PALETTE.key(r,g,b)
         local t = self._cache[k]
         if not t then
             t = PALETTE:compute(self.dither.wh,r,g,b)
             self._cache[k] = t
         end
-        local o,p,d = (x%2),math.floor(x/2) + y*40,self.dither:get(x,y)
-        local v = t:byte(d)
+        local o,p,v = (x%2),math.floor(x/2) + y*40,t:byte(self.dither:get(x,y))
         if o==0 then v=v*16 end
         self.image[p] = self.image[p] + v
     end
 elseif MODE==3 or MODE==5 or MODE==11 or MODE==15  then
     -- TO (transcode)
     function VIDEO:pset(x,y, r,g,b)
-        if not self.dither then VIDEO:init_dither() end
-        if not self._cache then self._cache = {} end
-
+        if not self.dither then self:init_dither(); self._cache = {} end
         local k = PALETTE.key(r,g,b)
         local t = self._cache[k]
         if not t then
@@ -1182,8 +1257,8 @@ elseif MODE==6 or MODE==7 then
         end
     end
     function VIDEO:pset(x,y, r,g,b)
-        if not self.dither then VIDEO:init_dither() end
-        if not self._linear then
+        if not self.dither then 
+			self:init_dither()
             self._linear = {}
             for i=0,255 do
                 local t = PALETTE.linear(i)
@@ -1238,8 +1313,8 @@ elseif MODE==8 or MODE==9 then
         end
     end
     function VIDEO:pset(x,y, r,g,b)
-        if not self.dither then VIDEO:init_dither() end
-        if not self._linear then
+        if not self.dither then 
+			self:init_dither()
             self._linear = {}
             local f = function (i)
                 return PALETTE.linear(i)*5
@@ -1280,7 +1355,7 @@ elseif MODE==12 or MODE==13 then
     if MODE%2==0 then
         -- MO (not transcode)
         function VIDEO:plot(p,o,v)
-            self.image[p] = self.image[p] + v*(o==0 and 16 or 1)
+            self.image[p] = self.image[p] + (o==0 and 16*v or v)
         end
     else
         -- TO (transcode)
@@ -1289,214 +1364,65 @@ elseif MODE==12 or MODE==13 then
         end
     end
     function VIDEO:pset(x,y, r,g,b)
-        if not self.dither then VIDEO:init_dither() end
-        if not self._linear then
+        if not self.dither then 
+			self:init_dither()
             self._linear = {}
             for i=0,255 do self._linear[i]=PALETTE.linear(i) end
         end
         local f,d = self._linear,self.dither:get(x,y)
-		local c = 0
-		if f[r]>d then c = c + 1 end
-		if f[g]>d then c = c + 2 end
-		if f[b]>d then c = c + 4 end
+		local c = (f[r]>d and 1 or 0) + (f[g]>d and 2 or 0) + (f[b]>d and 4 or 0)
+		-- if f[r]>d then c = c + 1 end
+		-- if f[g]>d then c = c + 2 end
+		-- if f[b]>d then c = c + 4 end
 		if c>0 then self:plot(math.floor(x/2) + y*40, x%2, c) end
     end
 else
     error('Invalid MODE: ' .. MODE)
 end
-function VIDEO:read_bmp(bytecode) -- (https://www.gamedev.net/forums/topic/572784-lua-read-bitmap/)
-    -- Helper function: Parse a 16-bit WORD from the binary string
-    local function ReadWORD(str, offset)
-        local loByte = str:byte(offset);
-        local hiByte = str:byte(offset+1);
-        return hiByte*256 + loByte;
-    end
-
-    -- Helper function: Parse a 32-bit DWORD from the binary string
-    local function ReadDWORD(str, offset)
-        local loWord = ReadWORD(str, offset);
-        local hiWord = ReadWORD(str, offset+2);
-        return hiWord*65536 + loWord;
-    end
-
-    -------------------------
-    -- Parse BITMAPFILEHEADER
-    -------------------------
-    local offset = 1;
-    local bfType = ReadWORD(bytecode, offset);
-    if(bfType ~= 0x4D42) then
-        error("Not a bitmap file (Invalid BMP magic value)");
-        return;
-    end
-    local bfOffBits = ReadWORD(bytecode, offset+10);
-
-    -------------------------
-    -- Parse BITMAPINFOHEADER
-    -------------------------
-    offset = 15; -- BITMAPFILEHEADER is 14 bytes long
-    local biWidth = ReadDWORD(bytecode, offset+4);
-    local biHeight = ReadDWORD(bytecode, offset+8);
-    local biBitCount = ReadWORD(bytecode, offset+14);
-    local biCompression = ReadDWORD(bytecode, offset+16);
-    if(biBitCount ~= 24) then
-        error("Only 24-bit bitmaps supported (Is " .. biBitCount .. "bpp)");
-        return;
-    end
-    if(biCompression ~= 0) then
-        error("Only uncompressed bitmaps supported (Compression type is " .. biCompression .. ")");
-        return;
-    end
-
-    -----------------
-    -- Clear image --
-    -----------------
-    if interlace=='a' then
-        if not self._prev then self._prev = {} end
-        for p=0,#self.image do
-            self._prev[p] = self.image[p]
-        end
-    end
+function VIDEO:clear()
     for p=0,#self.image do self.image[p] = self.zero end
-
-    ---------------------
-    -- Parse bitmap image
-    ---------------------
-    local ox = math.floor((self.screen_width - biWidth)/2)
-    local oy = math.floor((self.screen_height - biHeight)/2)
-    local oo = 4*math.floor((biWidth*biBitCount/8 + 3)/4)
-    local pr = self.filter:push(bytecode)
-    for y = biHeight-1, 0, -1 do
-        offset = bfOffBits + oo*y + 1;
-        for x = ox, ox+biWidth-1 do
-            local r = round(255*(x-ox)/biWidth)
-            local g = round(245*(x-ox)/biWidth)
-            local b = round(235*(x-ox)/biWidth)
-            self:pset(x, oy,
-                        pr:byte(offset+2), -- r
-                        pr:byte(offset+1), -- g
-                        pr:byte(offset  )  -- b
-            );
-            offset = offset + 3;
-        end
-        oy = oy+1
-    end
-    self.filter:flush()
+end
+function VIDEO:read_rgb24(raw)
+	self:clear()
+	local i,w,b,p = math.floor,self.width,FILTER.byte,self.pset
+	local ox = i((self.screen_width - w)/2)
+	local oy = i((self.screen_height - self.height)/2)
+	local pr = self.filter:push(raw)
+	for o=0,w*self.height-1 do
+		local x,y,o = ox+(o % w), i(o/w)+oy,o*3
+		p(self, x, y,
+			b(pr,o+1), -- r
+			b(pr,o+2), -- g
+			b(pr,o+3)  -- b
+		)
+	end
+	self.filter:flush()
 end
 function VIDEO:next_image()
     if not self.running then return end
-
-    -- nom nouvelle image
-    local name = self.img_pattern:format(self.cpt); self.cpt = self.cpt + 1
-    local buf = ''
-    local f = io.open(name,'rb')
-    if f then
-        buf = f:read(self.expected_size) or buf
-        f:close()
-    end
-
-    -- si pas la bonne taille, on nourrit ffmpeg
-    -- jusqu'a obtenir un fichier BMP complet
-    local timeout = TIMEOUT
-    while buf:len() ~= self.expected_size and timeout>0 do
-        buf = self.streams.inp:read(BUFFER_SIZE)
-        if buf then
-            self.streams.out:write(buf)
-            self.streams.out:flush()
-        else
-            if io.type(self.streams.out)=='file' then
-                self.streams.out:close()
-            end
-            -- io.stdout:write('wait ' .. name ..'\n')
-            -- io.stdout:flush()
-            local t=os.time()+1
-            repeat until os.time()>t
-            timeout = timeout - 1
-        end
-        f = io.open(name,'rb')
-        if f then
-            buf = f:read(self.expected_size) or ''
-            f:close()
-            timeout = TIMEOUT
-        else
-            buf = ''
-        end
-    end
-
-    -- effacement temporaire
-    os.remove(name)
-
-    if buf and buf:len()>0 then
-        -- nettoyage de l'image précédente
-        -- for i=0,7999+3 do self.image[i]=0 end
-        -- lecture image
-        self:read_bmp(buf)
-    else
-        if self.cpt==2 and not self._avi_hack then
-            self:close()
-            self.streams.inp = assert(io.popen(FFMPEG..' -i "'..self.file..'" -v 0 -s '..self.width..'x'..self.height..' -f avi pipe:','rb'))
-            self.streams.out = assert(io.popen(FFMPEG..' -i pipe: -v 0 -r '..self.fps..' -s '..self.width..'x'..self.height..' -an '..self.img_pattern, 'wb'))
-            self._avi_hack   = true
-            self.cpt = 1
-            self:next_image()
-        else
-            self.running = false
-        end
-    end
-
-    if interlace=='a' and self._prev then
-        if not diff_tab then
-            diff_tab = {}
-            local function diff(i,j)
-                local c,t = 0,128
-                if (i>=t) ~= (j>=t) then c=c+1 end; i,j,t=i%t,j%t,t/2
-                if (i>=t) ~= (j>=t) then c=c+1 end; i,j,t=i%t,j%t,t/2
-                if (i>=t) ~= (j>=t) then c=c+1 end; i,j,t=i%t,j%t,t/2
-                if (i>=t) ~= (j>=t) then c=c+1 end; i,j,t=i%t,j%t,t/2
-                if (i>=t) ~= (j>=t) then c=c+1 end; i,j,t=i%t,j%t,t/2
-                if (i>=t) ~= (j>=t) then c=c+1 end; i,j,t=i%t,j%t,t/2
-                if (i>=t) ~= (j>=t) then c=c+1 end; i,j,t=i%t,j%t,t/2
-                if (i>=t) ~= (j>=t) then c=c+1 end; i,j,t=i%t,j%t,t/2
-                if (i>=t) ~= (j>=t) then c=c+1 end; i,j,t=i%t,j%t,t/2
-                return c
-            end
-            for i=0,255 do
-                for j=0,255 do
-                    diff_tab[i*256+j] = diff(i,j)
-                end
-            end
-        end
-        local diff = {}
-        for i=math.floor((200-h)/2),math.floor((200-h)/2)+h-1 do
-            local l={i=i, n=0}
-            for j=i*40,i*40+39 do
-                l.n =l.n + diff_tab[self.image[j]*256 + self._prev[j]]
-            end
-            table.insert(diff, l)
-        end
-        table.sort(diff, function(a,b) return a.n>b.n end)
-        local flag = {}
-        for i=1,math.floor(#diff/3) do flag[diff[i].i] = true end
-        self.indices = {}
-        for i=math.floor((200-h)/2),math.floor((200-h)/2)+h-1 do
-            if flag[i] then
-                for j=i*40,i*40+39 do table.insert(self.indices, j) end
-            end
-        end
-        for i=math.floor((200-h)/2),math.floor((200-h)/2)+h-1 do
-            if not flag[i] then
-                for j=i*40,i*40+39 do table.insert(self.indices, j) end
-            end
-        end
-    end
-
+	self.cpt = self.cpt + 1
+	local buf,len = '', self.expected_size
+	while len>0 do
+		local b = self.input:read(len)
+		if not b then break end
+		buf,len = buf .. b,len - b:len()
+	end
+	-- print(self.cpt, len) io.stdout:flush()
+	if len==0 then
+		self:read_rgb24(buf)
+	else
+		self.running = false
+		self.input:close()
+		self.input = nil
+	end
 end
 function VIDEO:skip_image()
-    local bak = self.read_bmp
-    function self:read_bmp(bytecode)
-        self.filter:push(bytecode)
+    local bak = self.read_rgb24
+    function self:read_rgb24(raw)
+        self.filter:push(raw)
     end
     self:next_image()
-    self.read_bmp = bak
+    self.read_rgb24 = bak
 end
 
 local CONVERTER = {}
@@ -1561,10 +1487,8 @@ function CONVERTER:_stat()
     stat.super_pset = stat.pset
     stat.histo = {n=0}; for i=0,255 do stat.histo[i]=0 end
     function stat:pset(x,y, r,g,b)
-        self.histo[r] = self.histo[r]+1
-        self.histo[g] = self.histo[g]+1
-        self.histo[b] = self.histo[b]+1
-
+        self.histo[r],self.histo[g],self.histo[b] = 
+			self.histo[r]+1,self.histo[g]+1,self.histo[b]+1
         self:super_pset(x,y,r,g,b)
     end
     stat.super_next_image = stat.next_image
@@ -1587,9 +1511,8 @@ function CONVERTER:_stat()
         -- for _,i in ipairs(indices) do
             -- if prev[i] ~= curr[i] then chg = chg+1 end
         -- end
-
-        for _,i in ipairs(self.indices) do
-        -- for i=0,7999 do
+		
+        for _,i in self.indices(prev,curr) do
             while prev[i] ~= curr[i] do
                 if LOOSY and
                    curr[i+1]==prev[i+1] and
@@ -1600,8 +1523,7 @@ function CONVERTER:_stat()
                 then
                     curr[i] = prev[i]
                 else
-                    stat.trames = stat.trames + 1
-                    if stat.trames % 171 == 170 then stat.trames = stat.trames + 1 end
+                    stat.trames = stat.trames + (stat.trames % 171 == 169 and 2 or 1)
                     local k = i - pos
                     if k<0 then k=8000 end
                     if k<=1 then
@@ -1786,10 +1708,6 @@ function CONVERTER:_stat()
     end
 end
 function CONVERTER:process()
-    -- clean temporary files
-    if     isdir(TMP) then os.execute(DEL..' '..TMP) end
-	if not isdir(TMP) then os.execute(MKDIR..' '..TMP) end
-
     -- collect stats
     self:_stat()
 
@@ -1798,6 +1716,7 @@ function CONVERTER:process()
     local video  = self:_new_video()
 
     -- adaptation luminosité
+	print(self.video_cor[1],self.video_cor[2])
     if self.video_cor[1]~=0 or self.video_cor[2]~=1 then
         local cor = self.video_cor
         local super_pset = video.pset
@@ -1819,9 +1738,7 @@ function CONVERTER:process()
     local pos            = 8000
 
     -- init previous image
-    local curr = video.image
-    local prev = {}
-    for i=0,7999+3*10 do prev[i] = -1 end
+    local curr,prev = video.image,{}
 
     -- fade in/out audio
     local audio_fader = {
@@ -1865,28 +1782,33 @@ function CONVERTER:process()
 		return t
 	end
 	
+	local info_sec = 1
+	
+	local function update_info()
+		if video.cpt>=info_sec then
+			info_sec = info_sec + video.fps
+			tstamp = tstamp + 1
+			io.stdout:write(info() .. '\r')
+			io.stdout:flush()
+		end
+	end 
+	
 	-- progressive
-	local indices = {}
-	for i,o in ipairs(video.indices) do
-		if (o%80)~=39 then table.insert(indices,o) end
-	end
-	for i,o in ipairs(video.indices) do
-		if (o%80)==39 then table.insert(indices,o) end
+	local indices = function()
+		local i=-1
+		return function()
+			i=i+1
+			if i==8000 then return nil else return i,i end
+		end
 	end
 	
     -- conversion
     video:skip_image()
     current_cycle = current_cycle + cycles_per_img
     video:next_image()
-    while audio.running do
-        -- infos
-        if video.cpt % video.fps == 0 then
-            tstamp = tstamp + 1
-            io.stdout:write(info() .. '\r')
-            io.stdout:flush()
-        end
-
-        for _,i in ipairs(indices) do
+    while audio.running and video.running do
+        update_info()
+        for _,i in indices(prev,curr) do
             while prev[i] ~= curr[i] do
                 if LOOSY and
                    curr[i+1]==prev[i+1] and
@@ -1936,12 +1858,10 @@ function CONVERTER:process()
 
         -- skip image if drift is too big
         -- if current_cycle>cycles_per_img then print(current_cycle/cycles_per_img) end
-        while current_cycle>2*cycles_per_img do
+        while current_cycle>=2*cycles_per_img do
 			-- print('X', current_cycle, 2*cycles_per_img)
             video:skip_image()
-            if video.cpt % video.fps == 0 then
-                tstamp = tstamp + 1
-            end
+            update_info()
             current_cycle = current_cycle - cycles_per_img
         end
 
