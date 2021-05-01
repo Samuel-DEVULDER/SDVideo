@@ -565,12 +565,7 @@ function VIDEO:pset(x,y, r,g,b)
 	if not self._linear then
 		self._linear = {}
 		for i=0,255 do self._linear[i] = self:linear(i/255) end
-	end
-	r,g,b = self._linear[r],self._linear[g],self._linear[b]
-	if not self.dither then VIDEO:init_dither()	end
-	local d = self.dither:get(x,y)
-	
-	if not self._pset then
+		self:init_dither()
 		self._pset = {}
 		self._pset[0] = {}
 		self._pset[1] = {}
@@ -583,24 +578,27 @@ function VIDEO:pset(x,y, r,g,b)
 			end
 		end
 	end
+	r,g,b = self._linear[r],self._linear[g],self._linear[b]
+	local d = self.dither:get(x,y)
+	
 	local o,p = x%2,math.floor(x/2) + y*160
 	local function v(v) 
 		-- assert(0<=v and v<=3, 'v=' .. v)
 		self.image[p] = self._pset[o][self.image[p]][v]
 		p = p+40
 	end	
-	if interlace then
-		local q = self.cpt%2 == 0
-		function v(v) 
-			if q then
-				self.image[p] = self._pset[o][self.image[p]][v]
-				q = false
-			else
-				q = true
-			end
-			p = p+40
-		end	
-	end
+	-- if interlace then
+		-- local q = self.cpt%2 == 0
+		-- function v(v) 
+			-- if q then
+				-- self.image[p] = self._pset[o][self.image[p]][v]
+				-- q = false
+			-- else
+				-- q = true
+			-- end
+			-- p = p+40
+		-- end	
+	-- end
 	
 	if self.gray then
 		if SPECIAL_4 then
