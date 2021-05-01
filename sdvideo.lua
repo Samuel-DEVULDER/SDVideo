@@ -24,7 +24,6 @@ local FPS_MAX       = 30
 local FPS_MAX       = 30
 local FILTER_DEPTH  = 2
 local FILTER_THRES  = 0.03
-local MAX_AUDIO_AMP = 13
 local EXPONENTIAL   = true
 local ZIGZAG        = true
 local LOOSY         = false
@@ -879,59 +878,49 @@ end
 -- flux audio
 local AUDIO = {}
 function AUDIO:new(file)
-    local hz = round(6000000/CYCLES)
-    local o = {
-        hz = hz,
-        stream = assert(io.popen(FFMPEG..' -i "'..file ..'" -v 0 -f u8 -ac 1 -ar '..hz..' -acodec pcm_u8 pipe:', 'rb')),
-        amp = MAX_AUDIO_AMP, -- volume auto
-        min = 255,
-        buf = '', -- buffer
-        running = true
-    }
-    setmetatable(o, self)
-    self.__index = self
-    return o
+	-- value such that group_size*1000000/cycles is the most integer
+	local size = 6
+	if false then
+		local min = 10
+		for i=1,16 do
+			local x = i*1000000/CYCLES
+			x = math.abs(x-round(x))
+			if x<min then size,min = i,x end
+			print(i,x,size)
+		end
+	end
+	
+	local hz = round(size*1000000/CYCLES)
+	local o = {
+		hz = hz,
+		stream = assert(io.popen(FFMPEG..' -i "'..file ..'" -v 0 -af loudnorm -f u8 -ac 1 -ar '..hz..' -acodec pcm_u8 pipe:', 'rb')),
+		size = size,
+		mute = '',
+		buf = '', -- buffer
+		running = true
+	}
+	for i=1,size do o.mute = o.mute .. string.char(128) end
+	setmetatable(o, self)
+	self.__index = self
+	return o
 end
 function AUDIO:close()
-    self.stream:close()
+	self.stream:close()
 end
 function AUDIO:next_sample()
-    local buf = self.buf
-    if buf:len()<=5 then
-        local t = self.stream:read(BUFFER_SIZE)
-        if not t then
-            self.running = false
-            t = string.char(0,0,0,0,0,0)
-        end
-        buf = buf .. t
-    end
-    function sample(offset)
-        return ((buf:byte(offset)+128)%256)-128
-    end
-    -- print(buf:byte(1), sample(1))
-    local v = (buf:byte(1) + buf:byte(2) +
-               buf:byte(3) + buf:byte(4) +
-               buf:byte(5) + buf:byte(6))/6
-    self.buf = buf:sub(7)
-
-    v = v - self.min
-    if v<0 then
-        self.min = .3*v + self.min
-        v = 0
-    else
-        self.min = v/self.hz + self.min
-    end
-
-    -- auto volume
-    self.amp = self.amp*(1 + 1/self.hz)
-    if self.amp>MAX_AUDIO_AMP then self.amp = MAX_AUDIO_AMP end
-    local z=v*self.amp
-    if z>255 then self.amp = (self.amp*127 + 255/v)/128 end
-    -- if z>255 then self.amp = (self.amp*127 + 255/v)/128 end
-    -- print(vv,self.amp)
-    -- dither
-    v = math.max(math.min(z/4 + math.random() + math.random() - 1, 63),0)
-    return math.floor(v)
+	local buf,siz = self.buf,self.size
+	if buf:len()<=siz then
+		local t = self.stream:read(BUFFER_SIZE)
+		if not t then 
+			self.running,t = false, self.mute
+		end
+		buf = buf .. t
+	end
+	local v,g = 0,4
+	for i=1,siz do v = v + buf:byte(i) end
+	self.buf,v = buf:sub(siz+1),g*(v/(siz*4)-32) + 32
+	if v<0 then v=0 elseif v>63 then v=63 end
+	return math.floor(v)
 end
 
 -- ===========================================================================-- PALETTE support
@@ -1716,7 +1705,7 @@ function CONVERTER:process()
     local video  = self:_new_video()
 
     -- adaptation luminosité
-	print(self.video_cor[1],self.video_cor[2])
+	-- print(self.video_cor[1],self.video_cor[2])
     if self.video_cor[1]~=0 or self.video_cor[2]~=1 then
         local cor = self.video_cor
         local super_pset = video.pset
@@ -1740,39 +1729,14 @@ function CONVERTER:process()
     -- init previous image
     local curr,prev = video.image,{}
 
-    -- fade in/out audio
-    local audio_fader = {
-        duration = {intro=3,outro=3},
-        converter = self,
-        next_sample = function(self)
-            if not self._time then
-                self._time = {intro=self.duration.intro*video.fps, outro = (self.converter.duration-self.duration.outro)*video.fps}
-            end
-            if not self._slope then
-                self._slope = {intro=1/self._time.intro, outro=1/(self.duration.outro*video.fps)}
-            end
-
-            local k = 1
-            if     video.cpt <= self._time.intro then
-                k = math.min(1,video.cpt*self._slope.intro)
-            elseif video.cpt >= self._time.outro then
-                k = math.max(0,1-(video.cpt-self._time.outro)*self._slope.outro)
-            end
-            -- print(k, video.cpt , self._time.outro) io.stdout:flush()
-            return round(audio:next_sample()*k)
-        end
-    }
-	
 	-- user feedback
 	local last_etc=1e38
     local function info()
         local d = os.time() - start
-		local t = "> %d%% %s (%3.1fx) e=%5.3f a=(x%+d)*%-3.1f"
+		local t = "> %d%% %s (%3.1fx) e=%5.3f"
 		t = t:format(
 			percent(tstamp/self.duration), hms(tstamp),
-			round(100*tstamp/(d==0 and 100000 or d))/100, completed_imgs/video.cpt,
-			-audio.min, audio.amp
-			)
+			round(100*tstamp/(d==0 and 100000 or d))/100, completed_imgs/video.cpt)
 		local etc = d*(self.duration-tstamp)/tstamp
 		if d>10 then if etc>last_etc then etc = last_etc else last_etc = etc end end
 		local etr = 5 -- etc>=90 and 10 or 5
@@ -1847,7 +1811,7 @@ function CONVERTER:process()
 						b0,b1,b2 = 3,math.floor(pos/256),pos%256
                     end
 					-- print(zz, b0, b1, b2, '-->', pos)
-                    current_cycle = current_cycle + self.out:frame(b0,b1,b2,audio_fader)
+                    current_cycle = current_cycle + self.out:frame(b0,b1,b2,audio)
                 end
             end
         end
@@ -1868,7 +1832,7 @@ function CONVERTER:process()
         -- add padding if image is too simple
         while current_cycle<cycles_per_img do
 			-- print('Y', current_cycle, cycles_per_img)
-            current_cycle = current_cycle + self.out:frame(3,0,0,audio_fader)
+            current_cycle = current_cycle + self.out:frame(3,0,0,audio)
             pos = 0
         end
 

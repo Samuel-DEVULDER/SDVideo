@@ -318,6 +318,18 @@ INIT9
   STB   <$CD          bits CNA en sortie
   ORA   #$04          set b2
   STA   <$CF          selection PB
+  
+* Passage progressif du CNA a 32
+  CLRA
+INIT10
+  STA   <$CD
+  LDB   #20
+INIT11
+  DECB
+  BNE   INIT11
+  INCA
+  CMPA  #33
+  BNE   INIT10
 
 *-------------------------------------------------------
 * Lancement de la commande CMD18 et saut de huit blocs

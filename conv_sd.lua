@@ -29,12 +29,10 @@ local FPS_MAX       = 30
 local TIMEOUT       = 2
 local GRAY_THR      = .1 -- .07
 local FILTER_DEPTH  = 1
-local MAX_AUDIO_AMP = 16
 
 local tmp = 'tmp'
 local img_pattern =  tmp..'/img%05d.bmp'
 local cycles = 199 -- cycles par échantillons audio
-local hz = round(8000000/cycles)/8
 local fps = 12
 local gray = nil
 local interlace = nil	
@@ -259,16 +257,29 @@ end
 -- os.exit(0)
 -- flux audio
 local AUDIO = {}
-function AUDIO:new(file, hz)
-	hz=round(8*hz)
+function AUDIO:new(file)
+	-- value such that group_size*1000000/cycles is the most integer
+	local size = 8 
+	if false then
+		local min = 10
+		for i=1,16 do
+			local x = i*1000000/cycles
+			x = math.abs(x-round(x))
+			if x<min then size,min = i,x end
+			print(i,x,size)
+		end
+	end
+	
+	local hz = round(size*1000000/cycles)
 	local o = {
 		hz = hz,
-		stream = assert(io.popen(ffmpeg..' -i "'..file ..'" -v 0 -f u8 -ac 1 -ar '..hz..' -acodec pcm_u8 pipe:', 'rb')),
-		amp = MAX_AUDIO_AMP, -- volume auto
-		min = 255,
+		stream = assert(io.popen(ffmpeg..' -i "'..file ..'" -v 0 -af loudnorm -f u8 -ac 1 -ar '..hz..' -acodec pcm_u8 pipe:', 'rb')),
+		size = size,
+		mute = '',
 		buf = '', -- buffer
 		running = true
 	}
+	for i=1,size do o.mute = o.mute .. string.char(128) end
 	setmetatable(o, self)
 	self.__index = self
 	return o
@@ -277,39 +288,18 @@ function AUDIO:close()
 	self.stream:close()
 end
 function AUDIO:next_sample()
-	local buf = self.buf
-	if buf:len()<=8 then
+	local buf,siz = self.buf,self.size
+	if buf:len()<=siz then
 		local t = self.stream:read(BUFFER_SIZE)
 		if not t then 
-			self.running = false
-			t = string.char(0,0,0,0,0,0,0,0)
+			self.running,t = false, self.mute
 		end
 		buf = buf .. t
 	end
-	function sample(offset)
-		return ((buf:byte(offset)+128)%256)-128
-	end
-	-- print(buf:byte(1), sample(1))
-	local v = (buf:byte(1) + buf:byte(2) + buf:byte(3) + buf:byte(4) +
-	           buf:byte(5) + buf:byte(6) + buf:byte(7) + buf:byte(8))*.125 
-	self.buf = buf:sub(9)
-
-	v = v - self.min
-	if v<0 then
-		self.min = .3*v + self.min
-		v = 0
-	else
-		self.min = v/self.hz + self.min
-	end
-	
-	-- auto volume
-	self.amp = self.amp*(1 + 1/self.hz)
-	if self.amp>MAX_AUDIO_AMP then self.amp = MAX_AUDIO_AMP end
-	local z=v*self.amp
-	if z>255 then z=255; self.amp = 255/v end
-	-- print(vv,self.amp)
-	-- dither
-	v = math.max(math.min(z/4 + math.random() + math.random() - 1, 63),0)
+	local v,g = 0,4
+	for i=1,siz do v = v + buf:byte(i) end
+	self.buf,v = buf:sub(siz+1),g*(v/(siz*4)-32) + 32
+	if v<0 then v=0 elseif v>63 then v=63 end
 	return math.floor(v)
 end
 
@@ -698,7 +688,7 @@ function VIDEO:skip_image()
     self.read_rgb24 = bak
 end
 -- auto determination des parametres
-local stat = VIDEO:new(file,w,h,round(fps/2),gray)
+local stat = VIDEO:new(file,w,h,round(fps),gray)
 stat.super_pset = stat.pset
 stat.histo = {n=0}; for i=0,255 do stat.histo[i]=0 end
 function stat:pset(x,y, r,g,b)
@@ -742,30 +732,24 @@ stat.trames = 0
 stat.prev_img = {}
 for i=0,7999 do stat.prev_img[i]=-1 end
 function stat:count_trames()
-	local pos,prev,curr = 0,stat.prev_img,stat.image
-	local chg = 0
-	for _,i in ipairs(indices) do
-		if prev[i] ~= curr[i] then chg = chg+1 end
-	end
+	local pos,prev,curr,k = 0,stat.prev_img,stat.image
 	
 	for _,i in ipairs(indices) do
-	-- for i=0,7999 do
 		if prev[i] ~= curr[i] then 
-			stat.trames = stat.trames + 1
-			local k = i - pos
+			stat.trames,k = stat.trames + 1,i-pos
 			if k<0 then k=8000 end
 			if k<=2 then
-				prev[pos] = curr[pos]; pos = pos+1
-				prev[pos] = curr[pos]; pos = pos+1
-				prev[pos] = curr[pos]; pos = pos+1
-				prev[pos] = curr[pos]; pos = pos+1
+				prev[pos],pos = curr[pos],pos+1
+				prev[pos],pos = curr[pos],pos+1
+				prev[pos],pos = curr[pos],pos+1
+				prev[pos],pos = curr[pos],pos+1
 			elseif k<=256 then
 				pos = i
-				prev[pos] = curr[pos]; pos = pos+1
-				prev[pos] = curr[pos]; pos = pos+1
+				prev[pos],pos = curr[pos],pos+1
+				prev[pos],pos = curr[pos],pos+1
 			else
 				pos = i
-				prev[pos] = curr[pos]; pos = pos+1
+				prev[pos],pos = curr[pos],pos+1
 			end
 		end
 	end
@@ -948,11 +932,10 @@ while audio.running do
 	if video.cpt % video.fps == 0 then
 		tstamp = tstamp + 1
 		local d = os.time() - start
-		local t = "> %d%% %s (%3.1fx) e=%5.3f a=(x%+d)*%-3.1f"
+		local t = "> %d%% %s (%3.1fx) e=%5.3f"
 		t = t:format(
 			percent(tstamp/duration), hms(tstamp),
-			round(100*tstamp/(d==0 and 100000 or d))/100, completed_imgs/video.cpt,
-			-audio.min, audio.amp
+			round(100*tstamp/(d==0 and 100000 or d))/100, completed_imgs/video.cpt
 			)
 		local etc = d*(duration-tstamp)/tstamp
 		local etr = etc>=90 and 10 or 5
