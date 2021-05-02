@@ -20,39 +20,52 @@
 -- le code doit être nettoye et rendu plus
 -- amical pour l'utilisateur
 
+local function env(var, default)
+	return loadstring('return ' .. (os.getenv(var) or default))();
+end
 local function round(x)
 	return math.floor(x+.5)
 end
 
+local CYCLES        = 199 -- cycles par échantillons audio
 local BUFFER_SIZE   = 4096
 local FPS_MAX       = 30
 local TIMEOUT       = 2
 local GRAY_THR      = .1 -- .07
 local FILTER_DEPTH  = 1
+local GRAY          = env('GRAY','nil')
+local FPS           = env('FPS',11)
 
-local tmp = 'tmp'
-local img_pattern =  tmp..'/img%05d.bmp'
-local cycles = 199 -- cycles par échantillons audio
-local fps = 12
-local gray = nil
-local interlace = nil	
-local dither = 8 -- -8
-local ffmpeg = 'tools/ffmpeg.exe'
-local mode = 'p'
+local interlace     = nil -- useless
+local dither        = env('DITH', 8) -- -8 for vac
+local mode          = 'p'
+local FFMPEG        = 'tools\\ffmpeg.exe'
+local C6809         = 'tools\\c6809.exe'
 
-local SPECIAL_4 = false -- true
-
+local SPECIAL_4 = false -- experiment ==> no interrest
 if SPECIAL_4 then
-	gray = true
+	GRAY = 1
 	dither = 3
+end
+
+-- sanitise
+if GRAY~=nil and GRAY~=0 and GRAY~=1 then 
+	error("Env. var. GRAY shall be unset or set to 0 or 1.")
+end
+if type(FPS)~='number' then
+	error('Env. var. ENV shall be a positive integer.')
+else
+	FPS = round(FPS)
 end
 
 -- if os.execute('cygpath -W >/dev/null 2>&1')==0 then
 	-- ffmpeg = 'tools/ffmpeg.exe' 
 -- end
 
-local file = arg[1]:gsub('^/cygdrive/(%w)/','%1:/')
-
+if nil==os.getenv('CYG_SYS_BASHRC') then
+	FFMPEG = 'tools/ffmpeg.exe' 
+	C6809  = 'tools/c6809.exe'
+end
 local function exists(file)
    local ok, err, code = os.rename(file, file)
    if not ok then
@@ -63,197 +76,21 @@ local function exists(file)
    end
    return ok, err
 end
-
 local function isdir(file)
 	return exists(file..'/')
 end
-
-if not exists(file) then os.exit(0) end
-
 local function percent(x)
 	return round(math.min(1,x)*100)
 end
-
 local function hms(secs, fmt)
 	secs = round(secs)
 	return string.format(fmt or "%d:%02d:%02d", 
 			math.floor(secs/3600), math.floor(secs/60)%60, math.floor(secs)%60)
 end
-
--- if file:match('miga') then
-	-- gray = false
-	-- interlace = false
--- end
-
--- nom fichier
-io.stdout:write('\n'..file..'\n')
-io.stdout:flush()
-
--- recherche la bonne taille d'image
-local x,y = 80,45
-local IN,line = assert(io.popen(ffmpeg..' -i "'..file ..'" 2>&1', 'r'))
-for line in IN:lines() do 
-	local h,m,s = line:match('Duration: (%d+):(%d+):(%d+%.%d+),')
-	if h and m and s then duration = h*3600 + m*60 +s end
-	local a,b = line:match(', (%d+)x(%d+)')
-	if a and b then x,y=a,b end
-end
-IN:close()
-if not duration then error("Can't get duration!") end
-local max_ar
-for i=2,10 do
-	local t = x*i/y
-	t = math.abs(t-round(t))
-	if max_ar==nil or t<max_ar then
-		max_ar = t
-		aspect_ratio = round(x*i/y)..':'..i
-	end
-end
-local w = 80
-local h = round(w*y/x)
-if h>50 then
-   h = 50
-   w = round(h*x/y)
+function basename(file)
+    return file:gsub('^/cygdrive/(%w)/','%1:/'):gsub('.*[/\\]',''):gsub('%.[%a%d]+','')
 end
 
-if mode==nil then
-	mode = (h*w>32*48 and 'i') or 'p'
-end
-
--- initialise la progression dans les octets de l'image
-local lines,indices = {},{}
-for i=math.floor((50-h)/2)*4,(math.floor((50-h)/2)+h)*4-1 do
-	if i%4<3 then
-		table.insert(lines, i)
-	end
-end
-if mode=='p' or mode=='a' then
-	-- rien
-elseif mode=='i' then
-	local t = {}
-	for i=1,#lines,2 do
-		table.insert(t, lines[i])
-	end
-	for i=2,#lines,2 do
-		table.insert(t, lines[i])
-	end
-	lines = t
-elseif mode=='2' then
-	local t = {}
-	for i=1,#lines,3 do
-		table.insert(t, lines[i])
-	end
-	for i=2,#lines,3 do
-		table.insert(t, lines[i])
-	end
-	table.sort(t)
-	for i=3,#lines,3 do
-		table.insert(t, lines[i])
-	end
-	lines = t
-elseif mode=='3' then
-	local t = {}
-	for i=2,#lines,3 do
-		table.insert(t, lines[i])
-	end
-	for i=1,#lines,3 do
-		table.insert(t, lines[i])
-	end
-	for i=2,#lines,3 do
-		table.insert(t, lines[i])
-	end
-	lines = t
-elseif mode=='I' then
-	local t = {}
-	for i=1,#lines,6 do
-		table.insert(t, lines[i])
-		table.insert(t, lines[i+1])
-		table.insert(t, lines[i+2])
-	end
-	for i=4,#lines,6 do
-		table.insert(t, lines[i])
-		table.insert(t, lines[i+1])
-		table.insert(t, lines[i+2])
-	end
-	lines = t
-elseif mode=='ipi' then
-	local t = {}
-	for i=1+math.floor(#lines/3),math.floor(2*#lines/3) do
-		table.insert(t, lines[i])
-	end
-	for i=1,math.floor(#lines/3),2 do
-		table.insert(t, lines[i])
-	end
-	for i=1+math.floor(2*#lines/3),#lines,2 do
-		table.insert(t, lines[i])
-	end
-	for i=2,math.floor(#lines/3),2 do
-		table.insert(t, lines[i])
-	end
-	for i=2+math.floor(2*#lines/3),#lines,2 do
-		table.insert(t, lines[i])
-	end
-	lines = t
-elseif mode=='r' then
-	local size = #lines
-	for i = size, 1, -1 do
-		local rand = math.random(size)
-		lines[i], lines[rand] = lines[rand], lines[i]
-	end
-elseif mode=='3i' then
-	-- 14 + 14+12
-	local w = 2+4+4+4+4+4
-	local x = math.floor((39-w)/2)
-	for _,j in ipairs(lines) do
-		for i=j*40+x,j*40+x+w-1 do
-			table.insert(indices,i)
-		end
-	end
-	for j=1,#lines,2 do
-		for i=lines[j]*40,lines[j]*40+x-1 do
-			table.insert(indices,i)
-		end
-		for i=lines[j]*40+x+w,lines[j]*40+39 do
-			table.insert(indices,i)
-		end
-	end
-	for j=2,#lines,2 do
-		for i=lines[j]*40,lines[j]*40+x-1 do
-			table.insert(indices,i)
-		end
-		for i=lines[j]*40+x+w,lines[j]*40+39 do
-			table.insert(indices,i)
-		end
-	end
-	lines = {}
-elseif mode=='d' then
-	lines = {}
-	for x=0,39 do
-		for y=0,math.min(24,x) do
-			local p = y*320+(x-y)
-			for j=p,p+319,40 do
-				table.insert(indices,j)
-			end
-		end
-	end
-	for y=1,24 do
-		for x=0,24-y do
-			local p = (y+x)*320+39-x
-			for j=p,p+319,40 do
-				table.insert(indices,j)
-			end
-		end
-	end
-else 
-	error('Unknown mode: ' .. mode)
-end
-
-for _,i in ipairs(lines) do
-	-- print(i)
-	for j=i*40,i*40+39 do
-		table.insert(indices, j)
-	end
-end
 -- os.exit(0)
 -- flux audio
 local AUDIO = {}
@@ -263,17 +100,17 @@ function AUDIO:new(file)
 	if false then
 		local min = 10
 		for i=1,16 do
-			local x = i*1000000/cycles
+			local x = i*1000000/CYCLES
 			x = math.abs(x-round(x))
 			if x<min then size,min = i,x end
 			print(i,x,size)
 		end
 	end
 	
-	local hz = round(size*1000000/cycles)
+	local hz = round(size*1000000/CYCLES)
 	local o = {
 		hz = hz,
-		stream = assert(io.popen(ffmpeg..' -i "'..file ..'" -v 0 -af loudnorm -f u8 -ac 1 -ar '..hz..' -acodec pcm_u8 pipe:', 'rb')),
+		stream = assert(io.popen(FFMPEG..' -i "'..file ..'" -v 0 -af loudnorm -f u8 -ac 1 -ar '..hz..' -acodec pcm_u8 pipe:', 'rb')),
 		size = size,
 		mute = '',
 		buf = '', -- buffer
@@ -345,7 +182,7 @@ end
 
 -- flux video
 local VIDEO = {}
-function VIDEO:new(file, w, h, fps, gray)
+function VIDEO:new(file, w, h, fps)
     local o = {
         file = file,
         cpt = 1, -- compteur image
@@ -355,12 +192,11 @@ function VIDEO:new(file, w, h, fps, gray)
         screen_height = 50,
         interlace = interlace,
         fps = fps or 10,
-		gray = gray or false,
         image = {},
         dither = nil,
         expected_size = 3*h*w, -- --54 + h*(math.floor((w*3+3)/4)*4),
         running=true,
-        input = assert(io.popen(ffmpeg..
+        input = assert(io.popen(FFMPEG..
 			' -i "'..file..'" -v 0 -r '..fps..
 			' -s '..w..'x'..h..
 			' -an -f rawvideo -pix_fmt rgb24 pipe:', 
@@ -587,20 +423,18 @@ function VIDEO:pset(x,y, r,g,b)
 		self.image[p] = self._pset[o][self.image[p]][v]
 		p = p+40
 	end	
-	-- if interlace then
-		-- local q = self.cpt%2 == 0
-		-- function v(v) 
-			-- if q then
-				-- self.image[p] = self._pset[o][self.image[p]][v]
-				-- q = false
-			-- else
-				-- q = true
-			-- end
-			-- p = p+40
-		-- end	
-	-- end
+	if interlace then
+		local q = self.cpt%2 == 0
+		function v(v) 
+			if q then
+				self.image[p],q,p = self._pset[o][self.image[p]][v],false,p+40
+			else
+				q,p = true,p+40
+			end
+		end	
+	end
 	
-	if self.gray then
+	if GRAY==1 then
 		if SPECIAL_4 then
 			r = (.2126*r + .7152*g + .0722*b)*3 + d
 			if     r>=2 then	v(3)
@@ -685,340 +519,595 @@ function VIDEO:skip_image()
     self:next_image()
     self.read_rgb24 = bak
 end
--- auto determination des parametres
-local stat = VIDEO:new(file,w,h,round(fps),gray)
-stat.super_pset = stat.pset
-stat.histo = {n=0}; for i=0,255 do stat.histo[i]=0 end
-function stat:pset(x,y, r,g,b)
-	self.histo[r] = self.histo[r]+1
-	self.histo[g] = self.histo[g]+1
-	self.histo[b] = self.histo[b]+1
-	
-	self:super_pset(x,y,r,g,b)
-	
-	if gray==nil then
-		if self.mnt==nil then
-			self.mnt = {n=0,r1=0,g1=0,b1=0,r2=0,g2=0,b2=0}
+
+--------------------------------------------------
+local CONVERTER = {}
+function CONVERTER:new(file, out, fps)
+    file = file:gsub('^/cygdrive/(%w)/','%1:/')
+    if not exists(file) then return nil end
+
+    local o = {
+        file      = file,
+        out       = out,
+        fps       = fps,
+        interlace = interlace
+    }
+
+    -- recherche la bonne taille d'image
+    local x,y = 80,50
+    local IN,line = assert(io.popen(FFMPEG..' -i "'..file ..'" 2>&1', 'r'))
+    for line in IN:lines() do
+        local h,m,s = line:match('Duration: (%d+):(%d+):(%d+%.%d+),')
+        if h and m and s then o.duration = h*3600 + m*60 + s end
+        local a,b = line:match(', (%d+)x(%d+)')
+        if a and b then x,y=a,b end
+    end
+    IN:close()
+    if not o.duration then print(file..": Can't get duration!"); return nil end
+
+    -- determine aspect ratio
+    local max_ar
+    for i=2,10 do
+        local t = x*i/y
+        t = math.abs(t-round(t))
+        if max_ar==nil or t<max_ar then
+            max_ar = t
+            o.aspect_ratio = round(x*i/y)..':'..i
+        end
+    end
+
+    -- size of image
+	local w = 80
+	local h = round(w*y/x)
+	if h>50 then
+	   h = 50
+	   w = round(h*x/y)
+	end
+
+	if mode==nil then
+		mode = (h*w>32*48 and 'i') or 'p'
+	end
+	o.mode = mode
+    o.w    = w
+    o.h    = h
+
+	-- initialise la progression dans les octets de l'image
+	local lines,indices = {},{}
+	for i=math.floor((50-h)/2)*4,(math.floor((50-h)/2)+h)*4-1 do
+		if i%4<3 then
+			table.insert(lines, i)
 		end
-		local m = math.max(r,g,b)
-		if m>10 then 
-			m=1/m
-			r,g,b = r*m,g*m,b*m
+	end
+	if mode=='p' or mode=='a' then
+		-- rien
+	elseif mode=='i' then
+		local t = {}
+		for i=1,#lines,2 do
+			table.insert(t, lines[i])
+		end
+		for i=2,#lines,2 do
+			table.insert(t, lines[i])
+		end
+		lines = t
+	elseif mode=='2' then
+		local t = {}
+		for i=1,#lines,3 do
+			table.insert(t, lines[i])
+		end
+		for i=2,#lines,3 do
+			table.insert(t, lines[i])
+		end
+		table.sort(t)
+		for i=3,#lines,3 do
+			table.insert(t, lines[i])
+		end
+		lines = t
+	elseif mode=='3' then
+		local t = {}
+		for i=2,#lines,3 do
+			table.insert(t, lines[i])
+		end
+		for i=1,#lines,3 do
+			table.insert(t, lines[i])
+		end
+		for i=2,#lines,3 do
+			table.insert(t, lines[i])
+		end
+		lines = t
+	elseif mode=='I' then
+		local t = {}
+		for i=1,#lines,6 do
+			table.insert(t, lines[i])
+			table.insert(t, lines[i+1])
+			table.insert(t, lines[i+2])
+		end
+		for i=4,#lines,6 do
+			table.insert(t, lines[i])
+			table.insert(t, lines[i+1])
+			table.insert(t, lines[i+2])
+		end
+		lines = t
+	elseif mode=='ipi' then
+		local t = {}
+		for i=1+math.floor(#lines/3),math.floor(2*#lines/3) do
+			table.insert(t, lines[i])
+		end
+		for i=1,math.floor(#lines/3),2 do
+			table.insert(t, lines[i])
+		end
+		for i=1+math.floor(2*#lines/3),#lines,2 do
+			table.insert(t, lines[i])
+		end
+		for i=2,math.floor(#lines/3),2 do
+			table.insert(t, lines[i])
+		end
+		for i=2+math.floor(2*#lines/3),#lines,2 do
+			table.insert(t, lines[i])
+		end
+		lines = t
+	elseif mode=='r' then
+		local size = #lines
+		for i = size, 1, -1 do
+			local rand = math.random(size)
+			lines[i], lines[rand] = lines[rand], lines[i]
+		end
+	elseif mode=='3i' then
+		-- 14 + 14+12
+		local w = 2+4+4+4+4+4
+		local x = math.floor((39-w)/2)
+		for _,j in ipairs(lines) do
+			for i=j*40+x,j*40+x+w-1 do
+				table.insert(indices,i)
+			end
+		end
+		for j=1,#lines,2 do
+			for i=lines[j]*40,lines[j]*40+x-1 do
+				table.insert(indices,i)
+			end
+			for i=lines[j]*40+x+w,lines[j]*40+39 do
+				table.insert(indices,i)
+			end
+		end
+		for j=2,#lines,2 do
+			for i=lines[j]*40,lines[j]*40+x-1 do
+				table.insert(indices,i)
+			end
+			for i=lines[j]*40+x+w,lines[j]*40+39 do
+				table.insert(indices,i)
+			end
+		end
+		lines = {}
+	elseif mode=='d' then
+		lines = {}
+		for x=0,39 do
+			for y=0,math.min(24,x) do
+				local p = y*320+(x-y)
+				for j=p,p+319,40 do
+					table.insert(indices,j)
+				end
+			end
+		end
+		for y=1,24 do
+			for x=0,24-y do
+				local p = (y+x)*320+39-x
+				for j=p,p+319,40 do
+					table.insert(indices,j)
+				end
+			end
+		end
+	else 
+		error('Unknown mode: ' .. mode)
+	end
+
+	for _,i in ipairs(lines) do
+		-- print(i)
+		for j=i*40,i*40+39 do
+			table.insert(indices, j)
+		end
+	end
+	o.indices = indices
+
+    setmetatable(o, self)
+    self.__index = self
+    return o
+end
+function CONVERTER:_new_video()
+    return  VIDEO:new(self.file, self.w, self.h, self.fps)
+end
+function CONVERTER:_stat()
+    io.stdout:write('\n'..self.file..'\n')
+    io.stdout:flush()
+
+	-- auto determination des parametres
+	local stat = VIDEO:new(self.file,self.w,self.h,7)
+	stat.super_pset = stat.pset
+	stat.histo = {n=0}; for i=0,255 do stat.histo[i]=0 end
+	function stat:pset(x,y, r,g,b)
+		local h=self.histo
+		h[r] = h[r]+1
+		h[g] = h[g]+1
+		h[b] = h[b]+1
 		
-			m = self.mnt
-			m.n  = m.n + 1
+		self:super_pset(x,y,r,g,b)
+		
+		if GRAY==nil then
+			if self.mnt==nil then
+				self.mnt = {n=0,r1=0,g1=0,b1=0,r2=0,g2=0,b2=0}
+			end
+			local m = math.max(r,g,b)
+			if m>10 then 
+				m=1/m
+				r,g,b = r*m,g*m,b*m
 			
-			m.r1 = m.r1 + r
-			m.g1 = m.g1 + g
-			m.b1 = m.b1 + b
-			
-			m.r2 = m.r2 + r*r
-			m.g2 = m.g2 + g*g
-			m.b2 = m.b2 + b*b
+				m = self.mnt
+				m.n  = m.n + 1
+				
+				m.r1 = m.r1 + r
+				m.g1 = m.g1 + g
+				m.b1 = m.b1 + b
+				
+				m.r2 = m.r2 + r*r
+				m.g2 = m.g2 + g*g
+				m.b2 = m.b2 + b*b
+			end
 		end
 	end
-end
-stat.super_next_image = stat.next_image
-stat.mill = {'|', '/', '-', '\\'}
-stat.mill[0] = stat.mill[4]
-function stat:next_image()
-	self:super_next_image()
-	io.stderr:write(string.format('> analyzing...%s %d%%\r', self.mill[self.cpt % 4], percent(self.cpt/self.fps/duration)))
+	stat.super_next_image = stat.next_image
+	stat.mill = {'|', '/', '-', '\\'}
+	stat.mill[0] = stat.mill[4]
+	local indices,duration = self.indices,self.duration
+	function stat:next_image()
+		self:super_next_image()
+		io.stderr:write(string.format('> analyzing...%s %d%%\r', self.mill[self.cpt % 4], percent(self.cpt/self.fps/duration)))
+		io.stderr:flush()
+	end
+	stat.trames = 0
+	stat.prev_img = {}
+	for i=0,7999 do stat.prev_img[i]=-1 end
+	function stat:count_trames()
+		local pos,prev,curr,k = 0,stat.prev_img,stat.image
+		for _,i in ipairs(indices) do
+			if prev[i] ~= curr[i] then 
+				stat.trames,k = stat.trames + 1,i-pos
+				if k<0 then k=8000 end
+				if k<=2 then
+					prev[pos],pos = curr[pos],pos+1
+					prev[pos],pos = curr[pos],pos+1
+					prev[pos],pos = curr[pos],pos+1
+					prev[pos],pos = curr[pos],pos+1
+				elseif k<=256 then
+					pos = i
+					prev[pos],pos = curr[pos],pos+1
+					prev[pos],pos = curr[pos],pos+1
+				else
+					pos = i
+					prev[pos],pos = curr[pos],pos+1
+				end
+			end
+		end
+	end
+	while stat.running do
+		stat:next_image()
+		stat:count_trames()
+	end
+	io.stderr:write(string.rep(' ',79)..'\r')
 	io.stderr:flush()
-end
-stat.trames = 0
-stat.prev_img = {}
-for i=0,7999 do stat.prev_img[i]=-1 end
-function stat:count_trames()
-	local pos,prev,curr,k = 0,stat.prev_img,stat.image
-	
-	for _,i in ipairs(indices) do
-		if prev[i] ~= curr[i] then 
-			stat.trames,k = stat.trames + 1,i-pos
-			if k<0 then k=8000 end
-			if k<=2 then
-				prev[pos],pos = curr[pos],pos+1
-				prev[pos],pos = curr[pos],pos+1
-				prev[pos],pos = curr[pos],pos+1
-				prev[pos],pos = curr[pos],pos+1
-			elseif k<=256 then
-				pos = i
-				prev[pos],pos = curr[pos],pos+1
-				prev[pos],pos = curr[pos],pos+1
-			else
-				pos = i
-				prev[pos],pos = curr[pos],pos+1
-			end
+
+	-- determine if monochrome
+	if GRAY==nil then
+		local m = stat.mnt
+		m.r1,m.g1,m.b1 = m.r1/m.n,m.g1/m.n,m.b1/m.n
+		m.r2,m.g2,m.b2 = m.r2/m.n,m.g2/m.n,m.b2/m.n
+
+		local e = 0
+		e = e + math.sqrt(m.r2 - m.r1*m.r1)
+		e = e + math.sqrt(m.g2 - m.g1*m.g1)
+		e = e + math.sqrt(m.b2 - m.b1*m.b1)
+		e = e/3
+		
+		GRAY = e<GRAY_THR and 1 or 0
+	end
+
+	local neg_fps = self.fps<0
+	self.fps = math.abs(self.fps)
+	local max_trames = 1000000/(self.fps*CYCLES)
+	local avg_trames = (stat.trames/stat.cpt) * 1.03 -- 001 -- 0.11% safety margin
+	local ratio = max_trames / avg_trames
+	if neg_fps and self.fps>FPS_MAX then
+		self.fps = FPS_MAX
+	elseif ratio>1 or neg_fps then
+		self.fps = math.min(math.floor(self.fps*ratio),self.interlace and 2*FPS_MAX or FPS_MAX)
+	elseif ratio<1 then
+		local zoom = ratio^.5
+		self.w=math.floor(self.w*zoom)
+		self.h=math.floor(self.h*zoom)
+	end
+	stat.total = 0
+	for i=1,255 do
+		stat.total = stat.total + stat.histo[i]
+	end
+	stat.threshold_min = (GRAY==1 and .03 or .05)*stat.total
+	stat.min = 0
+	for i=1,255 do
+		stat.min = stat.min + stat.histo[i]
+		if stat.min>stat.threshold_min then
+			stat.min = i-1
+			break
 		end
 	end
-end
-while stat.running do
-	stat:next_image()
-	stat:count_trames()
-end
-io.stderr:write(string.rep(' ',79)..'\r')
-io.stderr:flush()
-
--- determine if monochrome
-if gray==nil then
-	local m = stat.mnt
-	m.r1,m.g1,m.b1 = m.r1/m.n,m.g1/m.n,m.b1/m.n
-	m.r2,m.g2,m.b2 = m.r2/m.n,m.g2/m.n,m.b2/m.n
-
-	local e = 0
-	e = e + math.sqrt(m.r2 - m.r1*m.r1)
-	e = e + math.sqrt(m.g2 - m.g1*m.g1)
-	e = e + math.sqrt(m.b2 - m.b1*m.b1)
-	e = e/3
-	
-	gray = e<GRAY_THR
-	-- print(gray,e)
-	-- print(m.r1, m.g1, m.b1)
-	-- if not gray then os.exit() end
-end
-
-local max_trames = 1000000/fps/cycles
-local avg_trames = (stat.trames/stat.cpt) * 1.03 -- 001 -- 0.11% safety margin
-local ratio = max_trames / avg_trames
--- print(ratio)
-if ratio>1 then
-	fps = math.min(math.floor(fps*ratio),interlace and 2*FPS_MAX or FPS_MAX)
-elseif ratio<1 then
-	local zoom = ratio^.5
-	w=math.floor(w*zoom)
-	h=math.floor(h*zoom)
-end
-stat.total = 0
-for i=1,255 do
-	stat.total = stat.total + stat.histo[i]
-end
-stat.threshold_min = (gray and .03 or .05)*stat.total
-stat.min = 0
-for i=1,255 do
-	stat.min = stat.min + stat.histo[i]
-	if stat.min>stat.threshold_min then
-		stat.min = i-1
-		break
-	end
-end
-stat.max = 0
-stat.threshold_max = (gray and .03 or .05)*stat.total
-for i=254,1,-1 do
-	stat.max = stat.max + stat.histo[i]
-	if stat.max>stat.threshold_max then
-		stat.max = i+1
-		break
-	end
-end
--- print(stat.min, stat.max)
--- io.stdout:flush()
-local video_cor = {stat.min, 255/(stat.max - stat.min)}
-
--- fichier de sortie
-function file_content(file, size)
-	local INP = assert(io.open(file, 'rb'))
-	local buf = ''
-	while true do
-		local t = INP:read(256)
-		if not t then break end
-		buf = buf .. t .. string.rep(string.char(0),512-t:len())
-	end
-	size = size - buf:len()
-	if size<0 then
-		print('size',size)
-		error('File ' .. file .. ' is too big')
-	end
-	return buf .. string.rep(string.char(0),size)
-end
-
-local OUT = assert(io.open(file:gsub('.*[/\\]',''):gsub('%.[%a%d]+','')..'.sd', 'wb'))
-OUT:write(file_content('bin/bootblk.raw', 512))
-OUT:write(file_content(gray and 'bin/player1.raw' or 'bin/player0.raw', 7*512))
-
--- flux audio/video
-local audio  = AUDIO:new(file, hz)
-local video  = VIDEO:new(file,w,h,fps,gray)
-
--- adaptation luminosité
-video.super_pset = video.pset
-function video:pset(x,y, r,g,b)
-	local function f(x)
-		x = round((x-video_cor[1])*video_cor[2]);
-		return x<0 and 0 or x>255 and 255 or x
-	end
-	self:super_pset(x,y, f(r),f(g),f(b))
-end
-
--- vars pour la cvonvesion
-local start          = os.time()
-local tstamp         = 0
-local cycles_per_img = 1000000 / fps
-local current_cycle  = 0
-local completed_imgs = 0
-local pos            = 8000
-local blk            = ''
-
--- init previous image
-local curr = video.image
-local prev = {}
-for i=0,7999+3 do prev[i] = -1 end
-
-function test_fin_bloc()
-	if blk:len()==3*170 then
-		local s1 = audio:next_sample()
-		local s2 = audio:next_sample()
-		local s3 = audio:next_sample()
-		local t = s1*1024 + math.floor(s2/2)*32 + math.floor(s3/2)
-	
-		blk = blk .. string.char(math.floor(t/256), t%256)
-		OUT:write(blk)
-		blk = ''
-
-		current_cycle = current_cycle + cycles*3
-	end
-end
-
-local _recalc_indices_d = {}
-for i=0,255 do 
-	local a = {i % 4, math.floor(i/4)%4}
-	local b = {math.floor(i/16)%4, math.floor(i/64)%4}
-	_recalc_indices_d[i] = math.abs(a[1]-b[1]) + math.abs(a[2]-b[2])
-end
-function recalc_indices_d()
-	local d = {} 
-	for i=0,7999,160 do
-		local e,f=0,0
-		for j=i,i+119 do
-			if curr[j]~=prev[j] then
-				f = f + 1
-				e = e + (_recalc_indices_d[prev[j]*16+curr[j]] or 6)
-			end
+	stat.max = 0
+	stat.threshold_max = (GRAY==1 and .03 or .05)*stat.total
+	for i=254,1,-1 do
+		stat.max = stat.max + stat.histo[i]
+		if stat.max>stat.threshold_max then
+			stat.max = i+1
+			break
 		end
-		table.insert(d, {e=e/(f>0 and f or 1), i=i})
 	end
-	
-	local MAX_DELAY = 1000000/fps -- 100*1000 -- µs
-	local e,h = 0,math.floor(MAX_DELAY *8 / (w*3*cycles))
-	local PRE = math.floor(h/3)
-	-- print(h,PRE)
-	for i=PRE,math.min(PRE+h,50) do e=e+d[i].e end
-	local m,p = e,1
-	for i=PRE+1,50-h do
-		e = e - d[i-1].e + d[i+h].e
-		if e>m then m,p = e,i-PRE end
-	end
-	-- print(p,m)
-	indices = {}
-	for i=p,50 do
-		for j=d[i].i,d[i].i+119 do table.insert(indices, j) end
-	end
-	for i=1,p-1 do
-		for j=d[i].i,d[i].i+119 do table.insert(indices, j) end
-	end
-end
+	-- print(stat.min, stat.max)
+	-- io.stdout:flush()
+	self.video_cor = {stat.min, 255/(stat.max - stat.min)}
 
--- conversion
-io.stdout:write(string.format('> %dx%d %s (%s) %s at %d fps (%d%% zoom, %s)\n',
-	w, h, mode, aspect_ratio,
-	hms(duration, "%dh %dm %ds"), fps, percent(math.max(w/80,h/50)), gray and "gray" or "color"))
-io.stdout:flush()
-video:skip_image()
-current_cycle = current_cycle + cycles_per_img
-video:next_image()
-while audio.running do
-	-- infos
-	if video.cpt % video.fps == 0 then
-		tstamp = tstamp + 1
-		local d = os.time() - start
+    -- info
+    io.stdout:write(string.format('> %dx%d %s (%s) %s at %d fps (%d%% zoom, %s)\n',
+		self.w, self.h, mode,self.aspect_ratio,hms(duration, "%dh %dm %ds"), self.fps, 
+		percent(math.max(self.w/80,self.h/50)), GRAY==1 and "gray" or "color"))
+    io.stdout:flush()
+end
+function CONVERTER:process()
+    -- collect stats
+    self:_stat()
+
+    -- flux audio/video
+    local audio  = AUDIO:new(self.file)
+    local video  = self:_new_video()
+
+    -- adaptation luminosité
+	-- print(self.video_cor[1],self.video_cor[2])
+    if self.video_cor[1]~=0 or self.video_cor[2]~=1 then
+        local cor = self.video_cor
+        local super_pset = video.pset
+        function video:pset(x,y, r,g,b)
+            local function f(x)
+                x = round((x-cor[1])*cor[2]);
+                return x<0 and 0 or x>255 and 255 or x
+            end
+            super_pset(self, x,y, f(r),f(g),f(b))
+        end
+    end
+
+    -- vars pour la conversion
+    local start          = os.time()
+    local tstamp         = 0
+    local cycles_per_img = 1000000 / self.fps
+    local current_cycle  = 0
+    local completed_imgs = 0
+    local pos            = 8000
+
+    -- init previous image
+    local curr,prev = video.image,{}
+	for i=0,7999+3 do prev[i] = -1 end
+
+	-- user feedback
+	local last_etc=1e38
+    local function info()
+        local d = os.time() - start
 		local t = "> %d%% %s (%3.1fx) e=%5.3f"
 		t = t:format(
-			percent(tstamp/duration), hms(tstamp),
-			round(100*tstamp/(d==0 and 100000 or d))/100, completed_imgs/video.cpt
-			)
-		local etc = d*(duration-tstamp)/tstamp
-		local etr = etc>=90 and 10 or 5
+			percent(tstamp/self.duration), hms(tstamp),
+			round(100*tstamp/(d==0 and 100000 or d))/100, completed_imgs/video.cpt)
+		local etc = d*(self.duration-tstamp)/tstamp
+		if d>10 then if etc>last_etc then etc = last_etc else last_etc = etc end end
+		local etr = 5 -- etc>=90 and 10 or 5
 		etc = round(etc/etr)*etr
 		etc = etc>0 and d>10 and "ETC="..hms(etc) or ""
-		t = t .. string.rep(' ', math.max(0,79-t:len()-etc:len())) .. etc .. "\r"
-		io.stdout:write(t)
-		io.stdout:flush()
+		t = t .. string.rep(' ', math.max(0,79-t:len()-etc:len())) .. etc 
+		return t
 	end
 	
-	if mode=='a' then recalc_indices_d() end
+	local info_sec = 1
 	
-	for _,i in ipairs(indices) do
-	-- for i=0,7999 do
-		if prev[i] ~= curr[i] then 
-			local k = i - pos
-			if k<0 then k=8000 end
-			pos = i
-			local buf = {audio:next_sample()*4,0,0}
-			-- if mode=='i' and w==80 then
-				-- if k<=2 and ((pos-k)%40)+4>=40
-			-- end
-			
-			if k<=2 then
-				-- deplacement trop faible: mise a jour des 4 octets
-				-- videos suivants d'un coup
-				pos = pos - k
-				buf[1] = buf[1] + 1
-				buf[2] = curr[pos+0]*16 + curr[pos+1]
-				buf[3] = curr[pos+2]*16 + curr[pos+3]
-				prev[pos] = curr[pos]; pos = pos+1
-				prev[pos] = curr[pos]; pos = pos+1
-				prev[pos] = curr[pos]; pos = pos+1
-				prev[pos] = curr[pos]; pos = pos+1
-			elseif k<=256 then
-				-- deplacement 8 bit
-				buf[1] = buf[1] + 0
-				buf[2] = k%256
-				buf[3] = curr[pos+0]*16 + curr[pos+1]
-				prev[pos] = curr[pos]; pos = pos+1
-				prev[pos] = curr[pos]; pos = pos+1
-			else
-				-- deplacement arbitraire
-				buf[1] = buf[1] + 2 + math.floor(pos/4096)
-				buf[2] = math.floor(pos/16) % 256
-				buf[3] = (pos%16)*16 + curr[pos]
-				prev[pos] = curr[pos]; pos = pos + 1
-			end
-			blk = blk .. string.char(buf[1], buf[2], buf[3])
-			current_cycle = current_cycle + cycles
-			
-			test_fin_bloc()
-		end
-	end
-	completed_imgs = completed_imgs + 1
-
-	video.filter:flush()
-	
-	-- skip image if drift is too big
-	-- if current_cycle>cycles_per_img then print(current_cycle/cycles_per_img) end
-	while current_cycle>2*cycles_per_img do
-		video:skip_image()
-		if video.cpt % video.fps == 0 then
+	local function update_info()
+		if video.cpt>=info_sec then
+			info_sec = info_sec + video.fps
 			tstamp = tstamp + 1
+			io.stdout:write(info() .. '\r')
+			io.stdout:flush()
 		end
-		current_cycle = current_cycle - cycles_per_img
-	end		
+	end 
 	
-	-- add padding if image is too simple
-	while current_cycle<cycles_per_img do
-		blk = blk .. string.char(audio:next_sample()*4+2,0,curr[0])
-		pos = 1
-		current_cycle = current_cycle + cycles
-		test_fin_bloc()
-	end
+	-- progressive
+	local indices = {}
+	for i=0,7999 do indices[i] = i end
+
+    -- conversion
+    video:skip_image()
+    current_cycle = current_cycle + cycles_per_img
+    video:next_image()
+    while audio.running and video.running do
+		local b0,b1,b2,k
+        update_info()
+        for _,i in ipairs(indices) do
+            if prev[i] ~= curr[i] then
+				k = i - pos
+				if k<0 then k=8000 end
+				if k<=2 then
+					-- deplacement trop faible: mise a jour des 4 octets
+					-- videos suivants d'un coup
+					b0 = 1
+					b1 = curr[pos+0]*16 + curr[pos+1]
+					b2 = curr[pos+2]*16 + curr[pos+3]
+					prev[pos] = curr[pos]; pos = pos+1
+					prev[pos] = curr[pos]; pos = pos+1
+					prev[pos] = curr[pos]; pos = pos+1
+					prev[pos] = curr[pos]; pos = pos+1
+				elseif k<=256 then
+					-- deplacement 8 bit
+					b0,b1,b2 = 0,k%256,curr[i]*16 + curr[i+1]
+					prev[i],prev[i+1],pos=curr[i],curr[i+1],i+2
+				else
+					-- deplacement arbitraire
+					b0 = 2 + math.floor(i/4096)
+					b1 = math.floor(i/16) % 256
+					-- print(i, curr[i])
+					b2 = (i%16)*16 + curr[i]
+					prev[i],pos = curr[i],i+1
+				end
+				current_cycle = current_cycle + self.out:frame(b0,b1,b2,audio)
+			end
+		end
+        completed_imgs = completed_imgs + 1
+        video.filter:flush()
+		indices = self.indices
+
+        -- skip image if drift is too big
+        -- if current_cycle>cycles_per_img then print(current_cycle/cycles_per_img) end
+        while current_cycle>=2*cycles_per_img do
+			-- print('X', current_cycle, 2*cycles_per_img)
+            video:skip_image()
+            update_info()
+            current_cycle = current_cycle - cycles_per_img
+        end
+
+        -- add padding if image is too simple
+        while current_cycle<cycles_per_img do
+			-- print('Y', current_cycle, cycles_per_img)
+            current_cycle = current_cycle + self.out:frame(2,0,0,audio)
+            pos = 1
+        end
+
+        -- next image
+        video:next_image()
+        current_cycle = current_cycle - cycles_per_img
+    end
+
+    audio:close()
+    video:close()
 	
-	-- next image
-	video:next_image()
-	current_cycle = current_cycle - cycles_per_img
+	tstamp = self.duration
+    io.stdout:write(info() .. '\n')
+    io.stdout:flush()
 end
-test_fin_bloc()
-blk = blk .. string.char(3,255,255)
-OUT:write(blk .. string.rep(string.char(255),512-blk:len()))
-OUT:close()
-audio:close()
-video:close()
-io.stdout:write('\n')
-io.stdout:flush()
+
+local OUT = {}
+function OUT:new(file)
+    local o = {
+        file = file,
+        stream = nil,
+        buf = '', -- buffer
+    }
+    setmetatable(o, self)
+    self.__index = self
+    return o
+end
+function OUT:open()
+    local function file_content(size, file, extra)
+        local buf = ''
+        local INP = assert(io.open(file, 'rb'))
+        while true do
+            local t = INP:read(256)
+            if not t then break end
+            if extra and t:len()<256 then t = t .. extra end
+            if t:len()>256 then
+                buf = buf .. t:sub(1,256) .. string.rep(string.char(0),256)
+                t = t:sub(257)
+            end
+            buf = buf .. t .. string.rep(string.char(0),512-t:len())
+        end
+        INP:close()
+        size = size - buf:len()
+        if size<0 then
+            print('size',size)
+            error('File ' .. file .. ' is too big')
+        end
+        return buf .. string.rep(string.char(0),size)
+    end
+    local function raw(name, source)
+        local raw = 'bin/' .. name .. '.raw'
+        if not exists(raw) then
+            local cmd = C6809..' -bd -am -oOP ' .. source .. ' ' .. raw
+            print(cmd) io.flush()
+            os.execute(cmd)
+        end
+        return raw
+    end
+
+    local asm_mode=GRAY
+
+	self.stream = assert(io.open(self.file, 'wb'))
+    self.stream:write(file_content(1*512, raw('bootblk', 'asm/bootblk.ass')))
+    self.stream:write(file_content(7*512, raw('player'..asm_mode, '-dGRAY='..asm_mode..' asm/player.ass')))
+end
+function OUT:frame(buf0,buf1,buf2,audio)
+	if not self.stream then self:open() end
+    local ret = 1
+    self.buf = self.buf .. string.char(buf0+audio:next_sample()*4,buf1,buf2)
+    if self.buf:len()==3*170 then
+        local s1 = audio:next_sample()
+        local s2 = audio:next_sample()
+        local s3 = audio:next_sample()
+        local t = s1*1024 + math.floor(s2/2)*32 + math.floor(s3/2)
+        self.stream:write(self.buf .. string.char(math.floor(t/256), t%256))
+        self.buf = ''
+        ret = ret + 3
+    end
+    return ret*CYCLES
+end
+function OUT:close()
+	if self.stream then
+		self:frame(3,255,255, {next_sample=function() return 32 end})
+		self.stream:write(self.buf .. string.rep(string.char(255),512-self.buf:len()))
+		self.stream:close()
+		self.stream = nil
+	end
+end
+
+-- ===========================================================================
+-- main process
+if #arg==0 then os.exit(0) end
+table.sort(arg)
+local file = basename(arg[1])
+if #arg>1 then -- infer name
+    local function substrings(s)
+        local MIN=4
+        local subs = {set={}}
+        function subs:longest()
+            local l=''
+            for _,s in pairs(self.set) do
+                if s:len()>l:len() then l=s end
+            end
+            return l
+        end
+        function subs:intersect(other)
+            for s in pairs(self.set) do
+                if other.set[s]==nil then self.set[s]=nil end
+            end
+        end
+        for i=1,s:len()-MIN do
+            for j=i+MIN,s:len() do
+                local t = s:sub(i,j)
+                subs.set[t:lower()]=t
+            end
+        end
+        return subs
+    end
+    local subs,num = substrings(file),0
+    for i,f in ipairs(arg) do
+        local TMP = CONVERTER:new(f,nil,3)
+        if TMP then
+            subs:intersect(substrings(basename(f)))
+			num = num + 1
+        end
+    end
+    file = subs:longest():gsub("%W+$", "")
+    if file:len()<=4 then file = basename(arg[1]) end
+    file = file.."#"..num
+    io.stderr:write("\n===> "..file.." <===\n")
+    io.stderr:flush()
+end
+local out = OUT:new(file..'.sd')
+for _,f in ipairs(arg) do
+    local conv = CONVERTER:new(f,out,FPS)
+    if conv then conv:process() end
+end
+out:close();
