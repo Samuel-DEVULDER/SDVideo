@@ -836,7 +836,7 @@ function CONVERTER:_stat()
 		end
 	end
 	stat.max = 0
-	stat.threshold_max = (GRAY==1 and .03 or .05)*stat.total
+	stat.threshold_max = (GRAY==1 and .03 or .03)*stat.total
 	for i=254,1,-1 do
 		stat.max = stat.max + stat.histo[i]
 		if stat.max>stat.threshold_max then
@@ -1091,16 +1091,17 @@ if #arg>1 then -- infer name
         end
         return subs
     end
-    local subs,num = substrings(file),0
+    local subs,num,first = substrings(file),0
     for i,f in ipairs(arg) do
         local TMP = CONVERTER:new(f,nil,3)
         if TMP then
+			first = first or f
             subs:intersect(substrings(basename(f)))
 			num = num + 1
         end
     end
     file = subs:longest():gsub("%W+$", "")
-    if file:len()<=4 then file = basename(arg[1]) end
+    if file:len()<=4 then file = basename(first) end
     file = file.."#"..num
     io.stderr:write("\n===> "..file.." <===\n")
     io.stderr:flush()

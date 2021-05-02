@@ -1952,16 +1952,17 @@ if #arg>1 then -- infer name
         end
         return subs
     end
-    local subs,num = substrings(file),1
+    local subs,num,first = substrings(file),1
     for i,f in ipairs(arg) do
         local TMP = CONVERTER:new(f,nil,3)
         if TMP then
+			first = first or f
             subs:intersect(substrings(basename(f)))
 			num = num + 1
         end
     end
     file = subs:longest():gsub("%W+$", "")
-    if file:len()<=4 then file = basename(arg[1]) end
+    if file:len()<=4 then file = basename(first) end
     file = file.."#"..num
     io.stderr:write("\n===> "..file.." <===\n")
     io.stderr:flush()
