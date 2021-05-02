@@ -569,23 +569,28 @@ WAIT4
   LEAS  -170*2,S                                   (8)
   JMP   TRAME                                      (4)
   
+TAB0 EQU %0000
+TAB1 EQU %0100
+TAB2 EQU %0110
+TAB3 EQU %1110  
+
 TAB_PIX16 MACRO
-  fcb   %00000000
-  fcb   %00001000
-  fcb   %00001100
-  fcb   %00001110
-  fcb   %10000000
-  fcb   %10001000
-  fcb   %10001100
-  fcb   %10001110
-  fcb   %11000000
-  fcb   %11001000
-  fcb   %11001100
-  fcb   %11001110
-  fcb   %11100000
-  fcb   %11101000
-  fcb   %11101100
-  fcb   %11101110
+  fcb   TAB0+16*TAB0
+  fcb   TAB1+16*TAB0
+  fcb   TAB2+16*TAB0
+  fcb   TAB3+16*TAB0
+  fcb   TAB0+16*TAB1
+  fcb   TAB1+16*TAB1
+  fcb   TAB2+16*TAB1
+  fcb   TAB3+16*TAB1
+  fcb   TAB0+16*TAB2
+  fcb   TAB1+16*TAB2
+  fcb   TAB2+16*TAB2
+  fcb   TAB3+16*TAB2
+  fcb   TAB0+16*TAB3
+  fcb   TAB1+16*TAB3
+  fcb   TAB2+16*TAB3
+  fcb   TAB3+16*TAB3
   ENDM
 
 TAB_PIX
