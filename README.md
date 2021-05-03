@@ -25,7 +25,7 @@ Each pixel needs 6 bits, meaning that one can pack 4 pixels in only 3 bytes. As 
 
 ## Usage
 	
-	tools/luajit.exe conv_sd.lua <video-file>
+	tools/luajit conv_sd.lua <video-files>
 
 ## Example
 
@@ -55,7 +55,7 @@ which allows playing most video between 11 to 13 frames per second which is pret
 
 ## Usage
 
-	MODE=<N> tools/luajit sdvideo.lua <video-file>
+	MODE=<N> tools/luajit sdvideo.lua <video-files>
 	
 `MODE=<N>` is actually a numerical parameter indicating the type of output to produce. To every machine is able do play each mode, but high-end machines (MO6, TO8, TO9+) can play all. Default mode (if omitted) is 7 which usually gives colorful result without sacrificing too much of the resolution.
 

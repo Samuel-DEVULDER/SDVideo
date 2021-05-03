@@ -13,33 +13,10 @@
 -- le code doit être nettoye et rendu plus
 -- amical pour l'utilisateur
 
--- utiliser un fps<0 si la taille 100% doit etre conservee
-local MODE = loadstring('return ' .. (os.getenv('MODE') or '7'))();
-local FPS = 13 -- 21 -- 17 -- 10 -- 15 -- 11
-
--- ===========================================================================
--- constants
-local CYCLES        = 169 -- CYCLES per audio sample
-local FPS_MAX       = 30
-local FPS_MAX       = 30
-local FILTER_DEPTH  = 2
-local FILTER_THRES  = 0.03
-local EXPONENTIAL   = true
-local ZIGZAG        = true
-local LOOSY         = false
-local BUFFER_SIZE   = 4096*4*2
-local FFMPEG        = 'tools\\ffmpeg.exe'
-local C6809         = 'tools\\c6809.exe'
-
--- ===========================================================================
 -- helper functions
-if os.execute('cygpath -W >/dev/null 2>&1')==0 then
-	FFMPEG = 'tools/ffmpeg.exe' 
-	C6809  = 'tools/c6809.exe'
-end
 if not unpack then unpack = table.unpack end
 local function round(x)
-    return math.floor(x+.5)
+	return math.floor(x+.5)
 end
 local function exists(file)
    local ok, err, code = os.rename(file, file)
@@ -52,8 +29,46 @@ local function exists(file)
    return ok, err
 end
 local function isdir(file)
-    return exists(file..'/')
+	return exists(file..'/')
 end
+local function env(var, default)
+	return loadstring('return ' .. (os.getenv(var) or default))();
+end
+local function locate(file,...)
+	local pwd = arg[0]:match("(.*[/\\])") or ''
+	for _,sep in ipairs{'\\','/'} do
+		for _,root in ipairs{pwd, pwd .. '..' .. sep} do
+			for _,dir in ipairs{'', ...} do
+				dir = dir=='' and dir or dir..sep
+				local tmp = root .. dir .. file
+				if exists(tmp) then return tmp end
+			end
+		end
+	end
+	error('Cannot locate "' .. file .. '"')
+end
+
+-- ===========================================================================
+-- utiliser un fps<0 si la taille 100% doit etre conservee
+local MODE          = env('MODE',7)
+local FPS           = env('FPS',13)
+
+local FFMPEG        = locate('ffmpeg.exe', 'tools')
+local BIN           = locate('bin/')
+
+-- constants
+local CYCLES        = 169 -- CYCLES per audio sample
+local FPS_MAX       = 30
+local FPS_MAX       = 30
+local FILTER_DEPTH  = 2
+local FILTER_THRES  = 0.03
+local EXPONENTIAL   = true
+local ZIGZAG        = true
+local LOOSY         = false
+local BUFFER_SIZE   = 4096*4*2
+
+-- ===========================================================================
+
 local function percent(x)
     -- convert x in 0..1+ to 0..100
     return round(math.min(1,x)*100)
@@ -1883,11 +1898,10 @@ function OUT:open()
         return buf .. string.rep(string.char(0),size)
     end
     local function raw(name, source)
-        local raw = 'bin/' .. name .. '.raw'
+        local raw = BIN .. name .. '.raw'
         if not exists(raw) then
-            local cmd = C6809..' -bd -am -oOP ' .. source .. ' ' .. raw
-            print(cmd) io.flush()
-            os.execute(cmd)
+            error(raw .. ' is missing. Please create via\n' ..
+			'c6809 -bd -am -oOP ' .. source .. ' ' .. raw)
         end
         return raw
     end

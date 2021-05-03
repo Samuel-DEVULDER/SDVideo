@@ -20,12 +20,45 @@
 -- le code doit être nettoye et rendu plus
 -- amical pour l'utilisateur
 
-local function env(var, default)
-	return loadstring('return ' .. (os.getenv(var) or default))();
-end
 local function round(x)
 	return math.floor(x+.5)
 end
+local function exists(file)
+   local ok, err, code = os.rename(file, file)
+   if not ok then
+      if code == 13 then
+         -- Permission denied, but it exists
+         return true
+      end
+   end
+   return ok, err
+end
+local function isdir(file)
+	return exists(file..'/')
+end
+local function env(var, default)
+	return loadstring('return ' .. (os.getenv(var) or default))();
+end
+local function locate(file,...)
+	local pwd = arg[0]:match("(.*[/\\])") or ''
+	for _,sep in ipairs{'\\','/'} do
+		for _,root in ipairs{pwd, pwd .. '..' .. sep} do
+			for _,dir in ipairs{'', ...} do
+				dir = dir=='' and dir or dir..sep
+				local tmp = root .. dir .. file
+				if exists(tmp) then return tmp end
+			end
+		end
+	end
+	error('Cannot locate "' .. file .. '"')
+end
+
+local GRAY          = env('GRAY','nil')
+local FPS           = env('FPS',11)
+local dither        = env('DITH', 8) -- -8 for vac
+
+local FFMPEG        = locate('ffmpeg.exe', 'tools')
+local BIN           = locate('bin/')
 
 local CYCLES        = 199 -- cycles par échantillons audio
 local BUFFER_SIZE   = 4096
@@ -33,14 +66,9 @@ local FPS_MAX       = 30
 local TIMEOUT       = 2
 local GRAY_THR      = .1 -- .07
 local FILTER_DEPTH  = 1
-local GRAY          = env('GRAY','nil')
-local FPS           = env('FPS',11)
 
 local interlace     = nil -- useless
-local dither        = env('DITH', 8) -- -8 for vac
 local mode          = 'p'
-local FFMPEG        = 'tools\\ffmpeg.exe'
-local C6809         = 'tools\\c6809.exe'
 
 local SPECIAL_4 = false -- experiment ==> no interrest
 if SPECIAL_4 then
@@ -62,23 +90,6 @@ end
 	-- ffmpeg = 'tools/ffmpeg.exe' 
 -- end
 
-if nil==os.getenv('CYG_SYS_BASHRC') then
-	FFMPEG = 'tools/ffmpeg.exe' 
-	C6809  = 'tools/c6809.exe'
-end
-local function exists(file)
-   local ok, err, code = os.rename(file, file)
-   if not ok then
-      if code == 13 then
-         -- Permission denied, but it exists
-         return true
-      end
-   end
-   return ok, err
-end
-local function isdir(file)
-	return exists(file..'/')
-end
 local function percent(x)
 	return round(math.min(1,x)*100)
 end
@@ -1023,20 +1034,16 @@ function OUT:open()
         return buf .. string.rep(string.char(0),size)
     end
     local function raw(name, source)
-        local raw = 'bin/' .. name .. '.raw'
+        local raw = BIN .. name .. '.raw'
         if not exists(raw) then
-            local cmd = C6809..' -bd -am -oOP ' .. source .. ' ' .. raw
-            print(cmd) io.flush()
-            os.execute(cmd)
+			error(raw .. ' is missing. Please create via\n' ..
+			'c6809 -bd -am -oOP ' .. source .. ' ' .. raw)
         end
         return raw
     end
-
-    local asm_mode=GRAY
-
 	self.stream = assert(io.open(self.file, 'wb'))
     self.stream:write(file_content(1*512, raw('bootblk', 'asm/bootblk.ass')))
-    self.stream:write(file_content(7*512, raw('player'..asm_mode, '-dGRAY='..asm_mode..' asm/player.ass')))
+    self.stream:write(file_content(7*512, raw('player'..GRAY, '-dGRAY='..GRAY..' asm/player.ass')))
 end
 function OUT:frame(buf0,buf1,buf2,audio)
 	if not self.stream then self:open() end
