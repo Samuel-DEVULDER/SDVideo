@@ -2,7 +2,7 @@ CC=gcc
 CFLAGS=-O3 -Wall
 GIT=git
 WGET=wget
-MKEXE=chmod 777
+MKEXE=chmod a+rx
 RM=rm
 CP=cp
 7Z=7z
@@ -26,6 +26,9 @@ ifeq ($(OS),Win)
 	CC=i686-w64-mingw32-gcc -m32
 	MACHINE=x86
 	FFMPEG_URL=https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.7z 
+	YT_DL_URL=https://youtube-dl.org/downloads/latest/youtube-dl.exe
+else
+	YT_DL_URL=https://yt-dl.org/downloads/latest/youtube-dl
 endif
 
 DISTRO=SDDrive-$(VERSION)-$(OS)-$(MACHINE)
@@ -37,8 +40,9 @@ BIN=bin/bootblk.raw bin/player0.raw bin/player1.raw \
 LUA=tools/luajit$(EXE)
 C6809=tools/c6809$(EXE)
 FFMPEG=tools/ffmpeg$(EXE)
+YT_DL=tools/youtube-dl$(EXE)
 
-ALL=$(LUA) $(BIN) $(FFMPEG)
+ALL=$(LUA) $(BIN) $(FFMPEG) $(YT_DL)
 
 all: $(ALL)
 	ls -l .
@@ -50,8 +54,7 @@ $(DISTRO): $(ALL) \
 	$(DISTRO)/ $(DISTRO)/bin/ $(DISTRO)/tools/ \
 	$(DISTRO)/README.html wrappers
 	$(CP) $(BIN) $@/bin/
-	$(CP) $(LUA) $@/tools/luajit$(EXE)
-	$(CP) $(FFMPEG) $@/tools/ffmpeg$(EXE)
+	$(CP) $(LUA)* $(FFMPEG)* $(YT_DL)* $@/tools/
 	$(CP) sdvideo.lua conv_sd.lua $@/tools/
 
 wrappers: $(DISTRO)/sdvideo.bat $(DISTRO)/conv_sd.bat 
@@ -105,15 +108,21 @@ clean:
 	
 $(LUA): LuaJIT $(wildcard LuaJIT/src/*)
 	cd $< && export MAKE="make -f Makefile" && $$MAKE BUILDMODE=static CC="$(CC) -static" CFLAGS="$(CFLAGS)"  
-	cp $</src/$(notdir $@) "$@"
+	$(CP) $</src/$(notdir $@) "$@"
+	$(CP) $</COPYRIGHT "$@"-COPYRIGHT
 	strip "$@"
 	
 $(FFMPEG):
 	$(7Z) --help >/dev/null || apt-cyg install p7zip
 	$(WGET) $(FFMPEG_URL) -O $(TMP)
+	$(7Z) e $(TMP) LICENSE -r -so >$(FFMPEG)-LICENSE
 	$(7Z) e $(TMP) ffmpeg$(EXE) -r -so >$(FFMPEG)
 	$(MKEXE) $(FFMPEG)
 	$(RM) $(TMP)
+	
+$(YT_DL):
+	$(WGET) $(YT_DL_URL) -O $@
+	$(MKEXE) $@
 	
 tools/%$(EXE): c6809/%.c
 	$(CC) $(CFLAGS) -o "$@" "$<"

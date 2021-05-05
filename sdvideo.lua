@@ -51,9 +51,10 @@ end
 -- ===========================================================================
 -- utiliser un fps<0 si la taille 100% doit etre conservee
 local MODE          = env('MODE',7)
-local FPS           = env('FPS',13)
+local FPS           = env('FPS',11)
 
 local FFMPEG        = locate('ffmpeg.exe', 'tools')
+local YT_DL         = locate('youtube-dl.exe', 'tools')
 local BIN           = locate('bin/')
 
 -- constants
@@ -288,7 +289,7 @@ if MODE==0 then
     CONFIG.dither    = compo(norm,bayer,4){{1}}
 elseif MODE==1 then
     CONFIG.px_size   = {1,3}
-    CONFIG.interlace = 'iii'
+    CONFIG.interlace = 'i' -- 'iii'
     CONFIG.dither    = compo(norm,bayer,3){{1,2,3}}
 elseif MODE==2 or MODE==3 then
     CONFIG.px_size   = {4,1}
@@ -1938,9 +1939,47 @@ function OUT:close()
 end
 
 -- ===========================================================================
+-- replace URLs
+function replace_yt(arg)
+	local updated = false
+	local out = {}
+	for i,vid in ipairs(arg) do
+		if vid:sub(1,8)=='https://' or vid:sub(1,7)=='http://' then
+			updated = updated or 0==os.execute(YT_DL .. ' -U -q')
+			local all={}
+			if vid:find('/playlist?') then
+				local IN,line = assert(io.popen(YT_DL..' -i --geo-bypass --get-id '..vid, 'r'))
+				for line in IN:lines() do
+					table.insert(all,'https://youtu.be/'.. line)
+					-- table.insert(all, '"'..line..'"')
+				end
+				IN:close()
+			else
+				table.insert(all,vid)
+			end
+			for _,vid in ipairs(all) do
+				local IN,line,file = assert(io.popen(YT_DL..' --geo-bypass --restrict-filenames -o "%(title)s--%(id)s" --get-filename ' .. vid, 'r'))
+				for line in IN:lines() do file = file or line .. '.mkv' end
+				IN:close()
+				local ok = os.execute(YT_DL .. ' -f 18 --geo-bypass --merge-output-format mkv -o "'.. file .. '" ' .. vid)
+				if ok==1 then
+					ok = os.execute(YT_DL .. ' --geo-bypass --merge-output-format mkv -o "'.. file .. '" ' .. vid)
+				end
+				if ok==0 then
+					table.insert(out, file)
+				end
+			end
+		else
+			table.insert(out,vid)
+		end
+	end
+	return out
+end
+
+-- ===========================================================================
 -- main process
 if #arg==0 then os.exit(0) end
-table.sort(arg)
+arg = replace_yt(arg)
 local file = basename(arg[1])
 if #arg>1 then -- infer name
     local function substrings(s)
