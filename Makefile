@@ -89,7 +89,7 @@ tst: tst_conv_sd tst_sdvideo
 
 tst_conv_sd: $(ALL)
 	nice -19 \
-	$(LUA) conv_sd.lua  "test/MMD Bad Apple!! Now in 3D with more Color-.mp4"
+	$(LUA) conv_sd.lua https://www.youtube.com/watch?v=uOyaCOViAPA
 	
 tst_sdvideo: $(ALL)
 	for i in {0..15}; do \
@@ -97,9 +97,9 @@ tst_sdvideo: $(ALL)
 		MODE=$$i \
 		nice -19 \
 		$(LUA) sdvideo.lua \
-			"test/Medley.mp4" \
-			"test/remember to breathe - Travel Alberta, Canada.flv" \
-			"test/spinning_a_mountain.mp4";\
+			https://www.youtube.com/watch?v=sBKmqkh9bb8 \
+			https://www.youtube.com/watch?v=ThFCg0tBDck \
+			https://www.youtube.com/watch?v=c5UoU7O3AzQ;\
 	done
 
 clean:
