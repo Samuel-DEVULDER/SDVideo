@@ -51,7 +51,7 @@ end
 -- ===========================================================================
 -- utiliser un fps<0 si la taille 100% doit etre conservee
 local MODE          = env('MODE',7)
-local FPS           = env('FPS',11)
+local FPS           = env('FPS',-30)
 
 local FFMPEG        = locate('ffmpeg.exe', 'tools')
 local YT_DL         = locate('youtube-dl.exe', 'tools')
@@ -60,13 +60,14 @@ local BIN           = locate('bin/')
 -- constants
 local CYCLES        = 169 -- CYCLES per audio sample
 local FPS_MAX       = 30
-local FPS_MAX       = 30
 local FILTER_DEPTH  = 2
-local FILTER_THRES  = 0.03
+local FILTER_THRES  = 0.005
+local FILTER_ALPHA  = 0
 local EXPONENTIAL   = true
 local ZIGZAG        = true
 local LOOSY         = false
 local BUFFER_SIZE   = 4096*4*2
+local CONFIG        = nil
 
 -- ===========================================================================
 
@@ -121,11 +122,17 @@ local function vac(n,m)
         t.mt={}
         setmetatable(t, t.mt)
         function t.mt.__tostring(t)
-            local s=''
+            local s,f='',0
+			for i=1,#t do for j=1,#t[1] do
+				local x = t[i][j]
+				x = x-math.floor(x)
+				if x>f then f=x end
+			end end
+			f = f>0 and "%9.6f" or "%3d"
             for i=1,#t do
                 for j=1,#t[1] do
                     if j>1 then s=s..',' end
-                    s = s..string.format("%9.6f",t[i][j])
+                    s = s..string.format(f,t[i][j])
                 end
                 s = s..'\n'
             end
@@ -161,9 +168,13 @@ local function vac(n,m)
         local h2 = math.ceil(h/2)
         local m = mat(w,h)
         for x,y in rangexy(w, h) do
-            local i = ((x-1+w2)%w)-w/2
-            local j = ((y-1+h2)%h)-h/2
-            m[y][x] = math.exp(-40*(i^2+j^2)/(w*h))
+            -- local i = ((x-1+w2)%w)-w/2
+            -- local j = ((y-1+h2)%h)-h/2
+            -- m[y][x] = math.exp(-40*(i^2+j^2)/(w*h))
+			local i = ((x-1+w2)%w)/w2-1  -- -1..1
+            local j = ((y-1+h2)%h)/h2-1  -- -1..1
+			i,j = i*3,j*3 -- i*3*CONFIG.px_size[2],j*3*CONFIG.px_size[1]
+            m[y][x] = .01/((i^2+j^2)+.01)
         end
         -- print(m)
         return m
@@ -177,7 +188,7 @@ local function vac(n,m)
         end
         return t
     end
-    local GAUSS = makegauss(n,m)
+    local GAUSS = makegauss(2*n,2*m)
     local function getminmax(m, c)
         local min,max,max_x,max_y,min_x,min_y=1e38,0
         local h,w = #m, #m[1]
@@ -257,7 +268,9 @@ local function compo(f,g,...) -- let's do functionnal programming
 		if type(f)=='function' then
 			return f
 		else
-			return function() return f end
+			return f==nil 
+			and function(...) return ... end 
+			or	function() return f end
 		end
     elseif type(g)=='number' then
         if g<=0 then
@@ -267,13 +280,13 @@ local function compo(f,g,...) -- let's do functionnal programming
         end
     else
         local h = compo(g,...)
-        return function(x) return f(h(x)) end
+        return function(...) return f(h(...)) end
     end
 end
 
 -- ===========================================================================
 -- init global data
-local CONFIG = {
+CONFIG = {
     interlace   = 'p',
 	asm_mode    = (MODE<6 and MODE) or (MODE%2==0 and 4 or 5),
     px_size     = {1,1},
@@ -285,8 +298,103 @@ local CONFIG = {
 }
 
 if MODE==0 then
-    CONFIG.interlace = 'i3'
-    CONFIG.dither    = compo(norm,bayer,4){{1}}
+    CONFIG.interlace = 'iii' -- 'i3'
+    CONFIG.dither    = 
+	-- compo(norm,vac)(8,8)
+		--compo(norm,bayer,4){{1}}
+		
+-- 38, 59, 11, 43,  3, 31, 53, 18
+-- 7, 32, 54, 27, 34, 47, 10, 44
+ -- 51, 14, 37,  6, 57, 20, 60, 26
+ -- 21, 62, 23, 49, 13, 41,  1, 39
+ -- 42,  4, 45, 17, 64, 22, 56, 12
+ -- 16, 58, 29, 36,  5, 40, 30, 52
+ -- 46, 33,  9, 55, 28, 50,  8, 25
+  -- 2, 24, 48, 19, 61, 15, 35, 63
+
+ -- 58,  5, 31, 38,  1, 28, 54, 13
+ -- 26, 49, 11, 47, 23, 51,  8, 37
+ -- 18, 35, 56, 19, 61, 16, 32, 63
+ -- 45,  7, 30, 44,  6, 40, 48,  2
+ -- 27, 60, 15, 36, 59, 24, 12, 55
+ -- 17, 34, 52,  3, 21, 50, 29, 39
+ -- 53, 10, 25, 46, 33,  9, 62,  4
+ -- 22, 42, 64, 14, 57, 41, 20, 43
+ 
+  -- 45, 12, 35, 53, 20, 38, 48,  8
+ -- 21, 59, 27, 10, 44,  2, 26, 54
+ -- 42,  3, 40, 63, 18, 57, 37, 13
+ -- 22, 55, 19, 31, 50,  9, 29, 62
+ -- 51, 11, 47,  4, 39, 24, 46,  6
+ -- 36, 25, 34, 56, 17, 60, 15, 43
+  -- 1, 64, 14, 30, 41,  7, 52, 28
+ -- 33, 23, 49,  5, 61, 32, 16, 58
+
+ -- 54, 33, 62, 12, 57, 16, 63, 18
+ -- 26,  1, 22, 47, 28, 37,  6, 49
+ -- 43, 31, 52, 23,  4, 59, 32, 15
+  -- 7, 60, 10, 35, 51, 19, 39, 56
+ -- 50, 20, 38, 64, 13, 42,  9, 27
+ -- 14, 46, 29,  3, 48, 21, 61, 36
+ -- 58,  5, 55, 25, 34, 53,  2, 24
+ -- 11, 41, 17, 44,  8, 40, 30, 45
+
+ -- 46, 22, 44,  9, 57,  3, 37, 17
+  -- 6, 55, 27, 49, 19, 45, 23, 60
+ -- 33, 40,  1, 32, 63,  7, 53, 14
+ -- 51, 15, 59, 11, 36, 29, 38, 26
+ -- 10, 42, 21, 48, 18, 56,  2, 61
+ -- 47, 28, 58,  5, 43, 24, 41, 20
+ -- 34,  4, 35, 52, 13, 62,  8, 54
+ -- 12, 64, 16, 30, 39, 25, 50, 31
+ 
+ -- 14, 57, 35, 22, 36, 46,  5, 62
+ -- 40, 29, 12, 64,  8, 30, 55, 25
+ -- 51,  3, 47, 28, 53, 21, 37, 10
+ -- 18, 58, 34, 15, 41,  2, 60, 33
+ -- 27, 38,  6, 61, 24, 48, 16, 45
+ -- 63, 13, 54, 31,  9, 32, 56,  4
+ -- 23, 42, 19, 44, 26, 50, 11, 39
+ -- 49,  7, 52,  1, 59, 17, 43, 20
+
+ -- 33, 57, 18, 27, 50, 16, 59,  5
+ -- 48, 13, 40, 64,  3, 32, 38, 20
+ -- 24, 53,  9, 22, 42, 56, 10, 62
+  -- 4, 44, 30, 52, 25, 14, 45, 36
+ -- 49, 15, 60,  6, 34, 58, 17, 28
+  -- 7, 31, 37, 19, 47,  1, 39, 63
+ -- 41, 55, 11, 61, 23, 54, 12, 21
+ -- 26,  2, 46, 35,  8, 43, 29, 51
+
+ -- 26, 56,  3, 41,  8, 45, 12, 59
+ -- 46, 20, 43, 21, 64, 28, 38, 15
+  -- 6, 61, 13, 52, 35,  1, 55, 32
+ -- 25, 39, 33,  9, 24, 60, 18, 50
+ -- 57,  2, 53, 29, 48, 14, 42, 10
+ -- 16, 44, 22, 62,  5, 37, 31, 47
+ -- 63, 30, 11, 40, 27, 58,  4, 23
+  -- 7, 36, 51, 17, 54, 19, 49, 34
+
+ -- 63, 24, 37,  5, 48, 11, 51, 31
+  -- 1, 54, 12, 59, 33, 22, 42, 20
+ -- 34, 44, 27, 40, 15, 60,  6, 56
+ -- 21, 10, 52,  3, 47, 36, 28, 41
+ -- 61, 38, 19, 64, 25,  9, 49, 13
+  -- 4, 29, 45, 14, 32, 57, 17, 53
+ -- 23, 58,  7, 55, 39,  2, 46, 35
+ -- 43, 16, 50, 30, 18, 62, 26,  8
+
+norm{
+{  5, 50, 35,  7, 52, 34, 10, 42},
+{ 31, 11, 59, 30, 15, 60, 25, 55},
+{ 38, 47, 19, 44, 36,  3, 46, 14},
+{  1, 23, 61,  6, 56, 21, 33, 63},
+{ 28, 51, 16, 40, 24, 49,  9, 41},
+{ 54,  8, 32, 48, 12, 29, 58, 20},
+{ 13, 37, 57,  2, 64, 39,  4, 43},
+{ 62, 26, 18, 45, 27, 17, 53, 22}}
+
+
 elseif MODE==1 then
     CONFIG.px_size   = {1,3}
     CONFIG.interlace = 'i' -- 'iii'
@@ -296,12 +404,14 @@ elseif MODE==2 or MODE==3 then
     CONFIG.interlace = 'i3'
     CONFIG.dither    = --bayer{{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
 			--bayer{{1,2},{9,10},{5,6},{13,14},{3,4},{11,12},{7,8},{15,16}}
-			compo(bayer,2){{1},{3},{2},{4}}
+			-- compo(bayer,2){{1},{3},{2},{4}}
+			vac(7,29)
 elseif MODE==4 or MODE==5 then
     CONFIG.px_size   = {4,1}
     CONFIG.interlace = 'ii'
     CONFIG.dither    = --bayer{{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
-		compo(bayer,2){{1},{3},{2},{4}}
+		-- compo(bayer,2){{1},{3},{2},{4}}
+		vac(7,29)
     CONFIG.palette   = compo(
         EXPONENTIAL and
             {0x000,0x00F,0x0F0,0x0CC,
@@ -316,14 +426,26 @@ elseif MODE==4 or MODE==5 then
 elseif MODE==6 or MODE==7 then
     CONFIG.px_size   = {4,2}
     CONFIG.interlace = ZIGZAG and 'i3' or 'p'
-    CONFIG.dither    = compo(norm,bayer){{1,4},{5,8},{3,2},{7,6}}
+    CONFIG.dither    = 
+		compo(norm,bayer){{1,4},{5,8},{3,2},{7,6}}
+		
+	-- b: 0     3   14
+	-- r: 0     1   6   15
+	-- g: 0     1   4   8       15
+
+	
     CONFIG.palette   = compo(
         EXPONENTIAL and
-            {0x000,0x100,0xE00,
-             0x001,0x101,0xE01,
-             0x004,0x104,0xE04,
-             0x00E,0x10E,0xE0E,
-             0x010,0x030,0x060,0x0E0}
+            {0x000,0x100,0xD00,
+             0x001,0x101,0xD01,
+             0x004,0x104,0xD04,
+             0x00D,0x10D,0xD0D,
+             0x010,0x030,0x060,0x0D0}
+			 -- {0x000,0x300,0xE00,
+			  -- 0x001,0x301,0xE01,
+			  -- 0x006,0x306,0xE06,
+			  -- 0x00F,0x30F,0xE0F,
+			  -- 0x010,0x040,0x080,0x0F0}
         or
             {0x000,0x600,0xF00,
              0x004,0x604,0xF04,
@@ -349,7 +471,8 @@ elseif MODE==10 or MODE==11 then
     CONFIG.px_size   = {4,1}
     CONFIG.interlace = 'i3'
     CONFIG.dither    = --compo(bayer){{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
-		compo(bayer,2){{1},{3},{2},{4}}
+		-- compo(bayer,2){{1},{3},{2},{4}}
+		vac(7,29)
 
     package.path = './lib/?.lua;' .. package.path
     function getpicturesize() return 80,50 end
@@ -381,7 +504,7 @@ elseif MODE==10 or MODE==11 then
                 while stat.running do stat:next_image() end
             end
         end
-        -- for i=1,64 do reducer:boostBorderColors() end
+		for i=1,16 do reducer:boostBorderColors() end
         io.stderr:write(string.rep(' ',79)..'\r')
         io.stderr:flush()
         local pal = reducer:buildPalette(16, true)
@@ -392,15 +515,60 @@ elseif MODE==12 or MODE==13 then
     CONFIG.px_size   = {4,1}
     CONFIG.interlace = 'i3'
     CONFIG.dither    = --compo(norm,bayer,2){{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
-			compo(norm,bayer,3){{1},{3},{2},{4}}
+			-- compo(norm,bayer,3){{1},{3},{2},{4}}
+			compo(norm,vac)(7,29)
 elseif MODE==14 or MODE==15 then
 	CONFIG.asm_mode	 = MODE%2==0 and 4 or 5
     CONFIG.px_size   = {4,1}
     CONFIG.interlace = 'i3'
     CONFIG.dither    = --compo(bayer,2){{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
-		compo(bayer,2){{1},{3},{2},{4}}
-	CONFIG.palette   = compo{0x000, 0x111, 0x101, 0x013, 0x510, 0x130, 0x772, 0xf11, 
-	                         0x25f, 0xf50, 0xea0, 0x579, 0xfa8, 0x3ff, 0xff2, 0xfff} -- Dawnbriger16
+		-- compo(bayer,2){{1},{3},{2},{4}}
+		vac(7,29)
+	CONFIG.palette   = compo{
+		0x000, 0x111, 0x101, 0x013, 
+		0x510, 0x130, 0x772, 0xf11, 
+	    0x25f, 0xf50, 0xea0, 0x579, 
+		0xfa8, 0x3ff, 0xff2, 0xfff} -- Dawnbriger16
+elseif MODE==16 or MODE==17 then
+	CONFIG.asm_mode	 = MODE%2==0 and 4 or 5
+    CONFIG.px_size   = {4,1}
+    CONFIG.interlace = 'i3'
+    CONFIG.dither    = 
+		-- compo(norm,bayer,2){{1},{3},{2},{4}}
+		compo(norm,vac)(7,29)
+		-- compo(norm,bayer,1){{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
+	CONFIG.palette   = compo{
+		0x000, 0x111, 0x222, 0x333,
+		0x444, 0x555, 0x666, 0x777,
+		0x888, 0x999, 0xAAA, 0xBBB,
+		0xCCC, 0xDDD, 0xEEE, 0xFFF}
+elseif MODE==18 or MODE==19 then
+	CONFIG.asm_mode	 = MODE%2==0 and 4 or 5
+    CONFIG.px_size   = {4,1}
+    CONFIG.interlace = 'i3'
+    CONFIG.dither    = 
+	-- compo(bayer,2){{1},{3},{2},{4}}
+	vac(7,29)
+	CONFIG.palette   = compo{
+		-- 0 1 4 7 14
+		0x000, 
+		0x100,0x400,0x700,
+		0x010,0x040,0x070,
+		0x001,0x004,0x007,
+		0x07E,0xE07,0xE70,
+		0x414,0x747,0xEEE
+		
+		-- 0x000,0xd00,0x0d0,0xdd0,
+		-- 0x00d,0xd0d,0x0dd,0xddd,
+		-- 0x100,0x010,0x001,
+		-- 0x400,0x040,0x004,
+		-- 0x444,0x888
+		
+		-- 0x000,0x0DD,0xD0D,0xDD0,
+        -- 0x001,0x004,0x007,0x00D,
+        -- 0x010,0x040,0x070,0x0D0,
+        -- 0x100,0x400,0x700,0xD00
+	}
 else
     error("Invalid MODE="..MODE)
 end
@@ -943,9 +1111,20 @@ end
 -- VIDEO filter aimed at mixing dropped frammes
 local FILTER = {}
 function FILTER:new()
-    local o = {t={}}
+    local o = {t={},cur={},map={}}
     setmetatable(o, self)
     self.__index = self
+	for i=0,320*200*3-1 do o.cur[i] = 0 end
+	local alpha = FILTER_ALPHA
+	for i=0,255 do
+		local x = PALETTE.linear(i)
+		o.map[i] = {}
+		for j=0,255 do
+			local y = PALETTE.linear(j)
+			local z = x*alpha + (1-alpha)*y
+			o.map[i][j] = round(PALETTE.unlinear(z))
+		end
+	end
     return o
 end
 function FILTER:push(bytecode)
@@ -954,36 +1133,45 @@ function FILTER:push(bytecode)
     table.insert(self.t, t)
     return self
 end
+if FILTER_ALPHA>0 then
+function FILTER:push(bytecode)
+    local t,map,cur = {},self.map,self.cur
+    for i=1,bytecode:len() do 
+		local x =map[cur[i]][bytecode:byte(i)] 
+		t[i], cur[i] = x, x
+	end
+    -- table.insert(self.t, t)
+	self.t[1] = t
+    return self
+end
+end
 function FILTER:flush()
     for i=FILTER_DEPTH,#self.t do table.remove(self.t,1) end
 end
 function FILTER:byte(offset)
-    local m = #self.t
+    local m,t = #self.t, self.t
     if m==1 then
-        return self.t[1][offset]
+        return t[1][offset]
     elseif m==2 then
-        -- return round((self.t[1][offset]+2*self.t[2][offset])*.3333333)
+        -- do return round((self.t[1][offset]+2*self.t[2][offset])*.3333333) end
 
         -- new strategy to improve compression: if change is small, keep previous value
-        local a,b = self.t[1][offset],self.t[2][offset]
+        local a,b = t[1][offset],t[2][offset]
         local la,lb =
             -- (a/255)^2.2,(b/255)^2.2
             PALETTE.linear(a),PALETTE.linear(b)
 		-- if math.abs(la-lb)>0 and la+lb>0 then print (math.abs(la-lb)/math.max(la,lb)) end
         if math.abs(la-lb)<FILTER_THRES*math.max(la,lb) then
-            self.t[2][offset]=a
-            b=a
+            b,t[2][offset]=a,a
         end
         return b
     elseif m==3 then
-        return round((self.t[1][offset]+2*self.t[2][offset]+3*self.t[3][offset])*.16666666)
+        return round((t[1][offset] + 
+		            2*t[2][offset] +
+					3*t[3][offset])*.16666666)
     else
         local v,d = 0,0
-        for i=1,m do
-            local t=i
-            v = v + self.t[i][offset]*t
-            d = d + t
-        end
+        for i=1,m do v,d = v + t[i][offset]*i,d+i end
         return round(v/d)
     end
 end
@@ -1173,14 +1361,24 @@ function VIDEO:init_dither()
     self.dither = m
 end
 function VIDEO:transcode(p, o, v)
-    local t = self.image[p]
-    v = v + (v>=8 and -8 or 8)
-    if o==0 then
-        v = v*8+t-(math.floor(t/8)%16)*8
-    else
-        v = (v>=8 and 128 or 0)+(v%8)+(math.floor(t/8)%16)*8
-    end
-    self.image[p] = v
+	if not self._transcode then
+		self._transcode = {}
+		for t=0,255 do 
+			local tab = {}
+			for v_=0,31 do
+				local v = v_ % 16
+				v = v + (v>=8 and -8 or 8)
+				if v_<16 then
+					v = v*8+t-(math.floor(t/8)%16)*8
+				else
+					v = (v>=8 and 128 or 0)+(v%8)+(math.floor(t/8)%16)*8
+				end
+				tab[v_] = v
+			end
+			self._transcode[t] = tab
+		end
+	end
+	self.image[p] = self._transcode[self.image[p]][v + (o==0 and 0 or 16)]
 end
 if MODE==0 then
     -- GRAY
@@ -1192,10 +1390,10 @@ if MODE==0 then
             self._mask = {}
             for i=0,319 do self._mask[i]=2^(7-(i%8)) end
         end
-		local f = self._linear
+		local f,i,m = self._linear
 		if .2126*f[r]+.7152*f[g]+.0722*f[b]>=self.dither:get(x,y) then
-			f = math.floor((x+y*320)/8)
-			self.image[f] = self.image[f] + self._mask[x]
+			f,i,m = math.floor((x+y*320)/8),self.image,self._mask
+			i[f] = i[f] + m[x]
 		end
     end
 elseif MODE==1 then
@@ -1210,11 +1408,11 @@ elseif MODE==1 then
         end
 		local f,d = self._linear,self.dither:get(x,y)
         local m,p,q = self._mask[x],math.floor((x+y*960)/8),self.image
-        if f[r]>d then q[p]    = q[p]    + m end
-        if f[g]>d then q[p+40] = q[p+40] + m end
-        if f[b]>d then q[p+80] = q[p+80] + m end
+        if f[r]>=d then q[p]    = q[p]    + m end
+        if f[g]>=d then q[p+40] = q[p+40] + m end
+        if f[b]>=d then q[p+80] = q[p+80] + m end
     end
-elseif MODE==2 or MODE==4 or MODE==10 or MODE==14 then
+elseif MODE==2 or MODE==4 or MODE==10 or MODE==14 or MODE==18 then
     -- MO (not transcode)
     function VIDEO:pset(x,y, r,g,b)
         if not self.dither then	self:init_dither(); self._cache = {} end
@@ -1228,7 +1426,7 @@ elseif MODE==2 or MODE==4 or MODE==10 or MODE==14 then
         if o==0 then v=v*16 end
         self.image[p] = self.image[p] + v
     end
-elseif MODE==3 or MODE==5 or MODE==11 or MODE==15  then
+elseif MODE==3 or MODE==5 or MODE==11 or MODE==15 or MODE==19 then
     -- TO (transcode)
     function VIDEO:pset(x,y, r,g,b)
         if not self.dither then self:init_dither(); self._cache = {} end
@@ -1244,18 +1442,17 @@ elseif MODE==6 or MODE==7 then
     if MODE%2==0 then
         -- MO (not transcode)
         function VIDEO:plot(p,o,r,g,b)
-            local p1,p2 = p,p+40
+            local p1,p2,img = p,p+40,self.image
             if ZIGZAG and o==1 then p1,p2=p2,p1 end
             o = o==0 and 16 or 1
             local t = b+r*3
-            if t>0 then self.image[p1] = self.image[p1] +      t*o end
-            if g>0 then self.image[p2] = self.image[p2] + (g+11)*o end
+            if t>0 then img[p1] = img[p1] +      t*o end
+            if g>0 then img[p2] = img[p2] + (g+11)*o end
         end
     else
         -- TO (transcode)
         function VIDEO:plot(p,o,r,g,b)
-            local t = b+r*3
-            local o1,o2=0,40
+            local t,o1,o2 = b+r*3,0,40
             if ZIGZAG and o==1 then o1,o2=o2,o1 end
             if t>0 then self:transcode(p+o1,o,t) end
             if g>0 then self:transcode(p+o2,o,g+11) end
@@ -1280,20 +1477,20 @@ elseif MODE==6 or MODE==7 then
                 end
             end
         end
-
+		
         local f,d = self._linear,self.dither:get(x,y)
         r,g,b = f[r][1],f[g][2],f[b][3]
         r = math.floor(r) +
         -- (r%1>self.dither:get(x,3*y+0) and 1 or 0)
-        (r%1>(r>=1 and d or self.dither:get(x,3*y+0)) and 1 or 0)
+        (r%1>=(r>=1 and d or self.dither:get(x,3*y+0)) and 1 or 0)
         -- (r%1>d and 1 or 0)
         g = math.floor(g) +
         -- (g%1>self.dither:get(x,3*y+1) and 1 or 0)
-        (g%1>(g>=1 and d or self.dither:get(x,3*y+1)) and 1 or 0)
+        (g%1>=(g>=1 and d or self.dither:get(x,3*y+1)) and 1 or 0)
         -- (g%1>d and 1 or 0)
         b = math.floor(b) +
         -- (b%1>self.dither:get(x,3*y+2) and 1 or 0)
-        (b%1>(b>=1 and d or self.dither:get(x,3*y+2)) and 1 or 0)
+        (b%1>=(b>=1 and d or self.dither:get(x,3*y+2)) and 1 or 0)
         -- (b%1>d and 1 or 0)
 
         self:plot(math.floor(x/2) + y*80,x%2,r,g,b)
@@ -1303,11 +1500,10 @@ elseif MODE==8 or MODE==9 then
         -- MO (not transcode)
         function VIDEO:plot(p,o,r,g,b)
             o = o==0 and 16 or 1
-            if r>0 then self.image[p] = self.image[p] + r*o end
-            p=p+40
-            if g>0 then self.image[p] = self.image[p] + g*o end
-            p=p+40
-            if b>0 then self.image[p] = self.image[p] + b*o end
+			local img = self.image
+            if r>0 then img[p] = img[p] + r*o end p=p+40
+            if g>0 then img[p] = img[p] + g*o end p=p+40
+            if b>0 then img[p] = img[p] + b*o end
         end
     else
         -- TO (transcode)
@@ -1380,6 +1576,33 @@ elseif MODE==12 or MODE==13 then
 		-- if f[g]>d then c = c + 2 end
 		-- if f[b]>d then c = c + 4 end
 		if c>0 then self:plot(math.floor(x/2) + y*40, x%2, c) end
+    end
+elseif MODE==16 or MODE==17 then
+	VIDEO.plot = MODE%2==0 
+	and -- MO (not transcode)
+        function(self,p,o,c)
+			self.image[p] = self.image[p] + c*(o==0 and 16 or 1)
+        end 
+	or
+		function(self,p,o,c)
+            self:transcode(p,o,c)
+        end
+    function VIDEO:pset(x,y, r,g,b)
+        if not self.dither then 
+			self:init_dither()
+            self._l_R = {}
+			self._l_G = {}
+			self._l_B = {}
+            local f = PALETTE.linear
+            for i=0,255 do
+				self._l_R[i]=f(i)*15*.2126
+				self._l_G[i]=f(i)*15*.7152
+				self._l_B[i]=f(i)*15*.0722
+			end
+        end
+		local l,f = self._l_R[r]+self._l_G[r]+self._l_B[b],math.floor
+		self:plot(f(x/2) + y*40, x%2, f(l) +
+			(((l%1)>=self.dither:get(x,y)) and 1 or 0))
     end
 else
     error('Invalid MODE: ' .. MODE)
@@ -1490,11 +1713,11 @@ function CONVERTER:_stat()
     -- auto determination des parametres
     local stat = self:_new_video(math.abs(self.fps))
     stat.super_pset = stat.pset
-    stat.histo = {n=0}; for i=0,255 do stat.histo[i]=0 end
+    stat.histo = {}; for i=0,255 do stat.histo[i]=0 end
     function stat:pset(x,y, r,g,b)
-        self.histo[r],self.histo[g],self.histo[b] = 
-			self.histo[r]+1,self.histo[g]+1,self.histo[b]+1
         self:super_pset(x,y,r,g,b)
+		local h = self.histo
+        h[r],h[g],h[b] = h[r]+1,h[g]+1,h[b]+1
     end
     stat.super_next_image = stat.next_image
     stat.mill = {'|', '/', '-', '\\'}
@@ -1561,17 +1784,20 @@ function CONVERTER:_stat()
     io.stderr:write(string.rep(' ',79)..'\r')
     io.stderr:flush()
 
-    local max_trames = 1000000/math.abs(self.fps)/CYCLES
-    local avg_trames = (stat.trames/stat.cpt) * 1.01 -- 1% safety margin
-    local ratio = max_trames / avg_trames
-    -- print(ratio)
-    if ratio>1 or self.fps<0 then
-        self.fps = math.min(math.floor(math.abs(self.fps)*ratio),FPS_MAX)
-    elseif ratio<1 then
+    local neg_fps = self.fps<0
+	self.fps = math.abs(self.fps)
+	local max_trames = 1000000/(self.fps*CYCLES)
+	local avg_trames = (stat.trames/stat.cpt) * 1.01 -- 001 -- 0.11% safety margin
+	local ratio = max_trames / avg_trames
+	if neg_fps and self.fps>FPS_MAX then
+		self.fps = FPS_MAX
+	elseif ratio>1 or neg_fps then
+		self.fps = math.min(math.floor(self.fps*ratio),FPS_MAX)
+	elseif ratio<1 then
 		local zoom = ratio^.5
 		self.w=math.floor(self.w*zoom)
 		self.h=math.floor(self.h*zoom)
-    end
+	end
     stat.total = 0
     for i=1,255 do
         stat.total = stat.total + stat.histo[i]
@@ -1593,7 +1819,7 @@ function CONVERTER:_stat()
     for i=255,stat.min,-1 do
         acc = acc + stat.histo[i]
         if acc>stat.threshold_max then
-            stat.max = i+1
+            stat.max = i
             break
         end
     end
@@ -1961,13 +2187,10 @@ function replace_yt(arg)
 				local IN,line,file = assert(io.popen(YT_DL..' --geo-bypass --restrict-filenames -o "%(title)s--%(id)s" --get-filename ' .. vid, 'r'))
 				for line in IN:lines() do file = file or line .. '.mkv' end
 				IN:close()
-				local ok = os.execute(YT_DL .. ' -f 18 --geo-bypass --merge-output-format mkv -o "'.. file .. '" ' .. vid)
-				if ok==1 then
-					ok = os.execute(YT_DL .. ' --geo-bypass --merge-output-format mkv -o "'.. file .. '" ' .. vid)
-				end
-				if ok==0 then
-					table.insert(out, file)
-				end
+				local ok = exists(file) and 0 or 1
+				ok = ok==0 and 0 or os.execute(YT_DL .. ' -f 18 --geo-bypass --merge-output-format mkv -o "'.. file .. '" ' .. vid)
+				ok = ok==0 and 0 or os.execute(YT_DL .. ' --geo-bypass --merge-output-format mkv -o "'.. file .. '" ' .. vid)
+				if ok==0 then table.insert(out, file) end
 			end
 		else
 			table.insert(out,vid)
@@ -2005,7 +2228,7 @@ if #arg>1 then -- infer name
         end
         return subs
     end
-    local subs,num,first = substrings(file),1
+    local subs,num,first = substrings(file),0
     for i,f in ipairs(arg) do
         local TMP = CONVERTER:new(f,nil,3)
         if TMP then

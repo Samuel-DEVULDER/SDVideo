@@ -192,6 +192,43 @@ function FILTER:byte(offset)
 end
 --	o.filter:new{1,4,10,30,10,4,1} -- {1,2,4,2,1} -- {1,4,10,4,1} -- {1,2,6,2,1} -- {1,1,2,4,2,1,1} -- {1,2,3,6,3,2,1} -- ,2,4,8,16,32}		
 
+-- function FILTER:new()
+    -- local o = {map={}}
+    -- setmetatable(o, self)
+	
+	-- local function linear(u)
+		-- return u<10.31475 and u/3294.6 or (((u+14.025)/269.025)^2.4)
+	-- end
+	-- local function unlinear(u)
+		-- return u<0 and 0 or u>1 and 255 or u<0.00313 and (u*3294.6) or ((u^(1/2.4))*269.025-14.025)
+	-- end
+	-- for i=0,80*50*3-1 do o[i] = 0 end
+	-- local alpha =0.6
+	-- for i=0,255 do
+		-- local x = linear(i)
+		-- o.map[i] = {}
+		-- for j=0,255 do
+			-- local y = linear(j)
+			-- local z = x*alpha + (1-alpha)*y
+			-- o.map[i][j] = round(unlinear(z))
+		-- end
+	-- end
+    -- self.__index = self
+    -- return o
+-- end
+-- function FILTER:push(bytecode)
+	-- local map = self.map
+    -- for i=1,bytecode:len() do 
+		-- self[i] = map[self[i]][bytecode:byte(i)]
+	-- end
+    -- return self
+-- end
+-- function FILTER:flush()
+-- end
+-- function FILTER:byte(offset)
+	-- return self[offset]
+-- end
+
 -- flux video
 local VIDEO = {}
 function VIDEO:new(file, w, h, fps)
@@ -1093,13 +1130,10 @@ function replace_yt(arg)
 				local IN,line,file = assert(io.popen(YT_DL..' --geo-bypass --restrict-filenames -o "%(title)s--%(id)s" --get-filename ' .. vid, 'r'))
 				for line in IN:lines() do file = file or line .. '.mkv' end
 				IN:close()
-				local ok = os.execute(YT_DL .. ' -f 18 --geo-bypass --merge-output-format mkv -o "'.. file .. '" ' .. vid)
-				if ok==1 then
-					ok = os.execute(YT_DL .. ' --geo-bypass --merge-output-format mkv -o "'.. file .. '" ' .. vid)
-				end
-				if ok==0 then
-					table.insert(out, file)
-				end
+				local ok = exists(file) and 0 or 1
+				ok = ok==0 and 0 or os.execute(YT_DL .. ' -f 18 --geo-bypass --merge-output-format mkv -o "'.. file .. '" ' .. vid)
+				ok = ok==0 and 0 or os.execute(YT_DL .. ' --geo-bypass --merge-output-format mkv -o "'.. file .. '" ' .. vid)
+				if ok==0 then table.insert(out, file) end
 			end
 		else
 			table.insert(out,vid)

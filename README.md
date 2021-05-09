@@ -71,6 +71,8 @@ Mode| Resolution | Colors | TO7 | MO5 | TO770 | MO6 | TO8(D), TO9+ | Comment
 10/11| 80x200     | 16    |     |     |       |  X  | Y  | Colors are created from a color-reduction algorithm running over all the frames of the video. *Slow process!*
 12/13| 80x200     | 16    |     |     |       |  X  | Y  | Same as 2/3 but with another dither matrix.
 14/15| 80x200     | 16    |     |     |       |  X  | Y  | [Dawnbriger 16](http://www.logicielsmoto.com/phpBB/viewtopic.php?p=5317#p5317) palette with dithering.
+16/17| 80x200     | 16    |     |     |       |  X  | Y  | Gray scale.
+18/19| 80x200     | 16    |     |     |       |  X  | Y  | Experimental palette which do not include saturated colors for high intensities.
 
 **Notice:**
 * An X/Y mode indicates to use X for MO-machine and Y for TO-machine.
