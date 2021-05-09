@@ -124,10 +124,14 @@ $(YT_DL):
 	$(WGET) $(YT_DL_URL) -O $@
 	$(MKEXE) $@
 	
-tools/%$(EXE): c6809/%.c
+tools/%$(EXE): c6809/%.c 
 	$(CC) $(CFLAGS) -o "$@" "$<"
 	@sleep 1 && strip "$@"
-	
+
+c6809/%.c:
+	$(WGET) http://www.pulsdemos.com/c6809/c6809-0.83.zip
+	unzip c6809-0.83.zip
+
 bin/%.bin: asm/%.ass $(C6809) bin/
 	-$(C6809) -bh -am -oOP "$<" "$@"
 
