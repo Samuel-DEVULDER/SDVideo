@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #ifndef TRUE
 #   define TRUE 1
@@ -537,7 +538,7 @@ void MakeLimitedLine(char *formatstring)
 void PrintErrorListLine(struct ERRLIST *rlist)
 {
     char formatstring[LINE_MAX_SIZE+3] ;
-    char fmt[10] ;
+    char fmt[30] ;
 
     sprintf(fmt,"%%%ds %% 7d ",ETSTRINGSIZE) ;
     sprintf(formatstring,fmt,
@@ -2028,7 +2029,7 @@ int Ass_AllType(int immediate, int lea)
             /* Adressage indexé avec offset et PCR   $xx,PCR */
             if (regs == REGS_PCR)
             {
-                eval.operand -= run.pc + 3 ;
+                eval.operand -= run.pc + 3 + ((run.code[0] == 0) ? 0 : 1);
                 mode = ((eval.operand >= -128) && (eval.operand <= 127)) ? 8 : 16 ;
                 if (eval.pass < run.pass) mode = 16 ;   /* 16 bits si non répertorié */
                 if (extended_mode == TRUE) mode = 16 ;  /* 16 bits si étendu forcé */
@@ -2066,7 +2067,8 @@ int Ass_AllType(int immediate, int lea)
                 mode = 16 ;
                 if ((eval.operand >= -128) && (eval.operand <= 127)) mode = 8 ;
                 if ((eval.operand >= -16)  && (eval.operand <= 15))  mode = 5 ;
-                if (eval.pass < run.pass)  mode = 16 ;  /* 16 bits si non répertorié */
+                if (0 && /* sam: disabled */
+					eval.pass < run.pass)  mode = 16 ;  /* 16 bits si non répertorié */
                 if (extended_mode == TRUE) mode = 16 ;  /* 16 bits si étendu forcé */
                 if (direct_mode == TRUE)   mode = 8 ;   /* 8 bits si direct forcé */
                 if ((mode == 5) && (indirect_mode == TRUE)) mode = 8 ;
@@ -2106,7 +2108,7 @@ int Ass_AllType(int immediate, int lea)
                     if ((eval.operand >= -16)
                      && (eval.operand <= 15)
                      && (mode > 5)
-                     && (indirect_mode == FALSE))
+                     && (indirect_mode == FALSE)) 
                         PrintError(ERR_5_BITS) ;
                     else
                     if ((eval.operand >= -128)
@@ -2154,6 +2156,7 @@ int Ass_AllType(int immediate, int lea)
                             PrintError(ERR_FORCE_TO_DP) ;
                         recordtype = PRINT_TWO_FOR_THREE ;
                     } else {
+                        info.cycle.plus = 2;
                         run.size = 4 ;
                         if (lea == FALSE) run.code[1] += (immediate == TRUE) ? 0x10 : 0x60 ;
                         run.code[2] = 0x9F ;
@@ -2990,20 +2993,17 @@ int Ass_INCBIN(void)
 
     if (Ass_Start_INC("BIN") != NO_ERROR)
         return ERR_ERROR ;
-    printf("fichier = %s\n",desc.name) ;
     if ((fp_file = fopen(desc.name,"rb")) == NULL)
         return PrintError(ERR_FILE_NOT_FOUND) ;
 
     if (feof(fp_file)) return Ass_BadFileFormat(fp_file) ;
-    printf("flag = %08x\n",flag) ;
     flag = fgetc(fp_file) ;
-    printf("flag = %08x\n",flag) ;
     if (feof(fp_file)) return Ass_BadFileFormat(fp_file) ;
     while (flag == 0x00)
     {
-        size = fgetc(fp_file) << 8 ;
+        size = (fgetc(fp_file) & 0xff) << 8 ;
         if (feof(fp_file)) return Ass_BadFileFormat(fp_file) ;
-        size |= fgetc(fp_file) ;
+        size |= (fgetc(fp_file) & 0xff) ;
         if (feof(fp_file)) return Ass_BadFileFormat(fp_file) ;
         fgetc(fp_file) ;
         if (feof(fp_file)) return Ass_BadFileFormat(fp_file) ;
@@ -3038,15 +3038,26 @@ int Ass_INCBIN(void)
  */
 int Ass_INCDAT(void)
 {
+    int i;
     FILE *fp_file ;
+    struct stat st;
     unsigned short pcr = run.pc ;
 
     if (Ass_Start_INC("") != NO_ERROR)
         return ERR_ERROR ;
-    if ((fp_file = fopen(desc.name,"rb")) ==  NULL)
+
+    if (stat(desc.name, &st) == 0)
+    {
+        if ((fp_file = fopen(desc.name,"rb")) ==  NULL)
+            return PrintError(ERR_FILE_NOT_FOUND) ;
+        for (i=0; i<(int)st.st_size; i++)
+        {
+            SaveBinChar(fgetc(fp_file)) ;
+        }
+    }
+    else
         return PrintError(ERR_FILE_NOT_FOUND) ;
-    while (!feof(fp_file))
-        SaveBinChar(fgetc(fp_file)) ;
+
     fclose(fp_file) ;
     return Ass_PrintWithPcr(pcr) ;
 }
@@ -3323,7 +3334,8 @@ int Ass_MACRO(void)
         current_macro->start = source ;
         current_macro->end   = NULL ;
     }
-    else    {
+    else
+    {
         /* Erreur si une macro a déjà été déclarée */
         if (run.locked & MACRO_LOCK)
             return PrintError(ERR_EMBEDDED_MACRO) ;
@@ -3696,6 +3708,12 @@ int AssembleLine(void)
         linebuffer[0] = '\0' ;
         strcat(linebuffer,ll) ;
     }
+    else
+    {
+        if (strchr (line, (int)'\\') != NULL)
+           return RecordLine(PRINT_EMPTY);
+    }
+    
 
     /*
      * Traitement étiquette/commentaire
@@ -3722,6 +3740,7 @@ int AssembleLine(void)
             upper_string(labelname) ;
         label = TRUE ;
     }
+        
 
     /*
      * Traitement étiquette sèche
@@ -3753,7 +3772,6 @@ int AssembleLine(void)
     run.code[0] = 0 ;
 
     /* Traitement de l'instruction */
-
     upper_string(arg) ;
     if (run.pass > MACROPASS)
     {
