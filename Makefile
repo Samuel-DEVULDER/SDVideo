@@ -1,7 +1,8 @@
+MKEXE=chmod a+rx
+STRIP=strip
+WGET=wget
 SED=sed -e
 GIT=git
-WGET=wget
-MKEXE=chmod a+rx
 RM=rm
 CP=cp
 7Z=7z
@@ -117,7 +118,7 @@ $(LUA): LuaJIT $(wildcard LuaJIT/src/*)
 	cd $< && export MAKE="make -f Makefile" && $$MAKE BUILDMODE=static CC="$(CC) -static" CFLAGS="$(CFLAGS)"  
 	$(CP) $</src/$(notdir $@) "$@"
 	$(CP) $</COPYRIGHT "$@"-COPYRIGHT
-	strip "$@"
+	$(STRIP) "$@"
 	
 $(FFMPEG):
 	$(7Z) --help >/dev/null || apt-cyg install p7zip
@@ -130,6 +131,7 @@ $(FFMPEG):
 $(YT_DL):
 	$(WGET) $(YT_DL_URL) -O $@
 	$(MKEXE) $@
+	$(WGET) https://raw.githubusercontent.com/ytdl-org/youtube-dl/master/LICENSE -O $@-LICENSE
 	
 tools/%$(EXE): c6809/%.c 
 	$(CC) $(CFLAGS) -o "$@" "$<"
