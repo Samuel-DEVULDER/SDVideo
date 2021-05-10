@@ -90,6 +90,9 @@ local FPS_MAX       = 30
 local TIMEOUT       = 2
 local GRAY_THR      = .1 -- .07
 local FILTER_DEPTH  = 1
+local GRAY_R		= 0.30 -- 0.2126
+local GRAY_G		= 0.59 -- 0.7152
+local GRAY_B		= 0.11 -- 0.0722
 
 local interlace     = nil -- useless
 local mode          = 'p'
@@ -508,7 +511,7 @@ function VIDEO:pset(x,y, r,g,b)
 	
 	if GRAY==1 then
 		if SPECIAL_4 then
-			r = (.2126*r + .7152*g + .0722*b)*3 + d
+			r = (GRAY_R*r + GRAY_G*g + GRAY_B*b)*3 + d
 			if     r>=2 then	v(3)
 			elseif r>=1 then	v(2)
 			else 				v(0)	
@@ -523,7 +526,7 @@ function VIDEO:pset(x,y, r,g,b)
 			else 				v(0)	
 			end
 		else
-			r = (.2126*r + .7152*g + .0722*b)*9 + d
+			r = (GRAY_R*r + GRAY_G*g + GRAY_B*b)*9 + d
 			if     r>=4 then	v(3)
 			elseif r>=2 then	v(2)
 			elseif r>=1 then	v(1)

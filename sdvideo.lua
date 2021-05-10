@@ -92,6 +92,9 @@ local ZIGZAG        = true
 local LOOSY         = false
 local BUFFER_SIZE   = 4096*4*2
 local CONFIG        = nil
+local GRAY_R		= 0.30 -- 0.2126
+local GRAY_G		= 0.59 -- 0.7152
+local GRAY_B		= 0.11 -- 0.0722
 
 -- ===========================================================================
 
@@ -269,7 +272,7 @@ local function vac(n,m)
         -- print(m2)
         vnc[y][x] = r
     end
-    print(vnc)
+	if n==8 and m==8 then print(vnc) end
     return vnc
 end
 local function norm(t)
@@ -1423,7 +1426,7 @@ if MODE==0 then
 		local f,i = self._linear
 		-- print(x,y, self.dither:get(x,y))
 		-- print(r,g,b)
-		if .2126*f[r]+.7152*f[g]+.0722*f[b]>=self.dither:get(x,y) then
+		if GRAY_R*f[r]+GRAY_G*f[g]+GRAY_B*f[b]>=self.dither:get(x,y) then
 			f,i = math.floor((x+y*320)/8),self.image
 			i[f] = i[f] + self._mask[x]
 		end
@@ -1658,9 +1661,9 @@ elseif MODE==16 or MODE==17 then
 			self._l_B = {}
             local f = PALETTE.linear
             for i=0,255 do
-				self._l_R[i]=f(i)*15*.2126
-				self._l_G[i]=f(i)*15*.7152
-				self._l_B[i]=f(i)*15*.0722
+				self._l_R[i]=f(i)*15*GRAY_R
+				self._l_G[i]=f(i)*15*GRAY_G
+				self._l_B[i]=f(i)*15*GRAY_B
 			end
         end
 		pset(self,x,y,r,g,b)
@@ -1885,7 +1888,7 @@ function CONVERTER:_stat()
             break
         end
     end
-    print(stat.min .. '    ' .. stat.max .. '                  ')
+    -- print(stat.min .. '    ' .. stat.max .. '                  ')
     io.stdout:flush()
     local video_cor = {stat.min, 255/(stat.max - stat.min)}
     if MODE==10 or MODE==11 then video_cor = {0,1} end
