@@ -6,22 +6,22 @@ RM=rm
 CP=cp
 7Z=7z
 
-VERSION=$(shell git describe --abbrev=0)
-MACHINE=$(shell uname -m)
-DATE=$(shell date +%FT%T%Z || date)
+VERSION:=$(shell git describe --abbrev=0)
+MACHINE:=$(shell uname -m)
+DATE:=$(shell date +%FT%T%Z || date)
 TMP:=$(shell mktemp)
-EXE:=
-OS=$(shell uname -o)
+OS:=$(shell uname -o)
+EXE=
 
 CC=gcc
 CFLAGS=-O3 -Wall
 
 ifeq ($(OS),Windows_NT)
-	OS=Win
+	OS:=Win
 endif
 
 ifeq ($(OS),Cygwin)
-	OS=Win
+	OS:=Win
 endif
 
 ifeq ($(OS),Win)
@@ -50,21 +50,22 @@ ALL=$(LUA) $(BIN) $(FFMPEG) $(YT_DL)
 all: $(ALL)
 	ls -l .
 
+clean:
+	-$(RM) -rf 2>/dev/null bin $(C6809) $(LUA) $(DISTRO)
+	-cd LuaJIT/ && make clean
+
 distro: $(DISTRO)
 	zip -u -r "$@.zip" "$<"
 
 $(DISTRO): $(ALL) \
 	$(DISTRO)/ $(DISTRO)/bin/ $(DISTRO)/tools/ \
-	$(DISTRO)/README.html wrappers \
+	$(DISTRO)/README.html do_wrappers \
 	$(DISTRO)/tools/sdvideo.lua $(DISTRO)/tools/conv_sd.lua
 	$(CP) $(BIN) $@/bin/
 	$(CP) $(LUA)* $(FFMPEG)* $(YT_DL)* $@/tools/
 	$(GIT) log >$@/ChangeLog.txt
 	
-$(DISTRO)/tools/%.lua: %.lua
-	$(SED) 's/$$Version$$/$(VERSION)/g;s/$$Date$$/$(DATE)/g' <$< >$@
-
-wrappers: $(DISTRO)/sdvideo.bat $(DISTRO)/conv_sd.bat 
+do_wrappers: $(DISTRO)/sdvideo.bat $(DISTRO)/conv_sd.bat 
 
 ifeq ($(OS),Win)
 $(DISTRO)/%.bat: %.lua
@@ -89,6 +90,9 @@ $(DISTRO)/%.html: %.md
 	grip -h >/dev/null || pip3 install grip
 	grip --wide --export "$<" $(HTML_TO) "$@"
 
+$(DISTRO)/tools/%.lua: %.lua
+	$(SED) 's%\$$Version\$$%$(VERSION)%g;s%\$$Date\$$%$(DATE)%g' $< >$@
+
 %/:
 	mkdir -p "$@"
 
@@ -108,10 +112,6 @@ tst_sdvideo: $(ALL)
 			https://www.youtube.com/watch?v=ThFCg0tBDck \
 			https://www.youtube.com/watch?v=c5UoU7O3AzQ;\
 	done
-
-clean:
-	-$(RM) -rf 2>/dev/null bin $(C6809) $(LUA) $(DISTRO)
-	-cd LuaJIT/ && make clean
 	
 $(LUA): LuaJIT $(wildcard LuaJIT/src/*)
 	cd $< && export MAKE="make -f Makefile" && $$MAKE BUILDMODE=static CC="$(CC) -static" CFLAGS="$(CFLAGS)"  
