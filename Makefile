@@ -68,7 +68,7 @@ $(DISTRO): $(ALL) \
 	
 do_wrappers: $(DISTRO)/sdvideo.bat $(DISTRO)/conv_sd.bat 
 
-ifeq ($(OS),Win)
+ifeq ($(OS),win)
 $(DISTRO)/%.bat: %.lua
 	echo  >$@ '@echo off'
 	echo >>$@ '%~dsp0\tools\luajit$(EXE) %~dsp0\tools\$*.lua %*'
@@ -81,7 +81,7 @@ $(DISTRO)/%.bat:
 	$(MKEXE) $(DISTRO)/$*
 endif
 
-ifeq ($(OS),Win)
+ifeq ($(OS),win)
 HTML_TO=
 else
 HTML_TO=-|$(SED) 's%tools/luajit\s+%tools/luajit.exe tools/%g'>
