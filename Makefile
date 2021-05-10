@@ -18,14 +18,14 @@ CC=gcc
 CFLAGS=-O3 -Wall
 
 ifeq ($(OS),Windows_NT)
-	OS:=Win
+	OS:=win
 endif
 
 ifeq ($(OS),Cygwin)
-	OS:=Win
+	OS:=win
 endif
 
-ifeq ($(OS),Win)
+ifeq ($(OS),win)
 	EXE=.exe
 	CC=i686-w64-mingw32-gcc -m32
 	MACHINE=x86
@@ -52,7 +52,7 @@ all: $(ALL)
 	ls -l .
 
 clean:
-	-$(RM) -rf 2>/dev/null bin $(C6809) $(LUA) $(DISTRO)
+	-$(RM) -rf 2>/dev/null bin $(DISTRO) $(C6809)* $(LUA)* $(FFMPEG)* $(YT_DL)*
 	-cd LuaJIT/ && make clean
 
 distro: $(DISTRO)
