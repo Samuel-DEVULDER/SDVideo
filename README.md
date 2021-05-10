@@ -1,5 +1,5 @@
 # SDVideo
-Convert video for the [SDDrive](http://dcmoto.free.fr/bricolage/sddrive/index.html) hardware by D.Coulom. 
+A set of tools by Samuel Devulder that converts videos for the [SDDrive](http://dcmoto.free.fr/bricolage/sddrive/index.html) hardware by D.Coulom. 
 
 [![](http://dcmoto.free.fr/programmes/sddrive-medley3/c1.jpg)](http://dcmoto.free.fr/bricolage/sddrive/index.html)
 
@@ -25,7 +25,15 @@ Each pixel needs 6 bits, meaning that one can pack 4 pixels in only 3 bytes. As 
 
 ## Usage
 	
-	tools/luajit conv_sd.lua <video-files>
+	[FPS=<N>] [GRAY=<0/1>] tools/luajit conv_sd.lua <video-files>
+	
+`GRAY=1` creates a grayscale picture.
+
+`FPS=<N>` allow choosing a proper FPS for the video. Don't take it too hight otherwise the converter will reduce the image size to keep up with the FPS you choose. A negative value will reduce the FPs too keep a full-screen image. The default value of 11 fps is a good compromise.
+
+`<Video-files>` can be any video file (MP4/AVI/MOV/MKV) you wish to convert or even a YouTube or Vimeo or any other YT-download compatible URL. Youtube playlists are treated as the set of all the videos in the playlist.
+
+*Note*: URL videos are fetched from interned by YT-download and a stored in the current folder with a MKV extension. Ensure you have write-access to that folder before you use this feature.
 
 ## Example
 
@@ -55,7 +63,13 @@ which allows playing most video between 11 to 13 frames per second which is pret
 
 ## Usage
 
-	MODE=<N> tools/luajit sdvideo.lua <video-files>
+	[FPS=<N>] [MODE=<N>] tools/luajit sdvideo.lua <video-files>
+
+`<Video-files>` can be any video file (MP4/AVI/MOV/MKV) you wish to convert or even a YouTube or Vimeo or any other YT-download compatible URL. Youtube playlists are treated as the set of all the videos in the playlist.
+
+*Note*: URL videos are fetched from interned by YT-download and a stored in the current folder with a MKV extension. Ensure you have write-access to that folder before you use this feature.
+	
+`FPS=<N>` allow choosing a proper FPS for the video. Don't take it too high otherwise the converter will reduce the image size to keep up with the FPS you choose. A negative value will reduce the FPs too keep a full-screen image. The default value of 11 fps is a good compromise. A value bigger than 31 will convert fullscreen image at 30fps, but consecutive images can be merged together resuling in mlore blurry pictures from time to time.
 	
 `MODE=<N>` is actually a numerical parameter indicating the type of output to produce. To every machine is able do play each mode, but high-end machines (MO6, TO8, TO9+) can play all. Default mode (if omitted) is 7 which usually gives colorful result without sacrificing too much of the resolution.
 

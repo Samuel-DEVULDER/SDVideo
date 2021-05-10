@@ -56,7 +56,7 @@ distro: $(DISTRO)
 $(DISTRO): $(ALL) \
 	$(DISTRO)/ $(DISTRO)/bin/ $(DISTRO)/tools/ \
 	$(DISTRO)/README.html wrappers \
-	$(DISTRO)/tools/sdvideo.lua $(DISTRO)/tools/conv_sd.lua \
+	$(DISTRO)/tools/sdvideo.lua $(DISTRO)/tools/conv_sd.lua
 	$(CP) $(BIN) $@/bin/
 	$(CP) $(LUA)* $(FFMPEG)* $(YT_DL)* $@/tools/
 	$(GIT) log >$@/ChangeLog.txt
