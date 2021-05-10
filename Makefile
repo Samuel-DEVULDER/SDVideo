@@ -56,7 +56,7 @@ clean:
 	-cd LuaJIT/ && make clean
 
 distro: $(DISTRO)
-	zip -u -r "$@.zip" "$<"
+	zip -u -r "$(DISTRO).zip" "$<"
 
 $(DISTRO): $(ALL) \
 	$(DISTRO)/ $(DISTRO)/bin/ $(DISTRO)/tools/ \
