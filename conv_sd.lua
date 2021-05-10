@@ -1,25 +1,48 @@
--- conversion fichier video en fichier sd-drive
+-- convs_sd.lua : Conversion fichier video en fichier sd-drive
 --
--- version alpha 0.07
----
--- Samuel DEVULDER Aout-Oct 2018
-
--- code experimental. essaye de determiner
--- les meilleurs parametres (fps, taille ecran
--- pour respecter le fps ci-dessous. 
-
--- gray peut être true ou false suivant qu'on
--- veut une sortie couleur ou pas. Le gris est
--- generalement plus rapide et/ou avec un ecran
--- plus large. Si on le laisse à nil, l'outil 
--- détermine automatiquement le mode couleur de
--- la video.
-
+-- Version $Version$ $Date$ par Samuel DEVULDER 
+--
+-- Ici l'écran fait 80x50 avec des pixels de 4x4 permettant d'afficher
+-- 64 couleurs sur tous les thomson. Les couleurs sont approximées par
+-- tramage. Chaque pixel a besoin de 2*3 = 6 bits. Donc sur 3 octets
+-- on encode au plus 4 pixels.
+--
+-- Le son joue à 5025Hz.
+--
+-- Variables d'environnement:
+-- ==========================
+--
+-- GRAY=0/1/nil (défaut: nil)
+--    0   = couleur
+--    1   = gris
+--    nil = détecte tout seul en fonction de la vidéo
+--
+-- FPS=<nombre d'images par secondes souhaité>
+--    La taille écran s'ajuste pour maintenir le débit souhaité si la
+--    vidéo est complexe. Si en revanche elle est simple, le débit
+--    peut dépasser celui souhaité pour amméliorer la fluidité.
+--
+--    Si l'on indique une valeur négative, le débit souhaité sera la
+--    valeur absolue de ce nombre. Si la vidéo est complexe et que le 
+--    débit de la carte SD ne permet pas d'encoder la vidéo, la taille
+--    de l'image ne sera pas réduite. En revanche le débit sera réduite
+--    par rapport à celui souhaité.
+--
+--    Avec le débit de la carte SD dans SD-drive, la valeur de 11
+--    images/secondes est un bon compromis. C'est la valeur par défaut.
+--
+-- DITH=num (par défaut: 8)
+--     Si num>0 utilise un tramage Bayer de niveau num
+--     Si num<0 utilise un tramage void&cluster num x num
+--
 -- Work in progress!
 -- =================
--- le code doit être nettoye et rendu plus
--- amical pour l'utilisateur
+-- le code doit être nettoye et rendu plus amical pour l'utilisateur
+--
+-- Travail débuté en Aout-Oct 2018.
 
+-- ===========================================================================
+-- helper functions
 local function round(x)
 	return math.floor(x+.5)
 end

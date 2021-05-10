@@ -1,5 +1,4 @@
-CC=gcc
-CFLAGS=-O3 -Wall
+SED=sed -e
 GIT=git
 WGET=wget
 MKEXE=chmod a+rx
@@ -9,9 +8,13 @@ CP=cp
 
 VERSION=$(shell git describe --abbrev=0)
 MACHINE=$(shell uname -m)
-OS=$(shell uname -o)
+DATE=$(shell date +%FT%T%Z || date)
 TMP:=$(shell mktemp)
-EXE=
+EXE:=
+OS=$(shell uname -o)
+
+CC=gcc
+CFLAGS=-O3 -Wall
 
 ifeq ($(OS),Windows_NT)
 	OS=Win
@@ -52,10 +55,14 @@ distro: $(DISTRO)
 
 $(DISTRO): $(ALL) \
 	$(DISTRO)/ $(DISTRO)/bin/ $(DISTRO)/tools/ \
-	$(DISTRO)/README.html wrappers
+	$(DISTRO)/README.html wrappers \
+	$(DISTRO)/tools/sdvideo.lua $(DISTRO)/tools/conv_sd.lua \
 	$(CP) $(BIN) $@/bin/
 	$(CP) $(LUA)* $(FFMPEG)* $(YT_DL)* $@/tools/
-	$(CP) sdvideo.lua conv_sd.lua $@/tools/
+	$(GIT) log >$@/ChangeLog.txt
+	
+$(DISTRO)/tools/%.lua: %.lua
+	$(SED) 's/$$Version$$/$(VERSION)/g;s/$$Date$$/$(DATE)/g' <$< >$@
 
 wrappers: $(DISTRO)/sdvideo.bat $(DISTRO)/conv_sd.bat 
 
@@ -75,7 +82,7 @@ endif
 ifeq ($(OS),Win)
 HTML_TO=
 else
-HTML_TO=-|sed -e 's%tools/luajit\s+%tools/luajit.exe tools/%g'>
+HTML_TO=-|$(SED) 's%tools/luajit\s+%tools/luajit.exe tools/%g'>
 endif
 	
 $(DISTRO)/%.html: %.md

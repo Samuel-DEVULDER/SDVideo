@@ -1,18 +1,42 @@
--- conversion fichier video en fichier sd-drive
+-- sdvideo.lua : Conversion fichier video en fichier sd-drive
 --
--- version alpha 0.17
----
--- Samuel DEVULDER Oct 2018-Déc 2019
-
--- code experimental. essaye de determiner
--- les meilleurs parametres (fps, taille ecran
--- pour respecter le fps ci-dessous.
-
+-- Version $Version$ $Date$ par Samuel DEVULDER 
+--
+-- Ici la résolution est plus fine que dans conv_sd.lua (de 320x200
+-- N/B à 80x66 avec 216 couleurs.) Les fichiers vidéo sont en partie
+-- différents entre les gammes d'ordinateurs thomson. Reférez vous au
+-- README.html pour avoir tous les détails.
+--
+-- Le son joue à 5.9 kHz.
+--
+-- Variables d'environnement:
+-- ==========================
+--
+-- FPS=<nombre d'images par secondes souhaité>
+--    La taille écran s'ajuste pour maintenir le débit souhaité si la
+--    vidéo est complexe. Si en revanche elle est simple, le débit
+--    peut dépasser celui souhaité pour amméliorer la fluidité.
+--
+--    Si l'on indique une valeur négative, le débit souhaité sera la
+--    valeur absolue de ce nombre. Si la vidéo est complexe et que le 
+--    débit de la carte SD ne permet pas d'encoder la vidéo, la taille
+--    de l'image ne sera pas réduite. En revanche le débit sera réduite
+--    par rapport à celui souhaité.
+--
+--    Avec le débit de la carte SD dans SD-drive, la valeur de 11
+--    images/secondes est un bon compromis. C'est la valeur par défaut.
+--
+-- MODE=0..19 (défaut: 7)
+--    Mode de sortie. Regardez le README.html pour les détails.
+--
 -- Work in progress!
 -- =================
--- le code doit être nettoye et rendu plus
--- amical pour l'utilisateur
+-- De nouveaux modes peuvent apparaitre et d'anciens disparaitre.
+-- Le code doit être nettoye et rendu plus amical pour l'utilisateur.
+--
+-- Travail débuté en Oct 2018.
 
+-- ===========================================================================
 -- helper functions
 if not unpack then unpack = table.unpack end
 local function round(x)
@@ -51,7 +75,7 @@ end
 -- ===========================================================================
 -- utiliser un fps<0 si la taille 100% doit etre conservee
 local MODE          = env('MODE',7)
-local FPS           = env('FPS',-30)
+local FPS           = env('FPS',11)
 
 local FFMPEG        = locate('ffmpeg.exe', 'tools')
 local YT_DL         = locate('youtube-dl.exe', 'tools')
@@ -245,7 +269,7 @@ local function vac(n,m)
         -- print(m2)
         vnc[y][x] = r
     end
-    -- print(vnc)
+    print(vnc)
     return vnc
 end
 local function norm(t)
@@ -300,7 +324,7 @@ CONFIG = {
 if MODE==0 then
     CONFIG.interlace = 'iii' -- 'i3'
     CONFIG.dither    = 
-	-- compo(norm,vac)(8,8)
+	compo(norm,vac)(8,8)
 		--compo(norm,bayer,4){{1}}
 		
 -- 38, 59, 11, 43,  3, 31, 53, 18
@@ -384,15 +408,25 @@ if MODE==0 then
  -- 23, 58,  7, 55, 39,  2, 46, 35
  -- 43, 16, 50, 30, 18, 62, 26,  8
 
-norm{
-{  5, 50, 35,  7, 52, 34, 10, 42},
-{ 31, 11, 59, 30, 15, 60, 25, 55},
-{ 38, 47, 19, 44, 36,  3, 46, 14},
-{  1, 23, 61,  6, 56, 21, 33, 63},
-{ 28, 51, 16, 40, 24, 49,  9, 41},
-{ 54,  8, 32, 48, 12, 29, 58, 20},
-{ 13, 37, 57,  2, 64, 39,  4, 43},
-{ 62, 26, 18, 45, 27, 17, 53, 22}}
+-- norm{
+-- {  5, 50, 35,  7, 52, 34, 10, 42},
+-- { 31, 11, 59, 30, 15, 60, 25, 55},
+-- { 38, 47, 19, 44, 36,  3, 46, 14},
+-- {  1, 23, 61,  6, 56, 21, 33, 63},
+-- { 28, 51, 16, 40, 24, 49,  9, 41},
+-- { 54,  8, 32, 48, 12, 29, 58, 20},
+-- { 13, 37, 57,  2, 64, 39,  4, 43},
+-- { 62, 26, 18, 45, 27, 17, 53, 22}}
+
+-- norm{
+-- { 23, 63,  4, 52, 12, 58, 20, 53},
+-- { 44, 13, 41, 19, 39,  7, 43,  2},
+-- { 17, 57, 24, 54, 27, 64, 22, 51},
+-- { 38,  8, 47,  1, 45, 11, 35, 29},
+-- { 60, 32, 21, 61, 18, 33, 56,  5},
+-- { 14, 50, 36,  9, 40, 49, 15, 42},
+-- { 55,  6, 28, 59, 25,  3, 62, 26},
+-- { 34, 31, 46, 16, 48, 30, 37, 10}}
 
 
 elseif MODE==1 then
@@ -484,13 +518,13 @@ elseif MODE==10 or MODE==11 then
         for i,f in ipairs(arg) do
             local TMP = CONVERTER:new(f,nil,3)
             if TMP then
-                local stat = VIDEO:new(TMP.file,TMP.fps,80,50,80,50,TMP.interlace)
-                function stat:pset(x,y, r,g,b)
+                local stat = VIDEO:new(TMP.file,TMP.fps,80,50,80,50,TMP.interlace,
+					function(self, x,y, r,g,b)
                     local col = Color:new(r,g,b):toLinear()
                     -- for i=1,1+1000*math.exp(-(x-40)^2/100) do
                         reducer:add(col)
                     -- end
-                end
+                end)
                 stat.super_next_image = stat.next_image
                 stat.mill = {'|', '/', '-', '\\'}
                 stat.mill[0] = stat.mill[4]
@@ -1180,7 +1214,7 @@ end
 -- ===========================================================================-- PALETTE support
 -- flux video
 local VIDEO = {}
-function VIDEO:new(file, fps, w, h, screen_width, screen_height, interlace)
+function VIDEO:new(file, fps, w, h, screen_width, screen_height, interlace, pset)
     local o = {
         file = file,
         cpt = 1, -- compteur image
@@ -1199,7 +1233,8 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, interlace)
 			' -i "'..file..'" -v 0 -r '..fps..
 			' -s '..w..'x'..h..
 			' -an -f rawvideo -pix_fmt rgb24 pipe:', 
-			'rb'))
+			'rb')),
+		pset = pset
     }
     setmetatable(o, self)
     self.__index = self
@@ -1345,6 +1380,8 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, interlace)
 
     o.filter = FILTER:new()
 
+	o:pset(0,0,0,0,0)
+
     return o
 end
 function VIDEO:close()
@@ -1382,6 +1419,15 @@ function VIDEO:transcode(p, o, v)
 end
 if MODE==0 then
     -- GRAY
+	local function pset(self, x,y, r,g,b)
+		local f,i = self._linear
+		-- print(x,y, self.dither:get(x,y))
+		-- print(r,g,b)
+		if .2126*f[r]+.7152*f[g]+.0722*f[b]>=self.dither:get(x,y) then
+			f,i = math.floor((x+y*320)/8),self.image
+			i[f] = i[f] + self._mask[x]
+		end
+	end
     function VIDEO:pset(x,y, r,g,b)
         if not self.dither then 
 			self:init_dither()
@@ -1389,28 +1435,34 @@ if MODE==0 then
             for i=0,255 do self._linear[i]=PALETTE.linear(i) end
             self._mask = {}
             for i=0,319 do self._mask[i]=2^(7-(i%8)) end
+			-- local dith = {}
+			-- for x=0,319 do for y=0,199 do
+				-- dith[x + 320*y] = self.dither:get(x,y)
+			-- end end
+			-- self.dither = dith
         end
-		local f,i,m = self._linear
-		if .2126*f[r]+.7152*f[g]+.0722*f[b]>=self.dither:get(x,y) then
-			f,i,m = math.floor((x+y*320)/8),self.image,self._mask
-			i[f] = i[f] + m[x]
-		end
+		pset(self,x,y,r,g,b)
+		self.pset = pset
     end
 elseif MODE==1 then
     -- RGB
-    function VIDEO:pset(x,y, r,g,b)
-        if not self.dither then 
-			self:init_dither()
-            self._linear = {}
-            for i=0,255 do self._linear[i]=PALETTE.linear(i) end
-            self._mask = {}
-            for i=0,319 do self._mask[i]=2^(7-(i%8)) end
-        end
+	local function pset(self, x,y, r,g,b)
 		local f,d = self._linear,self.dither:get(x,y)
         local m,p,q = self._mask[x],math.floor((x+y*960)/8),self.image
         if f[r]>=d then q[p]    = q[p]    + m end
         if f[g]>=d then q[p+40] = q[p+40] + m end
         if f[b]>=d then q[p+80] = q[p+80] + m end
+	end
+    function VIDEO:pset(x,y, r,g,b)
+        if not self.dither then 
+			self:init_dither()
+            self._linear = {}
+            for i=0,255 do self._linear[i]=PALETTE.linear(i) end
+            self._mask = {}
+            for i=0,319 do self._mask[i]=2^(7-(i%8)) end
+        end
+		pset(self, x,y, r,g,b)
+		self.pset = pset
     end
 elseif MODE==2 or MODE==4 or MODE==10 or MODE==14 or MODE==18 then
     -- MO (not transcode)
@@ -1458,6 +1510,24 @@ elseif MODE==6 or MODE==7 then
             if g>0 then self:transcode(p+o2,o,g+11) end
         end
     end
+	local function pset(self, x,y, r,g,b)
+		local f,d = self._linear,self.dither:get(x,y)
+        r,g,b = f[r][1],f[g][2],f[b][3]
+        r = math.floor(r) +
+        -- (r%1>self.dither:get(x,3*y+0) and 1 or 0)
+        (r%1>=(r>=1 and d or self.dither:get(x,3*y+0)) and 1 or 0)
+        -- (r%1>d and 1 or 0)
+        g = math.floor(g) +
+        -- (g%1>self.dither:get(x,3*y+1) and 1 or 0)
+        (g%1>=(g>=1 and d or self.dither:get(x,3*y+1)) and 1 or 0)
+        -- (g%1>d and 1 or 0)
+        b = math.floor(b) +
+        -- (b%1>self.dither:get(x,3*y+2) and 1 or 0)
+        (b%1>=(b>=1 and d or self.dither:get(x,3*y+2)) and 1 or 0)
+        -- (b%1>d and 1 or 0)
+
+        self:plot(math.floor(x/2) + y*80,x%2,r,g,b)
+	end
     function VIDEO:pset(x,y, r,g,b)
         if not self.dither then 
 			self:init_dither()
@@ -1477,23 +1547,8 @@ elseif MODE==6 or MODE==7 then
                 end
             end
         end
-		
-        local f,d = self._linear,self.dither:get(x,y)
-        r,g,b = f[r][1],f[g][2],f[b][3]
-        r = math.floor(r) +
-        -- (r%1>self.dither:get(x,3*y+0) and 1 or 0)
-        (r%1>=(r>=1 and d or self.dither:get(x,3*y+0)) and 1 or 0)
-        -- (r%1>d and 1 or 0)
-        g = math.floor(g) +
-        -- (g%1>self.dither:get(x,3*y+1) and 1 or 0)
-        (g%1>=(g>=1 and d or self.dither:get(x,3*y+1)) and 1 or 0)
-        -- (g%1>d and 1 or 0)
-        b = math.floor(b) +
-        -- (b%1>self.dither:get(x,3*y+2) and 1 or 0)
-        (b%1>=(b>=1 and d or self.dither:get(x,3*y+2)) and 1 or 0)
-        -- (b%1>d and 1 or 0)
-
-        self:plot(math.floor(x/2) + y*80,x%2,r,g,b)
+		pset(self, x,y, r,g,b)
+		self.pset = pset
     end
 elseif MODE==8 or MODE==9 then
     if MODE%2==0 then
@@ -1513,6 +1568,30 @@ elseif MODE==8 or MODE==9 then
             if b>0 then self:transcode(p+80,o,b) end
         end
     end
+	local function pset(self, x,y, r,g,b)
+		local f,d,int = self._linear,self.dither:get(x,y),math.floor
+        r,g,b = f[r],f[g],f[b]
+        r = int(r) + 
+			(r%1>(r>=1 and d or self.dither:get(x,3*y+0)) and 1 or 0)
+			-- (r%1>self.dither:get(x,3*y+0) and 1 or 0)
+        g = int(g) + 
+			(g%1>(g>=1 and d or self.dither:get(x,3*y+1)) and 1 or 0)
+			-- (g%1>self.dither:get(x,3*y+1) and 1 or 0)
+        b = int(b) + 
+			(b%1>(b>=1 and d or self.dither:get(x,3*y+2)) and 1 or 0)
+			-- (b%1>self.dither:get(x,3*y+2) and 1 or 0)
+        if g>0 then g=g+5  end
+        if b>0 then b=b+10 end
+        if ZIGZAG then
+            local z=x%4
+            if z==0 then
+                r,g,b = g,b,r
+            elseif z==2 then
+                r,g,b = b,r,g
+            end
+        end
+        self:plot(math.floor(x/2) + y*120, x%2, r,g,b)
+	end
     function VIDEO:pset(x,y, r,g,b)
         if not self.dither then 
 			self:init_dither()
@@ -1528,29 +1607,8 @@ elseif MODE==8 or MODE==9 then
             end
             for i=0,255 do self._linear[i]=f(i) end
         end
-        local f,d = self._linear,self.dither:get(x,y)
-        r,g,b = f[r],f[g],f[b]
-        r = math.floor(r) + 
-			(r%1>(r>=1 and d or self.dither:get(x,3*y+0)) and 1 or 0)
-			-- (r%1>self.dither:get(x,3*y+0) and 1 or 0)
-        g = math.floor(g) + 
-			(g%1>(g>=1 and d or self.dither:get(x,3*y+1)) and 1 or 0)
-			-- (g%1>self.dither:get(x,3*y+1) and 1 or 0)
-        b = math.floor(b) + 
-			(b%1>(b>=1 and d or self.dither:get(x,3*y+2)) and 1 or 0)
-			-- (b%1>self.dither:get(x,3*y+2) and 1 or 0)
-        if g>0 then g=g+5  end
-        if b>0 then b=b+10 end
-        if ZIGZAG then
-            local z=x%4
-            if z==0 then
-                r,g,b = g,b,r
-
-            elseif z==2 then
-                r,g,b = b,r,g
-            end
-        end
-        self:plot(math.floor(x/2) + y*120, x%2, r,g,b)
+        pset(self,x,y,r,g,b)
+		self.pset = pset
     end
 elseif MODE==12 or MODE==13 then
     if MODE%2==0 then
@@ -1587,6 +1645,11 @@ elseif MODE==16 or MODE==17 then
 		function(self,p,o,c)
             self:transcode(p,o,c)
         end
+	local function pset(self, x,y, r,g,b)
+		local l,f = self._l_R[r]+self._l_G[r]+self._l_B[b],math.floor
+		self:plot(f(x/2) + y*40, x%2, f(l) +
+			(((l%1)>=self.dither:get(x,y)) and 1 or 0))
+	end
     function VIDEO:pset(x,y, r,g,b)
         if not self.dither then 
 			self:init_dither()
@@ -1600,9 +1663,8 @@ elseif MODE==16 or MODE==17 then
 				self._l_B[i]=f(i)*15*.0722
 			end
         end
-		local l,f = self._l_R[r]+self._l_G[r]+self._l_B[b],math.floor
-		self:plot(f(x/2) + y*40, x%2, f(l) +
-			(((l%1)>=self.dither:get(x,y)) and 1 or 0))
+		pset(self,x,y,r,g,b)
+		self.pset = pset
     end
 else
     error('Invalid MODE: ' .. MODE)
@@ -1799,11 +1861,11 @@ function CONVERTER:_stat()
 		self.h=math.floor(self.h*zoom)
 	end
     stat.total = 0
-    for i=1,255 do
+    for i=1,254 do
         stat.total = stat.total + stat.histo[i]
     end
 	local default_palette = (MODE<=3 or MODE>=12 and MODE<=13)
-    stat.threshold_min = (default_palette and .05 or .01)*stat.total --.05*stat.total
+    stat.threshold_min = .02*stat.total -- (default_palette and .05 or .01)*stat.total --.05*stat.total
     local acc = 0
 	stat.min = 0
     for i=1,127 do
@@ -1813,17 +1875,17 @@ function CONVERTER:_stat()
             break
         end
     end
-    stat.threshold_max = (default_palette and .04 or .001)*stat.total -- .04*stat.total
+    stat.threshold_max = .02*stat.total -- (default_palette and .04 or .001)*stat.total -- .04*stat.total
 	acc = 0
     stat.max = 255
-    for i=255,stat.min,-1 do
+    for i=254,stat.min+1,-1 do
         acc = acc + stat.histo[i]
         if acc>stat.threshold_max then
-            stat.max = i
+            stat.max = i+1
             break
         end
     end
-    -- print(stat.min .. '    ' .. stat.max .. '                  ')
+    print(stat.min .. '    ' .. stat.max .. '                  ')
     io.stdout:flush()
     local video_cor = {stat.min, 255/(stat.max - stat.min)}
     if MODE==10 or MODE==11 then video_cor = {0,1} end
@@ -1953,7 +2015,7 @@ function CONVERTER:process()
         local super_pset = video.pset
         function video:pset(x,y, r,g,b)
             local function f(x)
-                x = round((x-cor[1])*cor[2]);
+                x = round((x-cor[1])*cor[2])
                 return x<0 and 0 or x>255 and 255 or x
             end
             super_pset(self, x,y, f(r),f(g),f(b))
