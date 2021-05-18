@@ -85,7 +85,7 @@ local BIN           = locate('bin/')
 local CYCLES        = 169 -- CYCLES per audio sample
 local FPS_MAX       = 30
 local FILTER_DEPTH  = 2
-local FILTER_THRES  = 0.005
+local FILTER_THRES  = 0.005*0+.02
 local FILTER_ALPHA  = 0
 local EXPONENTIAL   = true
 local ZIGZAG        = true
@@ -327,17 +327,18 @@ CONFIG = {
 if MODE==0 then
     CONFIG.interlace = 'iii' -- 'i3'
     CONFIG.dither    = 
-	compo(norm,vac)(8,8)
+	-- compo(norm,vac)(8,8)
+	-- compo(norm,vac)(16,16)
 	-- compo(norm,bayer,4){{1}}
-	-- norm{
-	-- {  6, 35, 49,  8, 39, 55, 13, 61},
-	-- { 26, 54, 19, 58, 24,  2, 51, 33},
-	-- { 45,  3, 41, 14, 44, 28, 38, 11},
-	-- { 21, 63, 29, 53,  7, 62, 17, 56},
-	-- { 47, 27,  9, 34, 46, 20, 42,  5},
-	-- { 15, 40, 57, 23, 12, 59, 25, 52},
-	-- { 60, 32,  1, 36, 50,  4, 37, 10},
-	-- { 43, 16, 30, 64, 18, 31, 48, 22}}
+	norm{
+	{  6, 35, 49,  8, 39, 55, 13, 61},
+	{ 26, 54, 19, 58, 24,  2, 51, 33},
+	{ 45,  3, 41, 14, 44, 28, 38, 11},
+	{ 21, 63, 29, 53,  7, 62, 17, 56},
+	{ 47, 27,  9, 34, 46, 20, 42,  5},
+	{ 15, 40, 57, 23, 12, 59, 25, 52},
+	{ 60, 32,  1, 36, 50,  4, 37, 10},
+	{ 43, 16, 30, 64, 18, 31, 48, 22}}
 elseif MODE==1 then
     CONFIG.px_size   = {1,3}
     CONFIG.interlace = 'i' -- 'iii'
@@ -1687,7 +1688,9 @@ function CONVERTER:_stat()
     io.stdout:flush()
 
     -- auto determination des parametres
-    local stat = self:_new_video(math.abs(self.fps))
+    local neg_fps = self.fps<0
+	self.fps = math.abs(self.fps)
+    local stat = self:_new_video((neg_fps and self.fps > FPS_MAX) and 3 or self.fps)
     stat.super_pset = stat.pset
     stat.histo = {}; for i=0,255 do stat.histo[i]=0 end
     function stat:pset(x,y, r,g,b)
@@ -1701,7 +1704,7 @@ function CONVERTER:_stat()
     stat.duration = self.duration
     function stat:next_image()
         self:super_next_image()
-        io.stderr:write(string.format('> analyzing...%s %d%%\r', self.mill[self.cpt % 4], percent(self.cpt/self.fps/self.duration)))
+        io.stderr:write(string.format('> analyzing...%s %d%%\r', self.mill[self.cpt % 4], percent(self.cpt/(self.fps*self.duration))))
         io.stderr:flush()
     end
     stat.trames = 0
@@ -1709,7 +1712,7 @@ function CONVERTER:_stat()
     for i=0,7999 do stat.prev_img[i]=-1 end
     stat.type = {0,0,0,0}
     function stat:count_trames()
-        local pos,prev,curr = 8000,stat.prev_img,stat.image
+        local pos,prev,curr,k = 8000,stat.prev_img,stat.image
 
         -- local chg = 0
         -- for _,i in ipairs(indices) do
@@ -1727,26 +1730,21 @@ function CONVERTER:_stat()
                 then
                     curr[i] = prev[i]
                 else
-                    stat.trames = stat.trames + (stat.trames % 171 == 169 and 2 or 1)
-                    local k = i - pos
+                    stat.trames,k = stat.trames + (stat.trames % 171 == 169 and 2 or 1),i-pos
                     if k<0 then k=8000 end
                     if k<=1 then
                         if k==0 and curr[pos+1]==prev[pos+1] then
-                            stat.type[3] = stat.type[3]+1
-                            prev[pos] = curr[pos]; pos = pos+2
-                            prev[pos] = curr[pos]; pos = pos+1
+                            stat.type[3],  prev[pos],prev[pos+2],pos = 
+							stat.type[3]+1,curr[pos],prev[pos+2],pos+3
                         else
-                            stat.type[1] = stat.type[1]+1
-                            prev[pos] = curr[pos]; pos = pos+1
-                            prev[pos] = curr[pos]; pos = pos+1
+                            stat.type[1],  prev[pos],prev[pos+1],pos = 
+							stat.type[1]+1,curr[pos],prev[pos+1],pos+2
                         end
                     elseif k<=257 then
-                        stat.type[2] = stat.type[2]+1
-                        pos = i
-                        prev[pos] = curr[pos]; pos = pos+1
+                        stat.type[2],  prev[i],pos = 
+						stat.type[2]+1,curr[i],i+1
                     else
-                        stat.type[4] = stat.type[4]+1
-                        pos = i
+                        stat.type[4],pos = stat.type[4]+1,i
                     end
                 end
             end
@@ -1760,19 +1758,17 @@ function CONVERTER:_stat()
     io.stderr:write(string.rep(' ',79)..'\r')
     io.stderr:flush()
 
-    local neg_fps = self.fps<0
-	self.fps = math.abs(self.fps)
 	local max_trames = 1000000/(self.fps*CYCLES)
-	local avg_trames = (stat.trames/stat.cpt) * 1.01 -- 001 -- 0.11% safety margin
+	local avg_trames = (stat.trames/stat.cpt) * 1.001 -- 0.1% safety margin
 	local ratio = max_trames / avg_trames
 	if neg_fps and self.fps>FPS_MAX then
 		self.fps = FPS_MAX
 	elseif ratio>1 or neg_fps then
-		self.fps = math.min(math.floor(self.fps*ratio),FPS_MAX)
+		self.fps = math.min(round(self.fps*ratio),FPS_MAX)
 	elseif ratio<1 then
 		local zoom = ratio^.5
-		self.w=math.floor(self.w*zoom)
-		self.h=math.floor(self.h*zoom)
+		self.w=round(self.w*zoom)
+		self.h=round(self.h*zoom)
 	end
     stat.total = 0
     for i=1,254 do
@@ -1810,109 +1806,14 @@ function CONVERTER:_stat()
         self.w, self.h, self.interlace, MODE, self.aspect_ratio,
         hms(self.duration, "%dh %dm %ds"), self.fps,
         percent(math.max(self.w/self.W,self.h/self.H))))
+	local TOT = stat.type[1]+stat.type[2]+stat.type[3]+stat.type[4]
     io.stdout:write(string.format('> %d frames: %d%% %d%% %d%% %d%%\n',
-                                    stat.type[1]+stat.type[2]+stat.type[3]+stat.type[4],
-                                    percent(stat.type[1]/(stat.type[1]+stat.type[2]+stat.type[3]+stat.type[4])),
-                                    percent(stat.type[2]/(stat.type[1]+stat.type[2]+stat.type[3]+stat.type[4])),
-                                    percent(stat.type[3]/(stat.type[1]+stat.type[2]+stat.type[3]+stat.type[4])),
-                                    percent(stat.type[4]/(stat.type[1]+stat.type[2]+stat.type[3]+stat.type[4]))))
+                                    TOT,
+                                    percent(stat.type[1]/TOT),
+                                    percent(stat.type[2]/TOT),
+                                    percent(stat.type[3]/TOT),
+                                    percent(stat.type[4]/TOT)))
     io.stdout:flush()
-
-    if false then -- eval which values are best approximations
-        local function map(x,x0,x1,y0,y1)
-            if false then
-                local x2 = (x0+x1)/2
-                return x0<x and x<=x2 and y0 or
-                       x2<x and x<=x1 and y1 or
-                       0
-            end
-            return x0<x and x<=x1 and y0+(y1-y0)*(x-x0)/(x1-x0)    or 0
-        end
-        local function map2(x,x0,x1)
-            x0 = (x0/15)^(1/2.8)
-            x1 = (x1/15)^(1/2.8)
-            return map(x,x0,x1,PALETTE.linear(255*x0),PALETTE.linear(255*x1))
-        end
-        local best,best_a,best_b,best_c,best_d,best_z
-
-        best=nil
-        for a=1,14 do
-            local cumul=0
-            for i=1,255 do
-                -- local x = (i/15)^(1/2.8)
-                local x = i/255
-                local y = map2(x,0,a) + map2(x,a,15)
-                local z = (y-PALETTE.linear(x*255))^2
-                cumul = cumul+z*stat.histo[i]
-            end
-            if not best or cumul<best then
-                best,best_a = cumul,a
-            end
-        end
-        print(best_a.." "..best)
-
-        best=nil
-        for a=1,13 do
-            for b=a+1,14 do
-                local cumul=0
-                for i=1,255 do
-                    -- local x = (i/15)^(1/2.8)
-                    local x = i/255
-                    local y = map2(x,0,a) + map2(x,a,b) + map2(x,b,15)
-                    local z = (y-PALETTE.linear(x*255))^2
-                    cumul = cumul+z*stat.histo[i]
-                end
-                if not best or cumul<best then
-                    best,best_a,best_b = cumul,a,b
-                end
-            end
-        end
-        print(best_a.." "..best_b.." "..best)
-
-        best=nil
-        for a=1,12 do
-            for b=a+1,13 do
-                for c=b+1,14 do
-                    local cumul=0
-                    for i=1,255 do
-                        -- local x = (i/15)^(1/2.8)
-                        local x = i/255
-                        local y = map2(x,0,a) + map2(x,a,b) + map2(x,b,c) + map2(x,c,15)
-                        local z = (y-PALETTE.linear(x*255))^2
-                        cumul = cumul+z*stat.histo[i]
-                    end
-                    if not best or cumul<best then
-                        best,best_a,best_b,best_c = cumul,a,b,c
-                    end
-                end
-            end
-        end
-        print(best_a.." "..best_b.." "..best_c.." "..best)
-
-        best=nil
-        for a=1,11 do
-            for b=a+1,12 do
-                for c=b+1,13 do
-                    for d=c+1,14 do
-                        local cumul=0
-                        for i=1,255 do
-                            -- local x = (i/15)^(1/2.8)
-                            local x = i/255
-                            local y = map2(x,0,a) + map2(x,a,b) + map2(x,b,c) + map2(x,c,d) + map2(x,d,15)
-                            local z = (y-PALETTE.linear(x*255))^2
-                            cumul = cumul+z*stat.histo[i]
-                        end
-                        if not best or cumul<best then
-                            best,best_a,best_b,best_c,best_d = cumul,a,b,c,d
-                        end
-                    end
-                end
-            end
-        end
-        print(best_a.." "..best_b.." "..best_c.." "..best_d.." "..best)
-
-        io.stdout:flush()
-    end
 end
 function CONVERTER:process()
     -- collect stats
