@@ -92,7 +92,23 @@ Mode| Resolution | Colors | TO7 | MO5 | TO770 | MO6 | TO8(D), TO9+ | Comment
 * An X/Y mode indicates to use X for MO-machine and Y for TO-machine.
 * A start (*) after the number of color indicates that this is indeed the number of virtual colors. These are colors that your eyes build up when it merges adjacent ones.
 
-## Example
+## How to view SDVideo files in DCMOTO ?
+
+If you don't have the SDDrive hardware you can still use the [DCMOTO emulator](http://dcmoto.free.fr/emulateur/index.html) to view the file.
+
+In order to do so, ensure you have selected the SDDRIVE external controller in the "options" menu:
+![](http://forum.system-cfg.com/download/file.php?id=19604)
+
+Then in the "Removable devices" menu and panel select the SD file you want to see, and ensure that you have checked the "SDDRIVE interface", and not the "Floppy drive" (which is otherwise the default):
+![](http://forum.system-cfg.com/download/file.php?id=19605)
+
+Then simply boot your virtual Thomson machine to any "basic" you want (the provided SD file is auto-boot). You should now see the SDDRIVE boot menu allowing to select the only visible SD file (_Notice_: the file name might be truncated):
+![](http://forum.system-cfg.com/download/file.php?id=19606)
+
+Then relax and enjoy the video.
+
+
+## Examples
 
 One can find an example of video made using this tool in the [Demonstration section](http://dcmoto.free.fr/programmes/sddrive-medley3/index.html) of the DCMOTO web site.
 ![](http://dcmoto.free.fr/programmes/sddrive-medley3/02.png) ![](http://dcmoto.free.fr/programmes/sddrive-medley3/04.png) ![](http://dcmoto.free.fr/programmes/sddrive-medley3/09.png) ![](http://dcmoto.free.fr/programmes/sddrive-medley3/10.png) ![](http://dcmoto.free.fr/programmes/sddrive-medley3/11.png) ![](http://dcmoto.free.fr/programmes/sddrive-medley3/12.png)
