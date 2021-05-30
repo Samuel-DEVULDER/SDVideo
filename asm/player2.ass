@@ -142,24 +142,20 @@ INIT
 *------------------------------------------------------
 * Initialisations communes MO5-MO6 
 *------------------------------------------------------
-  LDU   #$1F40+40     fin memoire video+1 ligne
+  LDU   #$1F40        fin memoire video+1 ligne
   LDX   #$A7C0        adresse selection banque video
   
   LDB   #1            memoire forme
   ORB   ,X
   STB   ,X            
 
+  CLRB
   BSR   ECRAN         remplissage forme avec 0
-  FCB   0,0,0,0
 
   DEC   ,X            memoire fond
 
+  LDB	#$70
   BSR   ECRAN         remplissage fond avec R/V/B/N
-  IFEQ  GRAY
-  FCB   0,$40,$20,$10
-  ELSE
-  FCB   $70,$70,$70,$70
-  ENDC
 
   INC   ,X            memoire forme
   LDA   >$FFF0        type d'ordinateur
@@ -188,27 +184,20 @@ INIT2
 * Initialisations communes TO7-TO8 
 *------------------------------------------------------
 INIT3
-  LDU   #$5F40+40     fin memoire video+1 ligne
+  LDU   #$5F40        fin memoire video+1 ligne
   LDX   #$E7C0        base regs TO
   
   LDB   #1            memoire forme
   ORB   3,X
   STB   3,X            
 
+  CLRB
   BSR   ECRAN         remplissage forme avec 0
-  FCB   0,0,0,0
 
   DEC   3,X            memoire fond
 
+  LDB   #$F8
   BSR   ECRAN         remplissage fond avec R/V/B/N
-  IFEQ GRAY
-  FCB  %11000000
-  FCB  %11100000
-  FCB  %11010000
-  FCB  %11001000
-  ELSE
-  FCB   $F8,$F8,$F8,$F8
-  ENDC
  
   INC   3,X           memoire forme
   
@@ -240,30 +229,16 @@ INIT4
   BRA   INIT8         suite des initialisations
 
 *------------------------------------------------------
-* Initialise la memoire video a partir des donnees
-* suivant l'appellant
+* Copie la valeur de B sur tout l'écran vidéo
 *------------------------------------------------------
 ECRAN
   PSHS  D,X,Y,U
-  LDX   8,S           recuperation donnees
+  TFR   B,A
+  TFR   D,X
+  LEAY  ,X
   
-  BSR   ECRAN1        remplissage ecran
-  BSR   ECRAN1
-  BSR   ECRAN1
-  BSR   ECRAN1
-  
-  STX   8,S           restauration PC pour poursuite
-  PULS  D,X,Y,U,PC
-
-ECRAN1  
-  LDA   ,X            lecture "val"
-  LDB   ,X+           D="val" "val"
-  LEAU  -40,U         remontee d'une ligne
-  PSHS  X,U
-  TFR   D,Y           Y=D="val" "val"
-  LEAX  ,Y            X=Y=D="val" "val"
-  LDA   #50
-ECRAN2
+  LDA   #200
+ECRAN1
   PSHU  B,X,Y         ecrit une ligne 
   PSHU  B,X,Y         (5*8) avec "val"
   PSHU  B,X,Y
@@ -272,10 +247,9 @@ ECRAN2
   PSHU  B,X,Y
   PSHU  B,X,Y
   PSHU  B,X,Y
-  LEAU  -3*40,U       remontee de 3 lignes
-  DECA                repete 50 fois
-  BNE   ECRAN2
-  PULS  X,U,PC
+  DECA                repete 20 fois
+  BNE   ECRAN1
+  PULS  D,X,Y,U,PC
 
 *------------------------------------------------------
 * Initialisations communes 
@@ -287,16 +261,9 @@ INIT8
   TFR   DP,A          valeur de DP dans A
   LDB   #$51          adresse de SD_LB0 version recente
   TFR   D,X           stockee dans le registre X   
-
   LDB   <$58          SD_SEL contient $55 depuis 20180702   
   CMPB  #$55          test version 20180702 ou plus recente
   BEQ   INIT9         version recente
-  
-  LDB   <$57          ; SD_SEL en $6057 b0-b7 depuis 20210212   
-  ANDB  #$7F          ; isole b0-b6 
-  CMPB  #$55          ; test version 20210212 ou plus recente
-  BEQ   INIT9         ; version 20210212 ou plus recente
-
   LDB   #$8E          adresse SD_LB0 des versions anciennes
   TFR   D,X           stockage dans le registre X
 
@@ -318,18 +285,6 @@ INIT9
   STB   <$CD          bits CNA en sortie
   ORA   #$04          set b2
   STA   <$CF          selection PB
-  
-* Passage progressif du CNA a 32
-  CLRA
-INIT10
-  STA   <$CD
-  LDB   #20
-INIT11
-  DECB
-  BNE   INIT11
-  INCA
-  CMPA  #33
-  BNE   INIT10
 
 *-------------------------------------------------------
 * Lancement de la commande CMD18 et saut de huit blocs
@@ -369,9 +324,9 @@ PREP_STACK
   DECB
   BNE   PREP_STACK
   
-  LDX   #$0000		  adresse ecran
+  LDX   #$0000+120	  adresse ecran
   VAR   PATCH_ECR,-2
-  LDU   #TAB_PIX+128
+  LDY   #TAB_CHAR
   JMP   DEB_BLOC      1 bloc = 170 * 3 + 2
     
 *------------------------------------------------------
@@ -405,17 +360,6 @@ STOP
   VAR   PATCH_FIN,-2
 *  BCS   STOP
   
-* Passage progressif du CNA a 0
-  LDA   #32
-EXIT10
-  STA   <$CD
-  LDB   #20
-EXIT11
-  DECB
-  BNE   EXIT11
-  DECA
-  BNE   EXIT10
-  
 * recommencer la lecture du fichier
   JMP   READ
 
@@ -430,7 +374,7 @@ READ_PIX MACRO
 
 *-----------------------------------------------------
 * Trame de deplacement 8 bits + 4 pixels
-* s6 0 0 | DD DD DD DD | VV VV VV VV             (145)
+* s6 1 | DD DD DD DD              (145)
 *-----------------------------------------------------  
 TRAME_DEP
   REPT  8,READ_BIT    lecture deplacement         (48)
@@ -453,24 +397,27 @@ DEB_BLOC
   REPT  8,READ_BIT    lecture octet               (48)
   CMPB  #$FE          test debut bloc              (2)
   BNE   DEB_BLOC      attente debut de bloc        (3)
-  
+(info)  
 *-----------------------------------------------------
-* TRAITE UNE TRAME DE 3 OCTETS                   (199)   
+* TRAITE UNE TRAME DE 2 OCTETS                   (199)   
 *-----------------------------------------------------
 TRAME
   REPT  6,READ_BIT    lecture donnee son          (36)
   STB   <$CD          joue echantillon             (4)
-  
-  GET_BIT             lecture bit de position      (4)
-  BCS   TRAME_POS     trame de position            (3)
-  GET_BIT             lecture bit de deplacement   (4)
   BCC   TRAME_DEP     trame de deplacement         (3)
-
+(info)
 *-----------------------------------------------------
-* Trame de video 8 pixel
-* s6 0 1 | VV VV VV VV | VV VV VV VV             (145)
+* Trame de caractete
+* s6 1 | cccccccc 
 *-----------------------------------------------------  
 TRAME_VIDEO
+  LDA   #127
+  REPT  8,READ_BIT
+  LSLB
+  ROLA
+  JMP   [D,Y]
+  
+  JMP []
   READ_PIX                                        (35)
   READ_PIX                                        (35)
   READ_PIX                                        (35)
@@ -580,28 +527,45 @@ WAIT4
   LEAS  -170*2,S                                   (8)
   JMP   TRAME                                      (4)
   
-TAB0 EQU %0000
-TAB1 EQU %0100
-TAB2 EQU %0110
-TAB3 EQU %1110  
+TAB_PIX0 EQU %000000000000
+TAB_PIX1 EQU %000010001100
+TAB_PIX2 EQU %100011001110
+TAB_PIX3 EQU %111011101110
 
+CHAR_NO   SET 0
+CHAR MACRO
+P SET   (CHAR_NO<-0)&3
+  LDD   #((A0&3)*16+(A1&3))*256+()
+  STA   -120,x
+  STB   -80,x
+  LDD   #0
+  STA   -40,x
+  STB   40,x
+  LDD   #0
+  STA   80,x
+  STB   120,x
+  RTS
+CHAR_NO   SET CHAR_NO+1
+  ENDM
+  
+  
 TAB_PIX16 MACRO
-  fcb   TAB0+16*TAB0
-  fcb   TAB1+16*TAB0
-  fcb   TAB2+16*TAB0
-  fcb   TAB3+16*TAB0
-  fcb   TAB0+16*TAB1
-  fcb   TAB1+16*TAB1
-  fcb   TAB2+16*TAB1
-  fcb   TAB3+16*TAB1
-  fcb   TAB0+16*TAB2
-  fcb   TAB1+16*TAB2
-  fcb   TAB2+16*TAB2
-  fcb   TAB3+16*TAB2
-  fcb   TAB0+16*TAB3
-  fcb   TAB1+16*TAB3
-  fcb   TAB2+16*TAB3
-  fcb   TAB3+16*TAB3
+  fcb   %00000000
+  fcb   %00001000
+  fcb   %00001100
+  fcb   %00001110
+  fcb   %10000000
+  fcb   %10001000
+  fcb   %10001100
+  fcb   %10001110
+  fcb   %11000000
+  fcb   %11001000
+  fcb   %11001100
+  fcb   %11001110
+  fcb   %11100000
+  fcb   %11101000
+  fcb   %11101100
+  fcb   %11101110
   ENDM
 
 TAB_PIX

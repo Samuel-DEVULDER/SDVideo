@@ -669,6 +669,17 @@ STOP
   JSR   $A028         EXCMD = execution commande CMD12
   VAR   PATCH_FIN,-2
 *  BCS   STOP
+
+* Passage progressif du CNA a 0
+  LDA   #32
+EXIT10
+  STA   <$CD
+  LDB   #20
+EXIT11
+  DECB
+  BNE   EXIT11
+  DECA
+  BNE   EXIT10
   
 * recommencer la lecture du fichier
   JMP   READ_VID
