@@ -489,13 +489,13 @@ ERRORTO0
 *------------------------------------------------------
 ECRAN1
   PSHS  D,X,Y,U
-  LDX   8,S
-  LDB   ,X+
-  STX   8,S
-  TFR   B,A
-  TFR   D,X
-  LEAY  ,X
-  LDA   #200
+  LDX   8,S           recup adr. retour
+  LDA   ,X            recup "val"
+  LDB   ,X+           2x (plus rapide que TFR)
+  STX   8,S           mise a jour adr. retour
+  TFR   D,X           remplissage registres
+  LEAY  ,X            
+  LDA   #200          nb de lignes ecran
 ECRAN11
   PSHU  B,X,Y         ecrit une ligne 
   PSHU  B,X,Y         (5*8) avec "val"
@@ -706,7 +706,7 @@ TRAME
   BCS   TRAME_01      trame de deplacement         (3)
 
 *-----------------------------------------------------
-* Trame de video 2 pixel
+* Trame de video 4 pixels (P1 P2 P3 P4)
 * s6 0 0 | VV VV VV VV | VV VV VV VV             (115)
 *-----------------------------------------------------  
 TRAME_00
@@ -722,7 +722,7 @@ TRAME_1X
   BCS   TRAME_11
   
 *-----------------------------------------------------
-* Trame de video 2 pixel
+* Trame de video 6 pixels (P1 P2 -- -- P3 P4)
 * s6 1 0 | VV VV VV VV | VV VV VV VV             (115)
 *-----------------------------------------------------  
 TRAME_10
