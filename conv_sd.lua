@@ -78,7 +78,7 @@ end
 
 local GRAY          = env('GRAY','nil')
 local FPS           = env('FPS',11)
-local dither        = env('DITH', 8) -- -8 for vac
+local dither        = env('DITH', 3) -- -8 for vac
 
 local FFMPEG        = locate('ffmpeg.exe', 'tools')
 local YT_DL         = locate('youtube-dl.exe', 'tools')
@@ -148,7 +148,13 @@ function AUDIO:new(file)
 	local hz = round(size*1000000/CYCLES)
 	local o = {
 		hz = hz,
-		stream = assert(io.popen(FFMPEG..' -i "'..file ..'" -v 0 -af loudnorm -f u8 -ac 1 -ar '..hz..' -acodec pcm_u8 pipe:', 'rb')),
+		stream = assert(io.popen(FFMPEG..' -i "'..file ..'" -v 0 -af ' ..
+		-- 'dynaudnorm=f=8000:c:b:s=10:m=4 ' ..
+		-- 'dynaudnorm=p=0.71:m=100:s=10:g=15 ' ..
+		-- 'dynaudnorm=p=0.71:m=6:s=10:g=15 ' ..
+		-- 'dynaudnorm=p=0.71:s=12:g=15:m=12:f=8000 ' ..
+		'loudnorm=I=-16:LRA=11:TP=-1.5 ' ..
+		'-f u8 -ac 1 -ar '..hz..' -acodec pcm_u8 pipe:', 'rb')),
 		size = size,
 		mute = '',
 		buf = '', -- buffer
@@ -794,7 +800,7 @@ function CONVERTER:_stat()
     io.stdout:flush()
 
 	-- auto determination des parametres
-	local stat = VIDEO:new(self.file,self.w,self.h,7)
+	local stat = VIDEO:new(self.file,self.w,self.h,5)
 	stat.super_pset = stat.pset
 	stat.histo = {n=0}; for i=0,255 do stat.histo[i]=0 end
 	function stat:pset(x,y, r,g,b)
@@ -844,19 +850,15 @@ function CONVERTER:_stat()
 		for _,i in ipairs(indices) do
 			if prev[i] ~= curr[i] then 
 				stat.trames,k = stat.trames + 1,i-pos
-				if k<0 then k=8000 end
-				if k<=2 then
-					prev[pos],pos = curr[pos],pos+1
-					prev[pos],pos = curr[pos],pos+1
-					prev[pos],pos = curr[pos],pos+1
-					prev[pos],pos = curr[pos],pos+1
+				if k<0 then 
+					prev[i],pos = curr[i],i+1
+				elseif k<=2 then
+					prev[pos],prev[pos+1],prev[pos+2],prev[pos+3],pos = 
+					curr[pos],curr[pos+1],curr[pos+2],curr[pos+3],pos+4
 				elseif k<=256 then
-					pos = i
-					prev[pos],pos = curr[pos],pos+1
-					prev[pos],pos = curr[pos],pos+1
+					prev[i],prev[i+1],pos = curr[i],curr[i+1],i+2
 				else
-					pos = i
-					prev[pos],pos = curr[pos],pos+1
+					prev[i],pos = curr[i],i+1
 				end
 			end
 		end
