@@ -85,16 +85,18 @@ local BIN           = locate('bin/')
 local CYCLES        = 169 -- CYCLES per audio sample
 local FPS_MAX       = 30
 local FILTER_DEPTH  = 2
-local FILTER_THRES  = 0.005*0+.02
-local FILTER_ALPHA  = 0
+local FILTER_THRES  = 0.005*0 + .02*0 + .03*0 + 1/16
+local FILTER_ALPHA  = env('ALPHA',0)
 local EXPONENTIAL   = true
 local ZIGZAG        = true
-local LOOSY         = false
-local BUFFER_SIZE   = 4096*4*2
+local BUFFER_SIZE   = 4096*4
 local CONFIG        = nil
-local GRAY_R		= 0.30 -- 0.2126
-local GRAY_G		= 0.59 -- 0.7152
-local GRAY_B		= 0.11 -- 0.0722
+-- local GRAY_R		= 0.30 -- 0.2126
+-- local GRAY_G		= 0.59 -- 0.7152
+-- local GRAY_B		= 0.11 -- 0.0722
+local GRAY_R		= 0.2126
+local GRAY_G		= 0.7152
+local GRAY_B		= 0.0722
 
 -- ===========================================================================
 
@@ -325,41 +327,47 @@ CONFIG = {
 }
 
 if MODE==0 then
-    CONFIG.interlace = 'iii' -- 'i3'
+    CONFIG.interlace = 'i3' -- 'i' -- 'iii' -- 'i3'
     CONFIG.dither    = 
 	-- compo(norm,vac)(8,8)
 	-- compo(norm,vac)(16,16)
 	-- compo(norm,bayer,4){{1}}
-	norm{
-	{  6, 35, 49,  8, 39, 55, 13, 61},
-	{ 26, 54, 19, 58, 24,  2, 51, 33},
-	{ 45,  3, 41, 14, 44, 28, 38, 11},
-	{ 21, 63, 29, 53,  7, 62, 17, 56},
-	{ 47, 27,  9, 34, 46, 20, 42,  5},
-	{ 15, 40, 57, 23, 12, 59, 25, 52},
-	{ 60, 32,  1, 36, 50,  4, 37, 10},
-	{ 43, 16, 30, 64, 18, 31, 48, 22}}
+	-- norm{
+	-- {  6, 35, 49,  8, 39, 55, 13, 61},
+	-- { 26, 54, 19, 58, 24,  2, 51, 33},
+	-- { 45,  3, 41, 14, 44, 28, 38, 11},
+	-- { 21, 63, 29, 53,  7, 62, 17, 56},
+	-- { 47, 27,  9, 34, 46, 20, 42,  5},
+	-- { 15, 40, 57, 23, 12, 59, 25, 52},
+	-- { 60, 32,  1, 36, 50,  4, 37, 10},
+	-- { 43, 16, 30, 64, 18, 31, 48, 22}}
+	compo(norm,vac)(7,7)
+	-- compo(norm,vac)(13,13)
 elseif MODE==1 then
     CONFIG.px_size   = {1,3}
     CONFIG.interlace = 'i' -- 'iii'
-    CONFIG.dither    = compo(norm,bayer,3){{1,2,3}}
+    CONFIG.dither    = --compo(norm,bayer,3){{1,2,3}}
+		-- compo(norm,vac)(13,5)
+		compo(norm,vac)(23,7)
+		-- compo(norm,vac)(17,5)
+		-- compo(norm,vac)(16,5)
 elseif MODE==2 or MODE==3 then
     CONFIG.px_size   = {4,1}
     CONFIG.interlace = 'i3'
     CONFIG.dither    = --bayer{{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
 			--bayer{{1,2},{9,10},{5,6},{13,14},{3,4},{11,12},{7,8},{15,16}}
 			-- compo(bayer,2){{1},{3},{2},{4}}
-			vac(7,29)
+			vac(5,19) -- (7,29)
 elseif MODE==4 or MODE==5 then
     CONFIG.px_size   = {4,1}
     CONFIG.interlace = 'ii'
     CONFIG.dither    = --bayer{{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
 		-- compo(bayer,2){{1},{3},{2},{4}}
-		vac(7,29)
+		vac(5,17) -- (7,29)
     CONFIG.palette   = compo(
         EXPONENTIAL and
-            {0x000,0x00F,0x0F0,0x0CC,
-             0xF00,0xC0C,0xCC0,0xFFF,
+            {0x000,0x00F,0x0F0,0xF00,
+			 0x0CC,0xC0C,0xCC0,0xFFF,
              0x001,0x010,0x100,0x111,
              0x005,0x050,0x500,0x555}
         or
@@ -416,7 +424,7 @@ elseif MODE==10 or MODE==11 then
     CONFIG.interlace = 'i3'
     CONFIG.dither    = --compo(bayer){{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
 		-- compo(bayer,2){{1},{3},{2},{4}}
-		vac(7,29)
+		vac(5,19) --(7,29)
 
     package.path = './lib/?.lua;' .. package.path
     function getpicturesize() return 80,50 end
@@ -457,7 +465,7 @@ elseif MODE==10 or MODE==11 then
 elseif MODE==12 or MODE==13 then
 	CONFIG.asm_mode	 = MODE%2==0 and 2 or 3
     CONFIG.px_size   = {4,1}
-    CONFIG.interlace = 'i3'
+    CONFIG.interlace = 'iii' -- 'i3'
     CONFIG.dither    = --compo(norm,bayer,2){{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
 			-- compo(norm,bayer,3){{1},{3},{2},{4}}
 			compo(norm,vac)(7,29)
@@ -467,7 +475,7 @@ elseif MODE==14 or MODE==15 then
     CONFIG.interlace = 'i3'
     CONFIG.dither    = --compo(bayer,2){{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
 		-- compo(bayer,2){{1},{3},{2},{4}}
-		vac(7,29)
+		vac(5,19) -- (7,29)
 	CONFIG.palette   = compo{
 		0x000, 0x111, 0x101, 0x013, 
 		0x510, 0x130, 0x772, 0xf11, 
@@ -478,8 +486,11 @@ elseif MODE==16 or MODE==17 then
     CONFIG.px_size   = {4,1}
     CONFIG.interlace = 'i3'
     CONFIG.dither    = 
-		-- compo(norm,bayer,2){{1},{3},{2},{4}}
-		compo(norm,vac)(7,29)
+		-- compo(norm,bayer,1){{1},{3},{2},{4}}
+		-- compo(norm,vac)(7,29)
+		-- compo(norm,vac)(5,19)
+		compo(norm,vac)(3,11)
+		-- compo(norm){{1}}
 		-- compo(norm,bayer,1){{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
 	CONFIG.palette   = compo{
 		0x000, 0x111, 0x222, 0x333,
@@ -492,7 +503,7 @@ elseif MODE==18 or MODE==19 then
     CONFIG.interlace = 'i3'
     CONFIG.dither    = 
 	-- compo(bayer,2){{1},{3},{2},{4}}
-	vac(7,29)
+	vac(5,19) -- (7,29)
 	CONFIG.palette   = compo{
 		-- 0 1 4 7 14
 		0x000, 
@@ -565,7 +576,7 @@ function PALETTE:intens(i)
     return .2126*f(p[1]) + .7152*f(p[2]) + .0722*f(p[3])
 end
 function PALETTE.key(r,g,b)
-    return string.format("%02x%02x%02x",round(r/8),round(g/8),round(b/8))
+    return string.char(round(r/4),round(g/4),round(b/8))
 end
 function PALETTE:compute(n, r,g,b)
 	-- for i,p in ipairs(self) do print(i,'=',unpack(p)) end
@@ -1021,7 +1032,14 @@ function AUDIO:new(file)
 	local hz = round(size*1000000/CYCLES)
 	local o = {
 		hz = hz,
-		stream = assert(io.popen(FFMPEG..' -i "'..file ..'" -v 0 -af loudnorm -f u8 -ac 1 -ar '..hz..' -acodec pcm_u8 pipe:', 'rb')),
+		stream = assert(io.popen(FFMPEG..' -i "'..file ..'" -v 0 -af ' ..
+		-- 'dynaudnorm=f=8000:c:b:s=10:m=4 ' ..
+		-- 'dynaudnorm=p=0.71:m=100:s=10:g=15 ' ..
+		-- 'dynaudnorm=p=0.71:m=6:s=10:g=15 ' ..
+		-- 'dynaudnorm=p=0.71:s=12:g=15:m=12:f=8000 ' ..
+		-- 'loudnorm=I=-16:LRA=11:TP=-1.5 ' ..
+		'loudnorm=LRA=11 ' ..
+		'-f u8 -ac 1 -ar '..hz..' -acodec pcm_u8 pipe:', 'rb')),
 		size = size,
 		mute = '',
 		buf = '', -- buffer
@@ -1105,7 +1123,10 @@ function FILTER:byte(offset)
             -- (a/255)^2.2,(b/255)^2.2
             PALETTE.linear(a),PALETTE.linear(b)
 		-- if math.abs(la-lb)>0 and la+lb>0 then print (math.abs(la-lb)/math.max(la,lb)) end
-        if math.abs(la-lb)<FILTER_THRES*math.max(la,lb) then
+        if la~=lb 
+		and	math.abs(la-lb)<FILTER_THRES*math.max(la,lb)
+		and math.random()>.001
+		then
             b,t[2][offset]=a,a
         end
         return b
@@ -1712,7 +1733,7 @@ function CONVERTER:_stat()
     for i=0,7999 do stat.prev_img[i]=-1 end
     stat.type = {0,0,0,0}
     function stat:count_trames()
-        local pos,prev,curr,k = 8000,stat.prev_img,stat.image
+        local pos,prev,curr,c = 8000,stat.prev_img,stat.image,stat.trames
 
         -- local chg = 0
         -- for _,i in ipairs(indices) do
@@ -1721,34 +1742,32 @@ function CONVERTER:_stat()
 		
         for _,i in self.indices(prev,curr) do
             while prev[i] ~= curr[i] do
-                if LOOSY and
-                   curr[i+1]==prev[i+1] and
-                   curr[i+2]==prev[i+2] and
-                   -- curr[i+3]==prev[i+3] and
-                   i-pos>1 and
-                   (self.cpt%5)>0
-                then
-                    curr[i] = prev[i]
-                else
-                    stat.trames,k = stat.trames + (stat.trames % 171 == 169 and 2 or 1),i-pos
-                    if k<0 then k=8000 end
-                    if k<=1 then
-                        if k==0 and curr[pos+1]==prev[pos+1] then
-                            stat.type[3],  prev[pos],prev[pos+2],pos = 
-							stat.type[3]+1,curr[pos],prev[pos+2],pos+3
-                        else
-                            stat.type[1],  prev[pos],prev[pos+1],pos = 
-							stat.type[1]+1,curr[pos],prev[pos+1],pos+2
-                        end
-                    elseif k<=257 then
-                        stat.type[2],  prev[i],pos = 
-						stat.type[2]+1,curr[i],i+1
-                    else
-                        stat.type[4],pos = stat.type[4]+1,i
-                    end
-                end
+				local k,t = i-pos
+				if k<0 then 
+					-- print(4,i,k)
+					t,pos = 4,i
+				elseif k<=1 then
+					if k==0 and curr[i+1]==prev[i+1] then
+						-- print(3,i,k)
+						t,prev[i],prev[i+2],pos = 
+						3,curr[i],curr[i+2],i+3
+					else
+						-- print(1,i,k)
+						t,prev[pos],prev[pos+1],pos = 
+						1,curr[pos],curr[pos+1],pos+2
+					end
+				elseif k<=257 then
+					-- print(2,i,k)
+					t,prev[i],pos = 
+					2,curr[i],i+1
+				else
+					-- print(4,i,k)
+					t,pos = 4,i
+				end
+				stat.type[t],c=stat.type[t]+1,c+(c % 171 == 169 and 2 or 1)
             end
         end
+		stat.trames = c
     end
 
     while stat.running do
@@ -1758,9 +1777,13 @@ function CONVERTER:_stat()
     io.stderr:write(string.rep(' ',79)..'\r')
     io.stderr:flush()
 
+	-- nb de trames vidéos par image
+	local avg_trames = (stat.trames/stat.cpt) * 1.05 -- 5% safety margin
+	-- nombre de trames théoriques max par image
 	local max_trames = 1000000/(self.fps*CYCLES)
-	local avg_trames = (stat.trames/stat.cpt) * 1.001 -- 0.1% safety margin
+	-- rapport entre les deux
 	local ratio = max_trames / avg_trames
+	print(avg_trames, max_trames, ratio)
 	if neg_fps and self.fps>FPS_MAX then
 		self.fps = FPS_MAX
 	elseif ratio>1 or neg_fps then
@@ -1891,47 +1914,29 @@ function CONVERTER:process()
     video:next_image()
     while audio.running and video.running do
         update_info()
+		local k,b0,b1,b2
         for _,i in indices(prev,curr) do
             while prev[i] ~= curr[i] do
-                if LOOSY and
-                   curr[i+1]==prev[i+1] and
-                   curr[i+2]==prev[i+2] and
-                   -- curr[i+3]==prev[i+3] and
-                   i-pos>1 and
-                   (video.cpt%5)>0
-                   -- math.random()>0.2
-                then
-                    curr[i] = prev[i]
-                else
-                    local k = i - pos
-					-- local zz = pos
-                    if k<0 then k=8000 end
-                    local b0,b1,b2
-                    -- if mode=='i' and w==80 then
-                        -- if k<=2 and ((pos-k)%40)+4>=40
-                    -- end
-
-                    if k<=1 then
-                        if k==0 and curr[pos+1]==prev[pos+1] then
-							b0,b1,b2 = 2,curr[pos],curr[pos+2]
-                            prev[pos] = curr[pos]; pos = pos+2
-                            prev[pos] = curr[pos]; pos = pos+1
-                        else
-							b0,b1,b2 = 0,curr[pos],curr[pos+1]
-                            prev[pos] = curr[pos]; pos = pos+1
-                            prev[pos] = curr[pos]; pos = pos+1
-                        end
-                    elseif k<=257 then -- deplacement 8 bit
-                        pos = i
-						b0,b1,b2 = 1,k-2,curr[pos]
-                        prev[pos] = curr[pos]; pos = pos+1
-                    else -- deplacement arbitraire
-                        pos = i
-						b0,b1,b2 = 3,math.floor(pos/256),pos%256
-                    end
-					-- print(zz, b0, b1, b2, '-->', pos)
-                    current_cycle = current_cycle + self.out:frame(b0,b1,b2,audio)
-                end
+				k = i - pos
+				if k<0 then 
+					b0,b1,b2,pos = 3,math.floor(i/256),i%256,i
+				elseif k<=1 then
+					if k==0 and curr[pos+1]==prev[pos+1] then
+						b0,b1,b2  = 2,curr[pos],curr[pos+2]
+						prev[pos] = curr[pos]; pos = pos+2
+						prev[pos] = curr[pos]; pos = pos+1
+					else
+						b0,b1,b2  = 0,curr[pos],curr[pos+1]
+						prev[pos] = curr[pos]; pos = pos+1
+						prev[pos] = curr[pos]; pos = pos+1
+					end
+				elseif k<=257 then -- deplacement 8 bit
+					b0,b1,b2,prev[i],pos = 1,k-2,curr[i],curr[i],i+1
+				else -- deplacement arbitraire
+					b0,b1,b2,pos = 3,math.floor(i/256),i%256,i
+				end
+				-- print(zz, b0, b1, b2, '-->', pos)
+				current_cycle = current_cycle + self.out:frame(b0,b1,b2,audio)
             end
         end
 		
