@@ -3,6 +3,7 @@ STRIP=strip
 WGET=wget
 SED=sed -e
 GIT=git
+BAT=.sh
 RM=rm
 CP=cp
 7Z=7z
@@ -26,6 +27,8 @@ ifeq ($(OS),Cygwin)
 endif
 
 ifeq ($(OS),win)
+	MKEXE=true
+	BAT=.BAT
 	EXE=.exe
 	CC=i686-w64-mingw32-gcc -m32
 	MACHINE=x86
@@ -40,6 +43,12 @@ DISTRO=SDDrive-$(VERSION)-$(OS)-$(MACHINE)
 BIN=bin/bootblk.raw bin/player0.raw bin/player1.raw \
     bin/player40.raw bin/player41.raw bin/player42.raw \
 	bin/player43.raw bin/player44.raw bin/player45.raw
+	
+EXAMPLES=BadApple Indi Pink
+
+BadApple_URL=https://www.youtube.com/watch?v=uOyaCOViAPA
+BadApple_TOOL=conv_sd
+BadApple_MODE=
 
 LUA=tools/luajit$(EXE)
 C6809=tools/c6809$(EXE)
@@ -59,26 +68,48 @@ distro: $(DISTRO)
 	zip -u -r "$(DISTRO).zip" "$<"
 
 $(DISTRO): $(ALL) \
-	$(DISTRO)/ $(DISTRO)/bin/ $(DISTRO)/tools/ \
-	$(DISTRO)/README.html do_wrappers \
+	$(DISTRO)/ $(DISTRO)/bin/ $(DISTRO)/tools/ $(EXAMPLES) \
+	$(DISTRO)/README.html do_wrappers do_examples \
 	$(DISTRO)/tools/sdvideo.lua $(DISTRO)/tools/conv_sd.lua
 	$(CP) $(BIN) $@/bin/
 	$(CP) $(LUA)* $(FFMPEG)* $(YT_DL)* $@/tools/
 	$(GIT) log >$@/ChangeLog.txt
 	
-do_wrappers: $(DISTRO)/sdvideo.bat $(DISTRO)/conv_sd.bat 
+do_wrappers: $(DISTRO)/sdvideo$(BAT) $(DISTRO)/conv_sd$(BAT)
+
+do_examples: $(addsufix $(addprefix $(DISTRO)/examples,$(EXAMPLES)),runme$(BAT))
 
 ifeq ($(OS),win)
-$(DISTRO)/%.bat: %.lua
+# -- WIN
+$(DISTRO)/examples/%/runme$(BAT): $(DISTRO)/examples/$*/
+	echo  >$@ '@echo off'
+	for m in $($*_MODE); do \
+		echo >>$@ "set MODE=$$m"; \
+		echo >>$@ '%~dsp0\..\..\$($*_TOOL)$(BAT) $($*_URL)'; \
+	done
+	echo >>$@ 'pause'
+	$(MKEXE) $@
+$(DISTRO)/%$(BAT): %.lua
 	echo  >$@ '@echo off'
 	echo >>$@ '%~dsp0\tools\luajit$(EXE) %~dsp0\tools\$*.lua %*'
 	echo >>$@ 'pause'
+	$(MKEXE) $@
+	
 else
-$(DISTRO)/%.bat:
-	echo  >$(DISTRO)/$* '#!/usr/bin/env sh'
-	echo >>$(DISTRO)/$* 'dir=`dirname "$$0"`'
-	echo >>$(DISTRO)/$* 'exec $$dir/luajit$(EXE) $$dir/tools\$*.lua "$$@"'
-	$(MKEXE) $(DISTRO)/$*
+# -- *NIX 
+$(DISTRO)/examples/%/runme$(BAT): $(DISTRO)/examples/$*/
+	echo  >$@ '#!/usr/bin/env sh'
+	echo >>$@ 'dir=`dirname "$$0"`'
+	for m in $($*_MODE); do \
+		echo >>$@ "export MODE=$$m"; \
+		echo >>$@ '$$dir/$($*_TOOL)$(BAT) $($*_URL)'; \
+	done
+	$(MKEXE) $@
+$(DISTRO)/%$(BAT):
+	echo  >$@ '#!/usr/bin/env sh'
+	echo >>$@ 'dir=`dirname "$$0"`'
+	echo >>$@ 'exec $$dir/luajit$(EXE) $$dir/tools\$*.lua "$$@"'
+	$(MKEXE) $@
 endif
 
 ifeq ($(OS),win)
@@ -101,10 +132,11 @@ tst: tst_conv_sd tst_sdvideo
 
 tst_conv_sd: $(ALL)
 	nice -19 \
-	$(LUA) conv_sd.lua https://www.youtube.com/watch?v=uOyaCOViAPA
+	$(LUA) conv_sd.lua $(BadApple_URL)
 	
 tst_sdvideo: $(ALL)
 	for i in {0..19}; do \
+		echo; \
 		echo "MODE=$$i"; \
 		MODE=$$i \
 		nice -19 \
@@ -167,3 +199,5 @@ tgz: fullclean
 w:	$(DISK) $(K7)
 	../teo/teow.exe -window -m MASS6809.M7 -disk0 `cygpath -w -s "$(PWD)/$(DISK)"` -disk1 `cygpath -w -s "$(PWD)/disk1.sap"` 
 	cd sapdir && ../tools/sapfs.exe --extract-all ../$(DISK)
+
+$(DISTRO)/examples/
