@@ -1063,7 +1063,7 @@ function AUDIO:new(file)
 			local k,v = line:match('"([^"]+)" : "([^"]+)"')
 			if k then
 				measured[k] = v
-				print(k,v)
+				-- print(k,v)
 			elseif line:match('spped=') then
 				io.stderr:write(line)
 				io.stderr:flush()
