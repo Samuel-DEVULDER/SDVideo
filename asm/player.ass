@@ -319,6 +319,10 @@ INIT9
   ORA   #$04          set b2
   STA   <$CF          selection PB
   
+*-------------------------------------------------------
+* Lancement de la commande CMD18 et saut de huit blocs
+*-------------------------------------------------------
+READ
 * Passage progressif du CNA a 32
   CLRA
 INIT10
@@ -331,10 +335,6 @@ INIT11
   CMPA  #33
   BNE   INIT10
 
-*-------------------------------------------------------
-* Lancement de la commande CMD18 et saut de huit blocs
-*-------------------------------------------------------
-READ
   LDU   #CMD18        adresse commande CMD18
   JSR   $A028         EXCMD = execution commande
   VAR   PATCH_READ,-2
