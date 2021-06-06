@@ -671,7 +671,7 @@ STOP
 *  BCS   STOP
 
 * Passage progressif du CNA a 0
-  LDA   #32
+  LDA   <$CD
 EXIT10
   STA   <$CD
   LDB   #20
