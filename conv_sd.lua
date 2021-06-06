@@ -824,7 +824,7 @@ function CONVERTER:_new_video()
     return  VIDEO:new(self.file, self.w, self.h, self.fps)
 end
 function CONVERTER:_stat()
-    io.stdout:write('\n'..self.file..'\n')
+    io.stdout:write(self.file..'\n')
     io.stdout:flush()
 
 	-- auto determination des parametres
