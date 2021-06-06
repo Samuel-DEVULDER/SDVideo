@@ -1848,7 +1848,7 @@ function CONVERTER:_stat()
 		self.h=round(self.h*zoom)
 	end
 	
-	for i=0,255 do print('histo',i,stat.histo[i]) end
+	-- for i=0,255 do print('histo',i,stat.histo[i]) end
 	
 	-- find true black
 	local total,threshold = 0
@@ -1882,7 +1882,7 @@ function CONVERTER:_stat()
 			break
 		end
 	end
-    print(stat.min .. '    ' .. stat.max .. '                  ')
+    -- print(stat.min .. '    ' .. stat.max .. '                  ')
     io.stdout:flush()
     local video_cor = {stat.min, 255/(stat.max - stat.min)}
     if MODE==10 or MODE==11 then video_cor = {0,1} end
