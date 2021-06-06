@@ -85,15 +85,15 @@ local BIN           = locate('bin/')
 local CYCLES        = 169 -- CYCLES per audio sample
 local FPS_MAX       = 30
 local FILTER_DEPTH  = 2
-local FILTER_THRES  = 0.005*0 + .02*0 + .03*0 + 1/16
+local FILTER_THRES  = 0.005*0 + .02*0 + .03*0 + 1/24
 local FILTER_ALPHA  = env('ALPHA',0)
 local EXPONENTIAL   = true
 local ZIGZAG        = true
 local BUFFER_SIZE   = 4096*4
 local CONFIG        = nil
--- local GRAY_R		= 0.30 -- 0.2126
--- local GRAY_G		= 0.59 -- 0.7152
--- local GRAY_B		= 0.11 -- 0.0722
+-- local GRAY_R		= 0.30
+-- local GRAY_G		= 0.59
+-- local GRAY_B		= 0.11
 local GRAY_R		= 0.2126
 local GRAY_G		= 0.7152
 local GRAY_B		= 0.0722
@@ -327,7 +327,7 @@ CONFIG = {
 }
 
 if MODE==0 then
-    CONFIG.interlace = 'i3' -- 'i' -- 'iii' -- 'i3'
+    CONFIG.interlace = 'i' -- 'i3' -- 'i' -- 'iii' -- 'i3'
     CONFIG.dither    = 
 	-- compo(norm,vac)(8,8)
 	-- compo(norm,vac)(16,16)
@@ -356,20 +356,27 @@ elseif MODE==2 or MODE==3 then
     CONFIG.interlace = 'i3'
     CONFIG.dither    = --bayer{{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
 			--bayer{{1,2},{9,10},{5,6},{13,14},{3,4},{11,12},{7,8},{15,16}}
-			-- compo(bayer,2){{1},{3},{2},{4}}
-			vac(5,19) -- (7,29)
+			compo(bayer,2){{1},{3},{2},{4}}
+			-- vac(5,19) -- (7,29)
+			-- vac(4,17)
 elseif MODE==4 or MODE==5 then
     CONFIG.px_size   = {4,1}
     CONFIG.interlace = 'ii'
     CONFIG.dither    = --bayer{{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
-		-- compo(bayer,2){{1},{3},{2},{4}}
-		vac(5,17) -- (7,29)
+		compo(bayer,2){{1},{3},{2},{4}}
+		-- vac(5,17) 
+		-- vac(7,29)
     CONFIG.palette   = compo(
+        -- EXPONENTIAL and
+            -- {0x000,0x00F,0x0F0,0xF00,
+			 -- 0x0CC,0xC0C,0xCC0,0xFFF,
+             -- 0x001,0x010,0x100,0x111,
+             -- 0x005,0x050,0x500,0x555}
         EXPONENTIAL and
-            {0x000,0x00F,0x0F0,0xF00,
-			 0x0CC,0xC0C,0xCC0,0xFFF,
+            {0x000,0x00E,0x0E0,0xE00,
+			 0x0BB,0xB0B,0xBB0,0xFFF,
              0x001,0x010,0x100,0x111,
-             0x005,0x050,0x500,0x555}
+             0x004,0x040,0x400,0x555}
         or
             {0x000,0x444,0x999,0xFFF,
              0x001,0x004,0x009,0x00F,
@@ -424,9 +431,12 @@ elseif MODE==10 or MODE==11 then
     CONFIG.interlace = 'i3'
     CONFIG.dither    = --compo(bayer){{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
 		-- compo(bayer,2){{1},{3},{2},{4}}
-		vac(5,19) --(7,29)
-
-    package.path = './lib/?.lua;' .. package.path
+		-- vac(5,19) --(7,29)
+		vac(5,17)
+    -- package.path = './lib/?.lua;' .. package.path
+	for match in (package.path..';'):gmatch("(.-)?.lua;") do
+		package.path = package.path .. ';' .. match .. "../lib/?.lua"
+    end
     function getpicturesize() return 80,50 end
     function waitbreak() end
     run = function(name) require(name:gsub('%..*','')) end
@@ -456,7 +466,7 @@ elseif MODE==10 or MODE==11 then
                 while stat.running do stat:next_image() end
             end
         end
-		for i=1,16 do reducer:boostBorderColors() end
+		-- for i=1,16 do reducer:boostBorderColors() end
         io.stderr:write(string.rep(' ',79)..'\r')
         io.stderr:flush()
         local pal = reducer:buildPalette(16, true)
@@ -475,7 +485,8 @@ elseif MODE==14 or MODE==15 then
     CONFIG.interlace = 'i3'
     CONFIG.dither    = --compo(bayer,2){{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
 		-- compo(bayer,2){{1},{3},{2},{4}}
-		vac(5,19) -- (7,29)
+		-- vac(5,19) -- (7,29)
+		vac(5,17)
 	CONFIG.palette   = compo{
 		0x000, 0x111, 0x101, 0x013, 
 		0x510, 0x130, 0x772, 0xf11, 
@@ -503,15 +514,29 @@ elseif MODE==18 or MODE==19 then
     CONFIG.interlace = 'i3'
     CONFIG.dither    = 
 	-- compo(bayer,2){{1},{3},{2},{4}}
-	vac(5,19) -- (7,29)
+	-- vac(5,19) -- (7,29)
+	-- vac(7,29)
+	vac(5,17)
+	-- vac(3,13)
+	-- vac(4,16)
 	CONFIG.palette   = compo{
 		-- 0 1 4 7 14
-		0x000, 
-		0x100,0x400,0x700,
-		0x010,0x040,0x070,
-		0x001,0x004,0x007,
-		0x07E,0xE07,0xE70,
-		0x414,0x747,0xEEE
+		-- 0x000, 
+		-- 0x100,0x400,0x700,
+		-- 0x010,0x040,0x070,
+		-- 0x001,0x004,0x007,
+		-- 0x07E,0xE07,0xE70,
+		-- 0x414,0x747,0xEEE
+		
+		-- 0x000,0x100,0x010,0x001,
+		-- 0x111,0x400,0x040,0x004,
+		-- 0x777,0xF00,0x0F0,0xFF0,
+		-- 0x00F,0xF0F,0x0FF,0xFFF
+
+		0x000,0x400,0x040,0x004,
+		0x111,0x044,0x404,0x440,
+		0x777,0xE00,0x0E0,0xEE0,
+		0x00E,0xE0E,0x0EE,0xEEE
 		
 		-- 0x000,0xd00,0x0d0,0xdd0,
 		-- 0x00d,0xd0d,0x0dd,0xddd,
@@ -1029,16 +1054,45 @@ function AUDIO:new(file)
 		end
 	end
 	
+	local loudnorm = '-af loudnorm=I=-16:LRA=11 '
+	if true then
+		local measured={}
+		local IN,line = assert(io.popen(FFMPEG..' -i "'..file ..'" -af loudnorm=I=-16:LRA=11:tp=-2:print_format=json -ac 1 -vn -f null x 2>&1', 'r'))
+		for line in IN:lines() do
+			-- print(line)
+			local k,v = line:match('"([^"]+)" : "([^"]+)"')
+			if k then
+				measured[k] = v
+				print(k,v)
+			elseif line:match('spped=') then
+				io.stderr:write(line)
+				io.stderr:flush()
+			end
+		end
+		IN:close()	
+		io.stderr:write('\r                             \r')
+		io.stderr:flush()
+		loudnorm = '-af loudnorm=linear=true:I=-16:LRA=11:tp=-2' .. 
+		':measured_I=' .. measured['input_i'] ..
+		':measured_LRA=' .. measured['input_lra'] ..
+		':measured_tp=' .. measured['input_tp'] ..
+		':measured_thresh=' .. measured['input_thresh'] ..
+		':offset=' .. measured['target_offset'].. 
+		' '
+		-- print(loudnorm)
+	end
+	
 	local hz = round(size*1000000/CYCLES)
 	local o = {
 		hz = hz,
-		stream = assert(io.popen(FFMPEG..' -i "'..file ..'" -v 0 -af ' ..
+		stream = assert(io.popen(FFMPEG..' -i "'..file ..'" -v 0 ' ..
 		-- 'dynaudnorm=f=8000:c:b:s=10:m=4 ' ..
 		-- 'dynaudnorm=p=0.71:m=100:s=10:g=15 ' ..
 		-- 'dynaudnorm=p=0.71:m=6:s=10:g=15 ' ..
 		-- 'dynaudnorm=p=0.71:s=12:g=15:m=12:f=8000 ' ..
 		-- 'loudnorm=I=-16:LRA=11:TP=-1.5 ' ..
-		'loudnorm=LRA=11 ' ..
+		-- '-af loudnorm=I=-16:LRA=11 ' ..
+		loudnorm ..
 		'-f u8 -ac 1 -ar '..hz..' -acodec pcm_u8 pipe:', 'rb')),
 		size = size,
 		mute = '',
@@ -1064,7 +1118,7 @@ function AUDIO:next_sample()
 	end
 	local v,g = 0,4
 	for i=1,siz do v = v + buf:byte(i) end
-	self.buf,v = buf:sub(siz+1),g*(v/(siz*4)-32) + 32
+	self.buf,v = buf:sub(siz+1),g*(v/(siz*4)-32) + 31.5
 	if v<0 then v=0 elseif v>63 then v=63 end
 	return math.floor(v)
 end
@@ -1705,7 +1759,7 @@ function CONVERTER:_new_video(fps)
     return VIDEO:new(self.file, fps or self.fps, self.w, self.h, self.W, self.H, self.interlace)
 end
 function CONVERTER:_stat()
-    io.stdout:write('\n'..self.file..'\n')
+    io.stdout:write(self.file..'\n')
     io.stdout:flush()
 
     -- auto determination des parametres
@@ -1778,12 +1832,12 @@ function CONVERTER:_stat()
     io.stderr:flush()
 
 	-- nb de trames vidéos par image
-	local avg_trames = (stat.trames/stat.cpt) * 1.05 -- 5% safety margin
+	local avg_trames = (stat.trames/stat.cpt) * 1.10 -- 10% safety margin
 	-- nombre de trames théoriques max par image
 	local max_trames = 1000000/(self.fps*CYCLES)
 	-- rapport entre les deux
 	local ratio = max_trames / avg_trames
-	print(avg_trames, max_trames, ratio)
+	-- print(avg_trames, max_trames, ratio)
 	if neg_fps and self.fps>FPS_MAX then
 		self.fps = FPS_MAX
 	elseif ratio>1 or neg_fps then
@@ -1793,32 +1847,42 @@ function CONVERTER:_stat()
 		self.w=round(self.w*zoom)
 		self.h=round(self.h*zoom)
 	end
-    stat.total = 0
-    for i=1,254 do
-        stat.total = stat.total + stat.histo[i]
-    end
-	local default_palette = (MODE<=3 or MODE>=12 and MODE<=13)
-    stat.threshold_min = .02*stat.total -- (default_palette and .05 or .01)*stat.total --.05*stat.total
-    local acc = 0
-	stat.min = 0
-    for i=1,127 do
-        acc = acc + stat.histo[i]
-        if acc>stat.threshold_min then
+	
+	for i=0,255 do print('histo',i,stat.histo[i]) end
+	
+	-- find true black
+	local total,threshold = 0
+	for i=1,184 do total = total + stat.histo[i] end
+	total,threshold = 0, total * .04
+    stat.min = 0
+    for i=1,184 do
+        total = total + stat.histo[i]
+        if total>threshold then
             stat.min = i-1
             break
         end
     end
-    stat.threshold_max = .02*stat.total -- (default_palette and .04 or .001)*stat.total -- .04*stat.total
-	acc = 0
-    stat.max = 255
-    for i=254,stat.min+1,-1 do
-        acc = acc + stat.histo[i]
-        if acc>stat.threshold_max then
-            stat.max = i+1
-            break
-        end
-    end
-    -- print(stat.min .. '    ' .. stat.max .. '                  ')
+	-- find true white
+	stat.max = 255
+	if stat.histo[253]>=stat.histo[254] then
+		for i=252,184,-1 do
+			if 0<stat.histo[i] and stat.histo[i]<stat.histo[i+1] then
+				stat.max = i+1
+				break
+			end
+		end
+	end
+	total,threshold = 0
+	for i=127,stat.max-1 do total = total + stat.histo[i] end
+	total,threshold = 0, total * .02
+	for i=stat.max-1,127,-1 do
+		total = total + stat.histo[i]
+		if total>threshold then
+			stat.max = i+1
+			break
+		end
+	end
+    print(stat.min .. '    ' .. stat.max .. '                  ')
     io.stdout:flush()
     local video_cor = {stat.min, 255/(stat.max - stat.min)}
     if MODE==10 or MODE==11 then video_cor = {0,1} end
@@ -2065,12 +2129,14 @@ function replace_yt(arg)
 			else
 				table.insert(all,vid)
 			end
+			local YT_DL=YT_DL..' --no-check-certificate'
 			for _,vid in ipairs(all) do
 				local IN,line,file = assert(io.popen(YT_DL..' --geo-bypass --restrict-filenames -o "%(title)s--%(id)s" --get-filename ' .. vid, 'r'))
 				for line in IN:lines() do file = file or line .. '.mkv' end
 				IN:close()
 				local ok = exists(file) and 0 or 1
 				ok = ok==0 and 0 or os.execute(YT_DL .. ' -f 18 --geo-bypass --merge-output-format mkv -o "'.. file .. '" ' .. vid)
+				ok = ok==0 and 0 or os.execute(YT_DL .. ' -f "best[height<=200]" --geo-bypass --merge-output-format mkv -o "'.. file .. '" ' .. vid)
 				ok = ok==0 and 0 or os.execute(YT_DL .. ' --geo-bypass --merge-output-format mkv -o "'.. file .. '" ' .. vid)
 				if ok==0 then table.insert(out, file) end
 			end
@@ -2083,8 +2149,8 @@ end
 
 -- ===========================================================================
 -- main process
-if #arg==0 then os.exit(0) end
 arg = replace_yt(arg)
+if #arg==0 then os.exit(0) end
 local file = basename(arg[1])
 if #arg>1 then -- infer name
     local function substrings(s)
@@ -2127,9 +2193,12 @@ if #arg>1 then -- infer name
 end
 PALETTE:init(CONFIG.palette(CONVERTER,VIDEO))
 local out = OUT:new(MODE..'_'..file..'.sd')
+local first = true
 for _,f in ipairs(arg) do
     local conv = CONVERTER:new(f,out,FPS)
-    if conv then conv:process() end
+    if conv then 
+		if not first then io.stdout:write('\n') else first=nil end
+		conv:process() 
+	end
 end
-out:close();
-
+out:close()
