@@ -431,8 +431,9 @@ elseif MODE==10 or MODE==11 then
     CONFIG.interlace = 'i3'
     CONFIG.dither    = --compo(bayer){{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
 		-- compo(bayer,2){{1},{3},{2},{4}}
+		compo(bayer){{1},{3},{2},{4}}
 		-- vac(5,19) --(7,29)
-		vac(5,17)
+		-- vac(5,17)----
     -- package.path = './lib/?.lua;' .. package.path
 	for match in (package.path..';'):gmatch("(.-)?.lua;") do
 		package.path = package.path .. ';' .. match .. "../lib/?.lua"
@@ -466,6 +467,7 @@ elseif MODE==10 or MODE==11 then
                 while stat.running do stat:next_image() end
             end
         end
+		reducer:boostBorderColors()
 		-- for i=1,16 do reducer:boostBorderColors() end
         io.stderr:write(string.rep(' ',79)..'\r')
         io.stderr:flush()
@@ -1057,7 +1059,7 @@ function AUDIO:new(file)
 	local loudnorm = '-af loudnorm=I=-16:LRA=11 '
 	if true then
 		local measured={}
-		local IN,line = assert(io.popen(FFMPEG..' -i "'..file ..'" -af loudnorm=I=-16:LRA=11:tp=-2:print_format=json -ac 1 -vn -f null x 2>&1', 'r'))
+		local IN,line = assert(io.popen(FFMPEG..' -i "'..file ..'" -af loudnorm=I=-16:LRA=11:tp=-1.5:print_format=json -ac 1 -vn -f null x 2>&1', 'r'))
 		for line in IN:lines() do
 			-- print(line)
 			local k,v = line:match('"([^"]+)" : "([^"]+)"')
@@ -1072,7 +1074,7 @@ function AUDIO:new(file)
 		IN:close()	
 		io.stderr:write('\r                             \r')
 		io.stderr:flush()
-		loudnorm = '-af loudnorm=linear=true:I=-16:LRA=11:tp=-2' .. 
+		loudnorm = '-af loudnorm=linear=true:I=-16:LRA=11:tp=-1.5' .. 
 		':measured_I=' .. measured['input_i'] ..
 		':measured_LRA=' .. measured['input_lra'] ..
 		':measured_tp=' .. measured['input_tp'] ..
@@ -1118,7 +1120,7 @@ function AUDIO:next_sample()
 	end
 	local v,g = 0,4
 	for i=1,siz do v = v + buf:byte(i) end
-	self.buf,v = buf:sub(siz+1),g*(v/(siz*4)-32) + 31.5
+	self.buf,v = buf:sub(siz+1),g*(v/(siz*4)-32) + 32
 	if v<0 then v=0 elseif v>63 then v=63 end
 	return math.floor(v)
 end
