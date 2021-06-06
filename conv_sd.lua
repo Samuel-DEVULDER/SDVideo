@@ -145,15 +145,43 @@ function AUDIO:new(file)
 		end
 	end
 	
+	local loudnorm = '-af loudnorm=I=-16:LRA=11 '
+	if true then
+		local measured={}
+		local IN,line = assert(io.popen(FFMPEG..' -i "'..file ..'" -af loudnorm=I=-16:LRA=11:tp=-2:print_format=json -ac 1 -vn -f null x 2>&1', 'r'))
+		for line in IN:lines() do
+			-- print(line)
+			local k,v = line:match('"([^"]+)" : "([^"]+)"')
+			if k then
+				measured[k] = v
+				print(k,v)
+			elseif line:match('spped=') then
+				io.stderr:write(line)
+				io.stderr:flush()
+			end
+		end
+		IN:close()	
+		io.stderr:write('\r                             \r')
+		io.stderr:flush()
+		loudnorm = '-af loudnorm=linear=true:I=-16:LRA=11:tp=-2' .. 
+		':measured_I=' .. measured['input_i'] ..
+		':measured_LRA=' .. measured['input_lra'] ..
+		':measured_tp=' .. measured['input_tp'] ..
+		':measured_thresh=' .. measured['input_thresh'] ..
+		':offset=' .. measured['target_offset'].. 
+		' '
+		-- print(loudnorm)
+	end
+	
 	local hz = round(size*1000000/CYCLES)
 	local o = {
 		hz = hz,
-		stream = assert(io.popen(FFMPEG..' -i "'..file ..'" -v 0 -af ' ..
+		stream = assert(io.popen(FFMPEG..' -i "'..file ..'" -v 0 ' ..
 		-- 'dynaudnorm=f=8000:c:b:s=10:m=4 ' ..
 		-- 'dynaudnorm=p=0.71:m=100:s=10:g=15 ' ..
 		-- 'dynaudnorm=p=0.71:m=6:s=10:g=15 ' ..
 		-- 'dynaudnorm=p=0.71:s=12:g=15:m=12:f=8000 ' ..
-		'loudnorm=I=-16:LRA=11:TP=-1.5 ' ..
+		loudnorm ..
 		'-f u8 -ac 1 -ar '..hz..' -acodec pcm_u8 pipe:', 'rb')),
 		size = size,
 		mute = '',
@@ -1154,12 +1182,14 @@ function replace_yt(arg)
 			else
 				table.insert(all,vid)
 			end
+			local YT_DL=YT_DL..' --no-check-certificate'
 			for _,vid in ipairs(all) do
 				local IN,line,file = assert(io.popen(YT_DL..' --geo-bypass --restrict-filenames -o "%(title)s--%(id)s" --get-filename ' .. vid, 'r'))
 				for line in IN:lines() do file = file or line .. '.mkv' end
 				IN:close()
 				local ok = exists(file) and 0 or 1
 				ok = ok==0 and 0 or os.execute(YT_DL .. ' -f 18 --geo-bypass --merge-output-format mkv -o "'.. file .. '" ' .. vid)
+				ok = ok==0 and 0 or os.execute(YT_DL .. ' -f "best[height<=200]" --geo-bypass --merge-output-format mkv -o "'.. file .. '" ' .. vid)
 				ok = ok==0 and 0 or os.execute(YT_DL .. ' --geo-bypass --merge-output-format mkv -o "'.. file .. '" ' .. vid)
 				if ok==0 then table.insert(out, file) end
 			end
@@ -1215,8 +1245,12 @@ if #arg>1 then -- infer name
     io.stderr:flush()
 end
 local out = OUT:new(file..'.sd')
+local first = true
 for _,f in ipairs(arg) do
     local conv = CONVERTER:new(f,out,FPS)
-    if conv then conv:process() end
+    if conv then 
+		if not first then io.stdout:write('\n') else first=nil end
+		conv:process() 
+	end
 end
-out:close();
+out:close()
