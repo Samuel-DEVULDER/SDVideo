@@ -585,10 +585,6 @@ INIT9
   ORA   #$04          set b2
   STA   <$CF          selection PB
 
-*-------------------------------------------------------
-* Lancement de la commande CMD18 et saut de huit blocs
-*-------------------------------------------------------
-READ_VID
 * Passage progressif du CNA a 32
   CLRA
 INIT10
@@ -601,6 +597,10 @@ INIT11
   CMPA  #33
   BNE   INIT10
 
+*-------------------------------------------------------
+* Lancement de la commande CMD18 et saut de huit blocs
+*-------------------------------------------------------
+READ_VID
   LDU   #CMD18        adresse commande CMD18
   JSR   $A028         EXCMD = execution commande
   VAR   PATCH_READ,-2
@@ -670,17 +670,6 @@ STOP
   VAR   PATCH_FIN,-2
 *  BCS   STOP
 
-* Passage progressif du CNA a 0
-  LDA   <$CD
-EXIT10
-  STA   <$CD
-  LDB   #20
-EXIT11
-  DECB
-  BNE   EXIT11
-  DECA
-  BNE   EXIT10
-  
 * recommencer la lecture du fichier
   JMP   READ_VID
 
