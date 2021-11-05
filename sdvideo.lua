@@ -43,7 +43,7 @@ local function round(x)
 	return math.floor(x+.5)
 end
 local function exists(file)
-   local ok, err, code = os.rename(file, file)
+   local ok, err, code = file and os.rename(file, file)
    if not ok then
       if code == 13 then
          -- Permission denied, but it exists
@@ -61,10 +61,10 @@ end
 local function locate(file,...)
 	local pwd = arg[0]:match("(.*[/\\])") or ''
 	for _,sep in ipairs{'\\','/'} do
-		for _,root in ipairs{pwd, pwd .. '..' .. sep} do
+		for _,root in ipairs{pwd, pwd .. '../'} do
 			for _,dir in ipairs{'', ...} do
-				dir = dir=='' and dir or dir..sep
-				local tmp = root .. dir .. file
+				dir = dir=='' and dir or dir..'/'
+				local tmp = (root .. dir .. file):gsub('/',sep)
 				if exists(tmp) then return tmp end
 			end
 		end
@@ -274,7 +274,7 @@ local function vac(n,m)
         -- print(m2)
         vnc[y][x] = r
     end
-	if n==8 and m==8 then print(vnc) end
+	-- if n==8 and m==8 then print(vnc) end
     return vnc
 end
 local function norm(t)
@@ -1056,16 +1056,20 @@ function AUDIO:new(file)
 		end
 	end
 	
-	local loudnorm = '-af loudnorm=I=-16:LRA=11 '
+	local hz = round(size*1000000/CYCLES)
+	local I='I=-12' -- -16
+	local LRA='LRA=11'
+	local tp='tp=-1.7'  -- -1.5
+	local loudnorm = '-af loudnorm='..I..':'..LRA..' '
 	if true then
 		local measured={}
-		local IN,line = assert(io.popen(FFMPEG..' -i "'..file ..'" -af loudnorm=I=-16:LRA=11:tp=-1.5:print_format=json -ac 1 -vn -f null x 2>&1', 'r'))
+		local IN,line = assert(io.popen(FFMPEG..' -i "'..file ..'" -ar '..hz..' -af loudnorm='..I..':'..LRA..':'..tp..':print_format=json -ac 1 -vn -f null x 2>&1', 'r'))
 		for line in IN:lines() do
 			-- print(line)
 			local k,v = line:match('"([^"]+)" : "([^"]+)"')
 			if k then
 				measured[k] = v
-				-- print(k,v)
+				print(k,v)
 			elseif line:match('spped=') then
 				io.stderr:write(line)
 				io.stderr:flush()
@@ -1074,7 +1078,7 @@ function AUDIO:new(file)
 		IN:close()	
 		io.stderr:write('\r                             \r')
 		io.stderr:flush()
-		loudnorm = '-af loudnorm=linear=true:I=-16:LRA=11:tp=-1.5' .. 
+		loudnorm = '-af loudnorm=linear=true:'..I..':'..LRA..':'..tp.. 
 		':measured_I=' .. measured['input_i'] ..
 		':measured_LRA=' .. measured['input_lra'] ..
 		':measured_tp=' .. measured['input_tp'] ..
@@ -1084,7 +1088,6 @@ function AUDIO:new(file)
 		-- print(loudnorm)
 	end
 	
-	local hz = round(size*1000000/CYCLES)
 	local o = {
 		hz = hz,
 		stream = assert(io.popen(FFMPEG..' -i "'..file ..'" -v 0 ' ..
@@ -1095,13 +1098,13 @@ function AUDIO:new(file)
 		-- 'loudnorm=I=-16:LRA=11:TP=-1.5 ' ..
 		-- '-af loudnorm=I=-16:LRA=11 ' ..
 		loudnorm ..
-		'-f u8 -ac 1 -ar '..hz..' -acodec pcm_u8 pipe:', 'rb')),
+		'-ac 1 -ar '..hz..' -f s8 -c:a pcm_s8 pipe:', 'rb')),
 		size = size,
 		mute = '',
 		buf = '', -- buffer
 		running = true
 	}
-	for i=1,size do o.mute = o.mute .. string.char(128) end
+	for i=1,size do o.mute = o.mute .. string.char(0) end
 	setmetatable(o, self)
 	self.__index = self
 	return o
@@ -1119,8 +1122,8 @@ function AUDIO:next_sample()
 		buf = buf .. t
 	end
 	local v,g = 0,4
-	for i=1,siz do v = v + buf:byte(i) end
-	self.buf,v = buf:sub(siz+1),g*(v/(siz*4)-32) + 32
+	for i=1,siz do v = v + ((buf:byte(i)+128)%256)-128 end
+	self.buf,v = buf:sub(siz+1),g*v/(siz*4) + 32
 	if v<0 then v=0 elseif v>63 then v=63 end
 	return math.floor(v)
 end
@@ -1876,7 +1879,7 @@ function CONVERTER:_stat()
 	end
 	total,threshold = 0
 	for i=127,stat.max-1 do total = total + stat.histo[i] end
-	total,threshold = 0, total * .02
+	total,threshold = 0, total * .04
 	for i=stat.max-1,127,-1 do
 		total = total + stat.histo[i]
 		if total>threshold then
@@ -2136,11 +2139,13 @@ function replace_yt(arg)
 				local IN,line,file = assert(io.popen(YT_DL..' --geo-bypass --restrict-filenames -o "%(title)s--%(id)s" --get-filename ' .. vid, 'r'))
 				for line in IN:lines() do file = file or line .. '.mkv' end
 				IN:close()
-				local ok = exists(file) and 0 or 1
-				ok = ok==0 and 0 or os.execute(YT_DL .. ' -f 18 --geo-bypass --merge-output-format mkv -o "'.. file .. '" ' .. vid)
-				ok = ok==0 and 0 or os.execute(YT_DL .. ' -f "best[height<=200]" --geo-bypass --merge-output-format mkv -o "'.. file .. '" ' .. vid)
-				ok = ok==0 and 0 or os.execute(YT_DL .. ' --geo-bypass --merge-output-format mkv -o "'.. file .. '" ' .. vid)
-				if ok==0 then table.insert(out, file) end
+				if file then
+					local ok = exists(file) and 0 or 1
+					ok = ok==0 and 0 or os.execute(YT_DL .. ' -f 18 --geo-bypass --merge-output-format mkv -o "'.. file .. '" ' .. vid)
+					ok = ok==0 and 0 or os.execute(YT_DL .. ' -f "best[height<=200]" --geo-bypass --merge-output-format mkv -o "'.. file .. '" ' .. vid)
+					ok = ok==0 and 0 or os.execute(YT_DL .. ' --geo-bypass --merge-output-format mkv -o "'.. file .. '" ' .. vid)
+					if ok==0 then table.insert(out, file) end
+				end
 			end
 		else
 			table.insert(out,vid)
