@@ -38,6 +38,7 @@ Each pixel needs 6 bits, meaning that one can pack 4 pixels in only 3 bytes. As 
 ## Example
 
 One can find an example of video made using this tool in the [Demonstration section](http://dcmoto.free.fr/programmes/sddrive-bad-apple/index.html) of the DCMOTO web site.
+
 ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/01.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/02.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/03.png) ![](http://dcmoto.free.fr/programmes/sddrive-bad-apple/04.png)
 
 # sdvideo.lua
