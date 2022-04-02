@@ -1057,19 +1057,19 @@ function AUDIO:new(file)
 	end
 	
 	local hz = round(size*1000000/CYCLES)
-	local I='I=-12' -- -16
+	local I='I=-14'
 	local LRA='LRA=11'
-	local tp='tp=-1.7'  -- -1.5
+	local tp='tp=-1.5'
 	local loudnorm = '-af loudnorm='..I..':'..LRA..' '
 	if true then
 		local measured={}
-		local IN,line = assert(io.popen(FFMPEG..' -i "'..file ..'" -ar '..hz..' -af loudnorm='..I..':'..LRA..':'..tp..':print_format=json -ac 1 -vn -f null x 2>&1', 'r'))
+		local IN,line = assert(io.popen(FFMPEG..' -i "'..file ..'" -ar '..hz..' -af loudnorm=print_format=json -ac 1 -vn -f null x 2>&1', 'r'))
 		for line in IN:lines() do
 			-- print(line)
 			local k,v = line:match('"([^"]+)" : "([^"]+)"')
 			if k then
 				measured[k] = v
-				-- print(k,v)
+				print(k,v)
 			elseif line:match('spped=') then
 				io.stderr:write(line)
 				io.stderr:flush()

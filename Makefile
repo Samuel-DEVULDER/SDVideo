@@ -118,7 +118,7 @@ tst: tst_conv_sd tst_sdvideo
 
 tst_conv_sd: $(ALL)
 	nice -19 \
-	$(LUA) conv_sd.lua $(BadApple_URL)
+	$(LUA) conv_sd.lua https://www.youtube.com/watch?v=uOyaCOViAPA
 	
 tst_sdvideo: $(ALL)
 	for i in {0..19}; do \

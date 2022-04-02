@@ -289,21 +289,6 @@ ERRORMO0
   FCB   0
   
 *------------------------------------------------------
-* Initialisations MO6 / TO8 / TO9+
-*------------------------------------------------------
-INIT2
-  CLR   $1D,X         change couleur cadre (noir)
-  LDA   ,X            PIA systeme 
-  ANDA  #$FB          clear mute bit 
-  STA   ,X            modification PIA
-  
-  IFEQ  (MODE-COL3MO)*(MODE-COL3TO)
-  JSR   PALETTE
-  ENDC
-
-  JMP   INIT8         suite des initialisations
-
-*------------------------------------------------------
 * Initialisations PALETTE
 *------------------------------------------------------  
 PALETTE
@@ -331,6 +316,21 @@ PALETTE4
   BNE   PALETTE4
   PULS  D,X,U,DP,PC
   
+*------------------------------------------------------
+* Initialisations MO6 / TO8 / TO9+
+*------------------------------------------------------
+INIT2
+  CLR   $1D,X         change couleur cadre (noir)
+  LDA   ,X            PIA systeme 
+  ANDA  #$FB          clear mute bit 
+  STA   ,X            modification PIA
+  
+  IFEQ  (MODE-COL3MO)*(MODE-COL3TO)
+  JSR   PALETTE
+  ENDC
+
+  JMP   INIT8         suite des initialisations
+
 *------------------------------------------------------
 * Initialisations communes TO7-TO8 
 *------------------------------------------------------
