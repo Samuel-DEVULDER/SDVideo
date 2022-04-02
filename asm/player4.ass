@@ -410,10 +410,10 @@ PATCH_TO
 PATCH2
   ENDC
 
-  CMPB  #3
-  BNE  PATCH3
-  JMP  INIT2         TO8
-PATCH3
+  CMPB  #3            TO8
+  BEQ   INIT2
+  CMPB  #6            TO9+
+  BEQ   INIT2
 
   IFEQ  MODE-COL3TO
   JSR   ERRORTO
