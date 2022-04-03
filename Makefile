@@ -44,9 +44,9 @@ ifeq ($(OS),win)
 	BAT_DIR=%~dsp0
 	SETENV=set
 	FFMPEG_URL=https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.7z 
-	YT_DL_URL=https://youtube-dl.org/downloads/latest/youtube-dl.exe
+	YT_DL_URL=https://github.com/yt-dlp/yt-dlp/releases/download/2022.03.08.1/yt-dlp_min.exe
 else
-	YT_DL_URL=https://yt-dl.org/downloads/latest/youtube-dl
+	YT_DL_URL=https://github.com/yt-dlp/yt-dlp/releases/download/2022.03.08.1/yt-dlp
 endif
 
 DISTRO=SDDrive-$(VERSION)-$(OS)-$(MACHINE)
@@ -58,7 +58,7 @@ BIN=bin/bootblk.raw bin/player0.raw bin/player1.raw \
 LUA=tools/luajit$(EXE)
 C6809=tools/c6809$(EXE)
 FFMPEG=tools/ffmpeg$(EXE)
-YT_DL=tools/youtube-dl$(EXE)
+YT_DL=tools/yt-dlp$(EXE)
 
 ALL=$(LUA) $(BIN) $(FFMPEG) $(YT_DL)
 
@@ -155,7 +155,7 @@ $(FFMPEG):
 $(YT_DL):
 	$(WGET) $(YT_DL_URL) -O $@
 	$(MKEXE) $@
-	$(WGET) https://raw.githubusercontent.com/ytdl-org/youtube-dl/master/LICENSE -O $@-LICENSE
+	$(WGET) https://raw.githubusercontent.com/yt-dlp/yt-dlp/master/LICENSE -O $@-LICENSE
 
 ##############################################################################
 # Compile our stuff
