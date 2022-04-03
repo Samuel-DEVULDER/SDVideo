@@ -44,7 +44,7 @@ ifeq ($(OS),win)
 	BAT_DIR=%~dsp0
 	SETENV=set
 	FFMPEG_URL=https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.7z 
-	YT_DL_URL=https://github.com/yt-dlp/yt-dlp/releases/download/2022.03.08.1/yt-dlp_min.exe
+	YT_DL_URL=https://github.com/yt-dlp/yt-dlp/releases/download/2022.03.08.1/yt-dlp_x86.exe
 else
 	YT_DL_URL=https://github.com/yt-dlp/yt-dlp/releases/download/2022.03.08.1/yt-dlp
 endif
@@ -289,7 +289,8 @@ VAR_Indi=FPS=-20
 
 # Microcosmos
 # Micro_URL=https://vimeo.com/84981267
-URL_Micro=https://www.dailymotion.com/video/x84o53
+# URL_Micro=https://www.dailymotion.com/video/x84o53
+URL_Micro=https://www.youtube.com/watch?v=LdDzu1QDP18
 VID_Micro=2 3 18 19
 
 # DaftPunk - Discovery
