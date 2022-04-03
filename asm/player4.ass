@@ -413,7 +413,7 @@ PATCH2
   CMPB  #3            TO8
   BEQ   INIT2
   CMPB  #6            TO9+
-  BEQ   INIT2
+  BEQ   *-4
 
   IFEQ  MODE-COL3TO
   JSR   ERRORTO
