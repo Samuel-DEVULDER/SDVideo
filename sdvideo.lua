@@ -1057,9 +1057,9 @@ function AUDIO:new(file)
 	end
 	
 	local hz = round(size*1000000/CYCLES)
-	local I='I=-14'
+	local I='I=-16' -- volume final -24=superbas, -16=fable
 	local LRA='LRA=11'
-	local tp='tp=-1.5'
+	local tp='tp=-2'
 	local loudnorm = '-af loudnorm='..I..':'..LRA..' '
 	if true then
 		local measured={}
@@ -1069,8 +1069,8 @@ function AUDIO:new(file)
 			local k,v = line:match('"([^"]+)" : "([^"]+)"')
 			if k then
 				measured[k] = v
-				print(k,v)
-			elseif line:match('spped=') then
+				-- print(k,v)
+			elseif line:match('spped=') then -- debug
 				io.stderr:write(line)
 				io.stderr:flush()
 			end
@@ -1121,9 +1121,9 @@ function AUDIO:next_sample()
 		end
 		buf = buf .. t
 	end
-	local v,g = 0,4
+	local v,g = 0,2
 	for i=1,siz do v = v + ((buf:byte(i)+128)%256)-128 end
-	self.buf,v = buf:sub(siz+1),g*v/(siz*4) + 32
+	self.buf,v = buf:sub(siz+1),g*v/(siz*4) + 32 + math.random()
 	if v<0 then v=0 elseif v>63 then v=63 end
 	return math.floor(v)
 end

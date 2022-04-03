@@ -145,17 +145,21 @@ function AUDIO:new(file)
 		end
 	end
 	
-	local loudnorm = '-af loudnorm=I=-16:LRA=11 '
+	local hz = round(size*1000000/CYCLES)
+	local I='I=-16' -- volume final -24=superbas, -16=fable
+	local LRA='LRA=11'
+	local tp='tp=-2'
+	local loudnorm = '-af loudnorm='..I..':'..LRA..' '
 	if true then
 		local measured={}
-		local IN,line = assert(io.popen(FFMPEG..' -i "'..file ..'" -af loudnorm=I=-16:LRA=11:tp=-2:print_format=json -ac 1 -vn -f null x 2>&1', 'r'))
+		local IN,line = assert(io.popen(FFMPEG..' -i "'..file ..'" -ar '..hz..' -af loudnorm=print_format=json -ac 1 -vn -f null x 2>&1', 'r'))
 		for line in IN:lines() do
 			-- print(line)
 			local k,v = line:match('"([^"]+)" : "([^"]+)"')
 			if k then
 				measured[k] = v
 				-- print(k,v)
-			elseif line:match('spped=') then
+			elseif line:match('spped=') then -- debug
 				io.stderr:write(line)
 				io.stderr:flush()
 			end
@@ -163,7 +167,7 @@ function AUDIO:new(file)
 		IN:close()	
 		io.stderr:write('\r                             \r')
 		io.stderr:flush()
-		loudnorm = '-af loudnorm=linear=true:I=-16:LRA=11:tp=-2' .. 
+		loudnorm = '-af loudnorm=linear=true:'..I..':'..LRA..':'..tp.. 
 		':measured_I=' .. measured['input_i'] ..
 		':measured_LRA=' .. measured['input_lra'] ..
 		':measured_tp=' .. measured['input_tp'] ..
@@ -173,7 +177,6 @@ function AUDIO:new(file)
 		-- print(loudnorm)
 	end
 	
-	local hz = round(size*1000000/CYCLES)
 	local o = {
 		hz = hz,
 		stream = assert(io.popen(FFMPEG..' -i "'..file ..'" -v 0 ' ..
@@ -205,9 +208,9 @@ function AUDIO:next_sample()
 		end
 		buf = buf .. t
 	end
-	local v,g = 0,4
+	local v,g = 0,2
 	for i=1,siz do v = v + buf:byte(i) end
-	self.buf,v = buf:sub(siz+1),g*(v/(siz*4)-32) + 32
+	self.buf,v = buf:sub(siz+1),g*(v/(siz*4)-32) + 32 + math.random()
 	if v<0 then v=0 elseif v>63 then v=63 end
 	return math.floor(v)
 end
