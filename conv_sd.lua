@@ -63,15 +63,28 @@ local function env(var, default)
 	return loadstring('return ' .. (os.getenv(var) or default))();
 end
 local function locate(file,...)
+	-- look locally
 	local pwd = arg[0]:match("(.*[/\\])") or ''
-	for _,sep in ipairs{'\\','/'} do
-		for _,root in ipairs{pwd, pwd .. '..' .. sep} do
-			for _,dir in ipairs{'', ...} do
-				dir = dir=='' and dir or dir..sep
-				local tmp = root .. dir .. file
-				if exists(tmp) then return tmp end
+	for _,ext in ipairs{'','.exe'} do
+		for _,sep in ipairs{'\\','/'} do
+			for _,root in ipairs{pwd, pwd .. '..' .. sep} do
+				for _,dir in ipairs{'', ...} do
+					dir = dir=='' and dir or dir..sep
+					local tmp = root .. dir .. file .. ext
+					if exists(tmp) then return tmp end
+				end
 			end
 		end
+	end
+	-- else try if system knows about the file
+	local IN = io.popen('which ' .. file, 'r')
+	if IN then
+		local found, line
+		for line in IN:lines() do
+			if not line:match(" ") then found = line end
+		end	
+		IN:close()
+		if found then return found end
 	end
 	error('Cannot locate "' .. file .. '"')
 end
@@ -80,8 +93,8 @@ local GRAY          = env('GRAY','nil')
 local FPS           = env('FPS',11)
 local dither        = env('DITH', 3) -- -8 for vac
 
-local FFMPEG        = locate('ffmpeg.exe', 'tools')
-local YT_DL         = locate('youtube-dl.exe', 'tools')
+local FFMPEG        = locate('ffmpeg', 'tools')
+local YT_DL         = locate('yt-dlp', 'tools')
 local BIN           = locate('bin/')
 
 local CYCLES        = 199 -- cycles par échantillons audio
@@ -146,7 +159,7 @@ function AUDIO:new(file)
 	end
 	
 	local hz = round(size*1000000/CYCLES)
-	local I='I=-16' -- volume final -24=superbas, -16=fable
+	local I='I=-14' -- volume final -24=superbas, -16=fable
 	local LRA='LRA=11'
 	local tp='tp=-2'
 	local loudnorm = '-af loudnorm='..I..':'..LRA..' '
@@ -208,7 +221,7 @@ function AUDIO:next_sample()
 		end
 		buf = buf .. t
 	end
-	local v,g = 0,2
+	local v,g = 0,2.2
 	for i=1,siz do v = v + buf:byte(i) end
 	self.buf,v = buf:sub(siz+1),g*(v/(siz*4)-32) + 32 + math.random()
 	if v<0 then v=0 elseif v>63 then v=63 end
@@ -1171,12 +1184,13 @@ end
 function replace_yt(arg)
 	local updated = false
 	local out = {}
+	local YT_DL=YT_DL..' --no-check-certificate --geo-bypass'
 	for i,vid in ipairs(arg) do
 		if vid:sub(1,8)=='https://' or vid:sub(1,7)=='http://' then
 			updated = updated or 0==os.execute(YT_DL .. ' -U -q')
 			local all={}
 			if vid:find('/playlist?') then
-				local IN,line = assert(io.popen(YT_DL..' -i --geo-bypass --get-id '..vid, 'r'))
+				local IN,line = assert(io.popen(YT_DL..' -i --get-id '..vid, 'r'))
 				for line in IN:lines() do
 					table.insert(all,'https://youtu.be/'.. line)
 					-- table.insert(all, '"'..line..'"')
@@ -1185,15 +1199,14 @@ function replace_yt(arg)
 			else
 				table.insert(all,vid)
 			end
-			local YT_DL=YT_DL..' --no-check-certificate'
 			for _,vid in ipairs(all) do
-				local IN,line,file = assert(io.popen(YT_DL..' --geo-bypass --restrict-filenames -o "%(title)s--%(id)s" --get-filename ' .. vid, 'r'))
+				local IN,line,file = assert(io.popen(YT_DL..' --restrict-filenames -o "%(title)s--%(id)s" --get-filename ' .. vid, 'r'))
 				for line in IN:lines() do file = file or line .. '.mkv' end
 				IN:close()
-				local ok = exists(file) and 0 or 1
-				ok = ok==0 and 0 or os.execute(YT_DL .. ' -f 18 --geo-bypass --merge-output-format mkv -o "'.. file .. '" ' .. vid)
-				ok = ok==0 and 0 or os.execute(YT_DL .. ' -f "best[height<=200]" --geo-bypass --merge-output-format mkv -o "'.. file .. '" ' .. vid)
-				ok = ok==0 and 0 or os.execute(YT_DL .. ' --geo-bypass --merge-output-format mkv -o "'.. file .. '" ' .. vid)
+				local ok = file and exists(file) and 0 or 1
+				ok = ok==0 and 0 or os.execute(YT_DL .. ' -f 18 --merge-output-format mkv -o "'.. file .. '" ' .. vid)
+				ok = ok==0 and 0 or os.execute(YT_DL .. ' -f "best[height<=200]" --merge-output-format mkv -o "'.. file .. '" ' .. vid)
+				ok = ok==0 and 0 or os.execute(YT_DL .. ' --merge-output-format mkv -o "'.. file .. '" ' .. vid)
 				if ok==0 then table.insert(out, file) end
 			end
 		else

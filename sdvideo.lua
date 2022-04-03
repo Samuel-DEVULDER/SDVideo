@@ -59,15 +59,28 @@ local function env(var, default)
 	return loadstring('return ' .. (os.getenv(var) or default))();
 end
 local function locate(file,...)
+	-- look locally
 	local pwd = arg[0]:match("(.*[/\\])") or ''
-	for _,sep in ipairs{'\\','/'} do
-		for _,root in ipairs{pwd, pwd .. '../'} do
-			for _,dir in ipairs{'', ...} do
-				dir = dir=='' and dir or dir..'/'
-				local tmp = (root .. dir .. file):gsub('/',sep)
-				if exists(tmp) then return tmp end
+	for _,ext in ipairs{'','.exe'} do
+		for _,sep in ipairs{'\\','/'} do
+			for _,root in ipairs{pwd, pwd .. '..' .. sep} do
+				for _,dir in ipairs{'', ...} do
+					dir = dir=='' and dir or dir..sep
+					local tmp = root .. dir .. file .. ext
+					if exists(tmp) then return tmp end
+				end
 			end
 		end
+	end
+	-- else try if system knows about the file
+	local IN = io.popen('which ' .. file, 'r')
+	if IN then
+		local found, line
+		for line in IN:lines() do
+			if not line:match(" ") then found = line end
+		end	
+		IN:close()
+		if found then return found end
 	end
 	error('Cannot locate "' .. file .. '"')
 end
@@ -77,8 +90,8 @@ end
 local MODE          = env('MODE',7)
 local FPS           = env('FPS',11)
 
-local FFMPEG        = locate('ffmpeg.exe', 'tools')
-local YT_DL         = locate('youtube-dl.exe', 'tools')
+local FFMPEG        = locate('ffmpeg', 'tools')
+local YT_DL         = locate('yt-dlp', 'tools')
 local BIN           = locate('bin/')
 
 -- constants
@@ -434,10 +447,10 @@ elseif MODE==10 or MODE==11 then
 		compo(bayer){{1},{3},{2},{4}}
 		-- vac(5,19) --(7,29)
 		-- vac(5,17)----
-    -- package.path = './lib/?.lua;' .. package.path
 	for match in (package.path..';'):gmatch("(.-)?.lua;") do
 		package.path = package.path .. ';' .. match .. "../lib/?.lua"
     end
+    package.path = './lib/?.lua;' .. package.path
     function getpicturesize() return 80,50 end
     function waitbreak() end
     run = function(name) require(name:gsub('%..*','')) end
@@ -1057,7 +1070,7 @@ function AUDIO:new(file)
 	end
 	
 	local hz = round(size*1000000/CYCLES)
-	local I='I=-16' -- volume final -24=superbas, -16=fable
+	local I='I=-14' -- volume final -24=superbas, -16=fable
 	local LRA='LRA=11'
 	local tp='tp=-2'
 	local loudnorm = '-af loudnorm='..I..':'..LRA..' '
@@ -1121,7 +1134,7 @@ function AUDIO:next_sample()
 		end
 		buf = buf .. t
 	end
-	local v,g = 0,2
+	local v,g = 0,2.2
 	for i=1,siz do v = v + ((buf:byte(i)+128)%256)-128 end
 	self.buf,v = buf:sub(siz+1),g*v/(siz*4) + 32 + math.random()
 	if v<0 then v=0 elseif v>63 then v=63 end
