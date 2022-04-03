@@ -135,13 +135,13 @@ tst_sdvideo: $(ALL)
 ##############################################################################
 # Build/download external tools
 
-$(LUA): LuaJIT $(wildcard LuaJIT/src/*)
+$(LUA): LuaJIT/ $(wildcard LuaJIT/src/*)
 	cd $< && export MAKE="make -f Makefile" && $$MAKE BUILDMODE=static CC="$(CC) -static" CFLAGS="$(CFLAGS)"  
 	$(CP) $</src/$(notdir $@) "$@"
 	$(CP) $</COPYRIGHT "$@"-COPYRIGHT
 	$(STRIP) "$@"
 
-LuaJIT:
+LuaJIT/:
 	$(GIT) clone https://github.com/LuaJIT/LuaJIT.git
 
 $(FFMPEG):
