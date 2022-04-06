@@ -444,9 +444,10 @@ elseif MODE==10 or MODE==11 then
     CONFIG.interlace = 'i3'
     CONFIG.dither    = --compo(bayer){{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
 		-- compo(bayer,2){{1},{3},{2},{4}}
-		compo(bayer){{1},{3},{2},{4}}
+		-- compo(bayer){{1},{3},{2},{4}}
 		-- vac(5,19) --(7,29)
-		-- vac(5,17)----
+		-- vac(5,17)
+		vac(3,13)
 	for match in (package.path..';'):gmatch("(.-)?.lua;") do
 		package.path = package.path .. ';' .. match .. "../lib/?.lua"
     end
@@ -528,10 +529,11 @@ elseif MODE==18 or MODE==19 then
     CONFIG.px_size   = {4,1}
     CONFIG.interlace = 'i3'
     CONFIG.dither    = 
-	-- compo(bayer,2){{1},{3},{2},{4}}
+	-- compo(bayer,1){{1},{3},{2},{4}}
 	-- vac(5,19) -- (7,29)
 	-- vac(7,29)
-	vac(5,17)
+	-- vac(5,17) --
+	vac(3,11)
 	-- vac(3,13)
 	-- vac(4,16)
 	CONFIG.palette   = compo{
