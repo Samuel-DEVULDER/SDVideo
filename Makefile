@@ -288,9 +288,8 @@ VID_Indi=10 11 18 19
 VAR_Indi=FPS=-20
 
 # Microcosmos
-# Micro_URL=https://vimeo.com/84981267
 # URL_Micro=https://www.dailymotion.com/video/x84o53
-URL_Micro=https://www.youtube.com/watch?v=LdDzu1QDP18
+URL_Micro=https://vimeo.com/84981267
 VID_Micro=2 3 18 19
 
 # DaftPunk - Discovery
