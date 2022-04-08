@@ -14,11 +14,12 @@ VERSION:=$(shell git describe --tags --abbrev=0)
 MACHINE:=$(shell uname -m)
 DATE:=$(shell date +%FT%T%Z || date)
 TMP:=$(shell mktemp)
-OS:=$(shell uname -o)
+OS:=$(shell uname -o | tr "/" "_")
 EXE=
 
+SHELL=bash
 BAT=.sh
-BAT_1ST=#!/usr/bin/env sh
+BAT_1ST=\#!/usr/bin/env $(SHELL)
 BAT_DIR=`dirname $$0`
 SETENV=export
 MKEXE=chmod a+rx
@@ -236,7 +237,7 @@ $(DISTRO)/examples/fill_all$(BAT):$(DISTRO)/examples/ Makefile
 ifeq ($(OS),win)
 	@for d in $(EXAMPLES); do echo >>$@ "call $$d\runme$(BAT)"; done
 else
-	@for d in $(EXAMPLES); do echo >>$@ "sh $$d/runme$(BAT)"; done
+	@for d in $(EXAMPLES); do echo >>$@ "$$SHELL $$d/runme$(BAT)"; done
 endif
 	@echo >>$@ 'popd'
 	@$(MKEXE) $@
@@ -245,7 +246,7 @@ endif
 ifeq ($(OS),win)
 INVOKE=call ..\..\ 
 else
-INVOKE=sh ../../
+INVOKE=$$SHELL ../../
 endif
 INVOKE:=$(strip $(INVOKE))
 
@@ -253,7 +254,7 @@ $(DISTRO)/examples/%/runme$(BAT): $(DISTRO)/examples/%/ Makefile
 	@echo -n "Generating $@..."
 	@echo  >$@ '$(BAT_1ST)'
 	@echo >>$@ 'pushd $(BAT_DIR)'
-	@echo >>$@ 'echo Building "$*" ($(URL_$*))'
+	@echo >>$@ 'echo Building "$*" -- $(URL_$*)'
 	@for m in $(VAR_$*); do echo >>$@ "$(SETENV) $$m"; done
 	@if test -n "$(VID_$*)"; then \
 		for m in $(VID_$*); do \
