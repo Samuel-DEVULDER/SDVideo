@@ -97,6 +97,8 @@ local FFMPEG        = locate('ffmpeg', 'tools')
 local YT_DL         = locate('yt-dlp', 'tools')
 local BIN           = locate('bin/')
 
+local POPEN_READBIN = FFMPEG:match(".*%.exe") and "rb" or "r"
+
 local CYCLES        = 199 -- cycles par échantillons audio
 local BUFFER_SIZE   = 4096
 local FPS_MAX       = 30
@@ -198,7 +200,7 @@ function AUDIO:new(file)
 		-- 'dynaudnorm=p=0.71:m=6:s=10:g=15 ' ..
 		-- 'dynaudnorm=p=0.71:s=12:g=15:m=12:f=8000 ' ..
 		loudnorm ..
-		'-f u8 -ac 1 -ar '..hz..' -acodec pcm_u8 pipe:', 'rb')),
+		'-f u8 -ac 1 -ar '..hz..' -acodec pcm_u8 pipe:', POPEN_READBIN)),
 		size = size,
 		mute = '',
 		buf = '', -- buffer
@@ -325,7 +327,7 @@ function VIDEO:new(file, w, h, fps)
 			' -i "'..file..'" -v 0 -r '..fps..
 			' -s '..w..'x'..h..
 			' -an -f rawvideo -pix_fmt rgb24 pipe:', 
-			'rb'))
+			POPEN_READBIN))
     }
     setmetatable(o, self)
     self.__index = self
@@ -662,6 +664,7 @@ function CONVERTER:new(file, out, fps)
     local x,y = 80,50
     local IN,line = assert(io.popen(FFMPEG..' -i "'..file ..'" 2>&1', 'r'))
     for line in IN:lines() do
+	-- print(line)
         local h,m,s = line:match('Duration: (%d+):(%d+):(%d+%.%d+),')
         if h and m and s then o.duration = h*3600 + m*60 + s end
         local a,b = line:match(', (%d+)x(%d+)')

@@ -10,15 +10,16 @@ RM=rm
 CP=cp
 7Z=7z
 
-VERSION:=$(shell git describe --abbrev=0)
+VERSION:=$(shell git describe --tags --abbrev=0)
 MACHINE:=$(shell uname -m)
 DATE:=$(shell date +%FT%T%Z || date)
 TMP:=$(shell mktemp)
-OS:=$(shell uname -o)
+OS:=$(shell uname -o | tr "/" "_")
 EXE=
 
+SHELL=bash
 BAT=.sh
-BAT_1ST=#!/usr/bin/env sh
+BAT_1ST=\#!/usr/bin/env $(SHELL)
 BAT_DIR=`dirname $$0`
 SETENV=export
 MKEXE=chmod a+rx
@@ -46,6 +47,7 @@ ifeq ($(OS),win)
 	FFMPEG_URL=https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.7z 
 	YT_DL_URL=https://github.com/yt-dlp/yt-dlp/releases/download/2022.03.08.1/yt-dlp_x86.exe
 else
+	FFMPEG_URL=https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
 	YT_DL_URL=https://github.com/yt-dlp/yt-dlp/releases/download/2022.03.08.1/yt-dlp
 endif
 
@@ -55,12 +57,13 @@ BIN=bin/bootblk.raw bin/player0.raw bin/player1.raw \
     bin/player40.raw bin/player41.raw bin/player42.raw \
 	bin/player43.raw bin/player44.raw bin/player45.raw
 
-LUA=tools/luajit$(EXE)
-C6809=tools/c6809$(EXE)
-FFMPEG=tools/ffmpeg$(EXE)
-YT_DL=tools/yt-dlp$(EXE)
+TOOLS=tools/
+LUA=$(TOOLS)luajit$(EXE)
+C6809=$(TOOLS)c6809$(EXE)
+FFMPEG=$(TOOLS)ffmpeg$(EXE)
+YT_DL=$(TOOLS)yt-dlp$(EXE)
 
-ALL=$(LUA) $(BIN) $(FFMPEG) $(YT_DL)
+ALL=$(TOOLS) $(LUA) $(BIN) $(FFMPEG) $(YT_DL)
 
 ##############################################################################
 
@@ -75,7 +78,8 @@ clean:
 ##############################################################################
 # Distribution stuff
 
-distro: $(DISTRO)
+distro: $(DISTRO) 
+	zip --help >/dev/null || apt-cyg install zip || sudo apt-get install zip
 	zip -u -r "$(DISTRO).zip" "$<"
 
 $(DISTRO): $(ALL) \
@@ -105,9 +109,13 @@ else
 HTML_TO=-|$(SED) 's%tools/luajit\s+%tools/luajit.exe tools/%g'>
 endif
 	
-$(DISTRO)/%.html: %.md
-	grip -h >/dev/null || pip3 install grip
+$(DISTRO)/%.html: %.md 
+	grip -h >/dev/null || make install_grip
 	grip --wide --export "$<" $(HTML_TO) "$@"
+
+install_grip:
+	pip3 -v 2>&1 >/dev/null || sudo apt install python3-pip
+	pip3 install grip
 
 $(DISTRO)/tools/%.lua: %.lua
 	$(SED) 's%\$$Version\$$%$(VERSION)%g;s%\$$Date\$$%$(DATE)%g' $< >$@
@@ -121,7 +129,7 @@ tst_conv_sd: $(ALL)
 	$(LUA) conv_sd.lua https://www.youtube.com/watch?v=uOyaCOViAPA
 	
 tst_sdvideo: $(ALL)
-	for i in {0..19}; do \
+	for i in 0 1 2 3 4 5 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19; do \
 		echo; \
 		echo "MODE=$$i"; \
 		MODE=$$i \
@@ -144,14 +152,25 @@ $(LUA): LuaJIT/ $(wildcard LuaJIT/src/*)
 LuaJIT/:
 	$(GIT) clone https://github.com/LuaJIT/LuaJIT.git
 
+ifeq ($(OS),win)
 $(FFMPEG):
-	$(7Z) --help >/dev/null || apt-cyg install p7zip
+	$(7Z) --help >/dev/null || apt-cyg install p7zip || sudo apt-get install p7zip
 	$(WGET) $(FFMPEG_URL) -O $(TMP)
-	$(7Z) e $(TMP) LICENSE -r -so >$(FFMPEG)-LICENSE
+	$(7Z) e $(TMP) LICENSE -r -so >$(FFMPEG)-LICENSE 
 	$(7Z) e $(TMP) ffmpeg$(EXE) -r -so >$(FFMPEG)
 	$(MKEXE) $(FFMPEG)
 	$(RM) $(TMP)
-	
+else
+$(FFMPEG):
+	$(WGET) $(FFMPEG_URL) -O $(TMP)
+	cd $(TOOLS) && tar xvf $(TMP) 
+	$(CP) $(TOOLS)ffmpeg*static/ffmpeg $(FFMPEG)
+	$(CP) $(TOOLS)ffmpeg*static/readme.txt $(FFMPEG)-README
+	$(CP) $(TOOLS)ffmpeg*static/GPL* $(FFMPEG)-LICENSE
+	$(RM) $(TMP)
+	$(RM) -rf $(TOOLS)ffmpeg*static
+endif
+
 $(YT_DL):
 	$(WGET) $(YT_DL_URL) -O $@
 	$(MKEXE) $@
@@ -218,7 +237,7 @@ $(DISTRO)/examples/fill_all$(BAT):$(DISTRO)/examples/ Makefile
 ifeq ($(OS),win)
 	@for d in $(EXAMPLES); do echo >>$@ "call $$d\runme$(BAT)"; done
 else
-	@for d in $(EXAMPLES); do echo >>$@ "sh $$d/runme$(BAT)"; done
+	@for d in $(EXAMPLES); do echo >>$@ "$$SHELL $$d/runme$(BAT)"; done
 endif
 	@echo >>$@ 'popd'
 	@$(MKEXE) $@
@@ -227,7 +246,7 @@ endif
 ifeq ($(OS),win)
 INVOKE=call ..\..\ 
 else
-INVOKE=sh ../../
+INVOKE=$$SHELL ../../
 endif
 INVOKE:=$(strip $(INVOKE))
 
@@ -235,7 +254,7 @@ $(DISTRO)/examples/%/runme$(BAT): $(DISTRO)/examples/%/ Makefile
 	@echo -n "Generating $@..."
 	@echo  >$@ '$(BAT_1ST)'
 	@echo >>$@ 'pushd $(BAT_DIR)'
-	@echo >>$@ 'echo Building "$*" ($(URL_$*))'
+	@echo >>$@ 'echo Building "$*" -- $(URL_$*)'
 	@for m in $(VAR_$*); do echo >>$@ "$(SETENV) $$m"; done
 	@if test -n "$(VID_$*)"; then \
 		for m in $(VID_$*); do \
@@ -249,6 +268,9 @@ $(DISTRO)/examples/%/runme$(BAT): $(DISTRO)/examples/%/ Makefile
 	@echo >>$@ 'echo Done "$*"'
 	@$(MKEXE) $@
 	@echo "done"
+
+$(DISTRO)/examples/%/:
+	mkdir -p $@
 
 ##############################################################################
 # Example data
@@ -331,3 +353,4 @@ VAR_2nd_R=FPS=11
 # Kefrensh megademo
 URL_Desert=https://www.youtube.com/watch?v=4HuJK5nITyo https://www.youtube.com/watch?v=fYpLZhkkyRs
 VID_Desert=4 5
+
