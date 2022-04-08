@@ -104,7 +104,7 @@ local FILTER_THRES  = 0.005*0 + .02*0 + .03*0 + 1/24
 local FILTER_ALPHA  = env('ALPHA',0)
 local EXPONENTIAL   = true
 local ZIGZAG        = true
-local BUFFER_SIZE   = 4096*4*4
+local BUFFER_SIZE   = 4096
 local CONFIG        = nil
 -- local GRAY_R		= 0.30
 -- local GRAY_G		= 0.59
@@ -451,9 +451,11 @@ elseif MODE==10 or MODE==11 then
 		-- vac(5,17)
 		vac(3,13)
 	for match in (package.path..';'):gmatch("(.-)?.lua;") do
-		package.path = package.path .. ';' .. match .. "../lib/?.lua"
-    end
-    package.path = './lib/?.lua;' .. package.path
+		package.path = package.path .. ';' .. match ..           "./lib/?.lua"
+		package.path = package.path .. ';' .. match ..          "../lib/?.lua"
+		package.path = package.path .. ';' .. match ..    "../tools/lib/?.lua"
+		package.path = package.path .. ';' .. match .. "../../tools/lib/?.lua"
+	end
     function getpicturesize() return 80,50 end
     function waitbreak() end
     run = function(name) require(name:gsub('%..*','')) end
