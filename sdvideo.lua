@@ -94,6 +94,8 @@ local FFMPEG        = locate('ffmpeg', 'tools')
 local YT_DL         = locate('yt-dlp', 'tools')
 local BIN           = locate('bin/')
 
+local POPEN_READBIN = FFMPEG:match(".*%.exe") and "rb" or "r"
+
 -- constants
 local CYCLES        = 169 -- CYCLES per audio sample
 local FPS_MAX       = 30
@@ -1113,7 +1115,7 @@ function AUDIO:new(file)
 		-- 'loudnorm=I=-16:LRA=11:TP=-1.5 ' ..
 		-- '-af loudnorm=I=-16:LRA=11 ' ..
 		loudnorm ..
-		'-ac 1 -ar '..hz..' -f s8 -c:a pcm_s8 pipe:', 'rb')),
+		'-ac 1 -ar '..hz..' -f s8 -c:a pcm_s8 pipe:', POPEN_READBIN)),
 		size = size,
 		mute = '',
 		buf = '', -- buffer
@@ -1238,7 +1240,7 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, interlace, pset
 			' -i "'..file..'" -v 0 -r '..fps..
 			' -s '..w..'x'..h..
 			' -an -f rawvideo -pix_fmt rgb24 pipe:', 
-			'rb')),
+			POPEN_READBIN)),
 		pset = pset
     }
     setmetatable(o, self)
