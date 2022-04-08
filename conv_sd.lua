@@ -100,7 +100,7 @@ local BIN           = locate('bin/')
 local POPEN_READBIN = FFMPEG:match(".*%.exe") and "rb" or "r"
 
 local CYCLES        = 199 -- cycles par échantillons audio
-local BUFFER_SIZE   = 4096
+local BUFFER_SIZE   = 4096*4
 local FPS_MAX       = 30
 local TIMEOUT       = 2
 local GRAY_THR      = .1 -- .07
@@ -166,6 +166,8 @@ function AUDIO:new(file)
 	local tp='tp=-2'
 	local loudnorm = '-af loudnorm='..I..':'..LRA..' '
 	if true then
+		io.stderr:write('> analyzing audio...')
+		io.stderr:flush()
 		local measured={}
 		local IN,line = assert(io.popen(FFMPEG..' -i "'..file ..'" -ar '..hz..' -af loudnorm=print_format=json -ac 1 -vn -f null x 2>&1', 'r'))
 		for line in IN:lines() do
@@ -174,13 +176,13 @@ function AUDIO:new(file)
 			if k then
 				measured[k] = v
 				-- print(k,v)
-			elseif line:match('spped=') then -- debug
-				io.stderr:write(line)
-				io.stderr:flush()
+			-- elseif line:match('speed=') then -- debug
+				-- io.stderr:write(line)
+				-- io.stderr:flush()
 			end
 		end
 		IN:close()	
-		io.stderr:write('\r                             \r')
+		io.stderr:write('\r                                 \r')
 		io.stderr:flush()
 		loudnorm = '-af loudnorm=linear=true:'..I..':'..LRA..':'..tp.. 
 		':measured_I=' .. measured['input_i'] ..
@@ -886,7 +888,7 @@ function CONVERTER:_stat()
 	local indices,duration = self.indices,self.duration
 	function stat:next_image()
 		self:super_next_image()
-		io.stderr:write(string.format('> analyzing...%s %d%%\r', self.mill[self.cpt % 4], percent(self.cpt/self.fps/duration)))
+		io.stderr:write(string.format('> analyzing video...%s %d%%\r', self.mill[self.cpt % 4], percent(self.cpt/self.fps/duration)))
 		io.stderr:flush()
 	end
 	stat.trames = 0

@@ -104,7 +104,7 @@ local FILTER_THRES  = 0.005*0 + .02*0 + .03*0 + 1/24
 local FILTER_ALPHA  = env('ALPHA',0)
 local EXPONENTIAL   = true
 local ZIGZAG        = true
-local BUFFER_SIZE   = 4096*4
+local BUFFER_SIZE   = 4096*4*4
 local CONFIG        = nil
 -- local GRAY_R		= 0.30
 -- local GRAY_G		= 0.59
@@ -1079,6 +1079,8 @@ function AUDIO:new(file)
 	local tp='tp=-2'
 	local loudnorm = '-af loudnorm='..I..':'..LRA..' '
 	if true then
+		io.stderr:write('> analyzing audio...')
+		io.stderr:flush()
 		local measured={}
 		local IN,line = assert(io.popen(FFMPEG..' -i "'..file ..'" -ar '..hz..' -af loudnorm=print_format=json -ac 1 -vn -f null x 2>&1', 'r'))
 		for line in IN:lines() do
@@ -1087,13 +1089,13 @@ function AUDIO:new(file)
 			if k then
 				measured[k] = v
 				-- print(k,v)
-			elseif line:match('spped=') then -- debug
-				io.stderr:write(line)
-				io.stderr:flush()
+			-- elseif line:match('speed=') then -- debug
+				-- io.stderr:write(line)
+				-- io.stderr:flush()
 			end
 		end
 		IN:close()	
-		io.stderr:write('\r                             \r')
+		io.stderr:write('\r                                     \r')
 		io.stderr:flush()
 		loudnorm = '-af loudnorm=linear=true:'..I..':'..LRA..':'..tp.. 
 		':measured_I=' .. measured['input_i'] ..
@@ -1801,7 +1803,7 @@ function CONVERTER:_stat()
     stat.duration = self.duration
     function stat:next_image()
         self:super_next_image()
-        io.stderr:write(string.format('> analyzing...%s %d%%\r', self.mill[self.cpt % 4], percent(self.cpt/(self.fps*self.duration))))
+        io.stderr:write(string.format('> analyzing video...%s %d%%\r', self.mill[self.cpt % 4], percent(self.cpt/(self.fps*self.duration))))
         io.stderr:flush()
     end
     stat.trames = 0
