@@ -124,7 +124,7 @@ $(DISTRO)/tools/%.lua: %.lua
 # Testing
 tst: tst_conv_sd tst_sdvideo
 
-tst_conv_sd: $(ALL)
+tst_conv_sd: $(FFMPEG) $(ALL)		
 	nice -19 \
 	$(LUA) conv_sd.lua https://www.youtube.com/watch?v=uOyaCOViAPA
 	
@@ -226,7 +226,7 @@ EXAMPLES=Touhou Cat Russians Spinning Skies Bat Turtles A500 2nd_R Desert Micro 
 
 EXAMPLES_RUME=$(EXAMPLES:%=$(DISTRO)/examples/%/runme$(BAT))
 
-do_examples: $(DISTRO)/examples/fill_all$(BAT) $(EXAMPLES_RUME)
+do_examples: $(DISTRO)/examples/fill_all$(BAT) $(EXAMPLES:%=$(DISTRO)/examples/%/) $(EXAMPLES_RUME)
 
 .PHONY: phony
  
