@@ -1076,7 +1076,7 @@ function AUDIO:new(file)
 	end
 	
 	local hz = round(size*1000000/CYCLES)
-	local I='I=-14' -- volume final -24=superbas, -16=fable
+	local I='I=-16' -- volume final -24=superbas, -16=fable
 	local LRA='LRA=11'
 	local tp='tp=-2'
 	local loudnorm = '-af loudnorm='..I..':'..LRA..' '
@@ -1120,6 +1120,7 @@ function AUDIO:new(file)
 		-- '-af loudnorm=I=-16:LRA=11 ' ..
 		loudnorm ..
 		'-ac 1 -ar '..hz..' -f s8 -c:a pcm_s8 pipe:', POPEN_READBIN)),
+		vol=2.2,
 		size = size,
 		mute = '',
 		buf = '', -- buffer
@@ -1142,7 +1143,7 @@ function AUDIO:next_sample()
 		end
 		buf = buf .. t
 	end
-	local v,g = 0,2.2
+	local v,g = 0,self.vol
 	for i=1,siz do v = v + ((buf:byte(i)+128)%256)-128 end
 	self.buf,v = buf:sub(siz+1),g*v/(siz*4) + 32 + math.random()
 	if v<0 then v=0 elseif v>63 then v=63 end
