@@ -229,6 +229,8 @@ PATCH_TO
   LDB   >$FFF0        type d'ordinateur
   CMPB  #3
   BEQ   INIT2         TO8
+  CMPB  #6 
+  BEQ   *-4           TO9+
 
 *------------------------------------------------------
 * Initialisations TO7 et TO7/70
