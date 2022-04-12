@@ -1145,7 +1145,7 @@ function AUDIO:next_sample()
 	end
 	local v = 0
 	for i=1,siz do v = v + ((buf:byte(i)+128)%256)-128 end
-	self.buf,v = buf:sub(siz+1),sel.vol*v/(siz*4) + 32 + math.random()
+	self.buf,v = buf:sub(siz+1),self.vol*v/(siz*4) + 32 + math.random()
 	if v<0 then v=0 elseif v>63 then v=63 end
 	return math.floor(v)
 end
