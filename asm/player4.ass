@@ -25,9 +25,10 @@
 GRAY   set 0	Memoire forme: N&B
 COL1   set 1	Memoire forme: R/G/B
 COL2MO set 2	Memoire fond, pas transcodage
-COL2TO set 3    Memoire fond, transcodage
-COL3MO set 4    Memoire fond, palette, pas trans.
-COL3TO set 5    Memoire fond, palette, transcodage
+COL2TO set 3  Memoire fond, transcodage
+COL3MO set 4  Memoire fond, palette, pas trans.
+COL3TO set 5  Memoire fond, palette, transcodage
+BM59   set 6  Memoire forme, palette 4 couls
 
 *MODE SET GRAY
    
@@ -211,9 +212,9 @@ INIT
   ENDC
   
   LDA   >$FFF0        type d'ordinateur
-  BNE  INIT2          MO6  
+  LBNE  INIT2         MO6  
 
-  IFEQ  MODE-COL3MO
+  IFEQ  (MODE-COL3MO)*(MODE-BM59)
   JSR   ERRORMO
   FCC   /Cette video requiert un MO6/
   FCB   0
@@ -296,11 +297,11 @@ PALETTE
   TFR   X,D
   TFR   A,DP
 PALETTE1
-  TST   <$E7
+  LDA   <$E7
   BPL   PALETTE1
 PALETTE2
-  TST	<$E7
-  BMI	PALETTE2
+  LDA	  <$E7
+  BMI	  PALETTE2
   LDX   #200
 PALETTE3
   LEAX  -1,X
@@ -325,7 +326,7 @@ INIT2
   ANDA  #$FB          clear mute bit 
   STA   ,X            modification PIA
   
-  IFEQ  (MODE-COL3MO)*(MODE-COL3TO)
+  IFEQ  (MODE-COL3MO)*(MODE-COL3TO)*(MODE-BM59)
   JSR   PALETTE
   ENDC
 
@@ -383,6 +384,18 @@ INIT3
   FCB   %11110000
   DEC   3,X           memoire forme
   ENDC
+  
+  IFEQ  MODE-BM59
+  LDB   #1            memoire forme
+  ORB   3,X
+  STB   3,X            
+  JSR   ECRAN1        remplissage forme avec 0
+  FCB   %00000000
+  LDB   #$59
+  STB   $1C,X         changement mode video
+*  STB   <$5F          force reset ecran
+  ENDC
+
 
 *------------------------------------------------------
 * Patch les adresses pour les TO
@@ -413,9 +426,9 @@ PATCH2
   CMPB  #3            TO8
   BEQ   INIT2
   CMPB  #6            TO9+
-  BEQ   *-4
+  BEQ   *-4           beq INIT2 en court
 
-  IFEQ  MODE-COL3TO
+  IFEQ  (MODE-COL3TO)*(MODE-BM59)
   JSR   ERRORTO
   FCC   %Cette video requiert un TO8/TO9+%
   FCB   0

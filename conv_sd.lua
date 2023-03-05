@@ -207,7 +207,7 @@ function AUDIO:new(file)
 		size = size,
 		mute = '',
 		buf = '', -- buffer
-		vol = 2.0,
+		vol = 1.9,
 		running = true
 	}
 	for i=1,size do o.mute = o.mute .. string.char(128) end

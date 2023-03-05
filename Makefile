@@ -3,7 +3,7 @@
 ##############################################################################
 
 STRIP=strip
-WGET=wget
+WGET=wget --no-check-certificate
 SED=sed -e
 GIT=git
 RM=rm
