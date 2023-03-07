@@ -816,7 +816,7 @@ elseif MODE==22 then
 	CONFIG.asm_mode	 = 6
     CONFIG.px_size   = {2,1}
     CONFIG.interlace = 'p'
-    CONFIG.dither    = compo(norm,bayer,2){{1},{2}} -- norm(vac(7,13)) -- compo(norm,bayer,2){{1},{2}} -- norm(vac(4,8)) -- 
+    CONFIG.dither    = compo(norm,bayer,2){{1},{2}} --  norm(vac(4,7)) -- norm(vac(7,13)) -- compo(norm,bayer,2){{1},{2}} --  compo(norm,bayer,2){{1},{2}} -- norm(vac(4,8)) -- 
 	CONFIG.palette   = function(CONVERTER,VIDEO)
 		local H = {w={}} for i=0,255 do H.w[i]=0 end		
 		local function map(vals, histo)

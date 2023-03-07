@@ -330,6 +330,15 @@ INIT2
   JSR   PALETTE
   ENDC
 
+  IFEQ  MODE-BM59
+  LDB   #1            memoire forme
+  ORB   ,X
+  STB   ,X            
+*  STB   <$5F          force reset ecran
+  JSR   ECRAN1        remplissage forme avec 0
+  FCB   %00000000
+  ENDC
+  
   JMP   INIT8         suite des initialisations
 
 *------------------------------------------------------
@@ -391,11 +400,8 @@ INIT3
   STB   3,X            
   JSR   ECRAN1        remplissage forme avec 0
   FCB   %00000000
-  LDB   #$59
-  STB   $1C,X         changement mode video
 *  STB   <$5F          force reset ecran
   ENDC
-
 
 *------------------------------------------------------
 * Patch les adresses pour les TO
@@ -564,6 +570,11 @@ ECRAN32
 * L'adresse de SD_LB0 passe de $208E-$608E a $2051-$6051
 * pour tous les controleurs a partir de juillet 2018
 INIT8
+  IFEQ  MODE-BM59
+  LDB   #$59
+  STB   $1C,X         changement mode video
+  ENDC
+
   TFR   DP,A          valeur de DP dans A
   LDB   #$51          adresse de SD_LB0 version recente
   TFR   D,X           stockee dans le registre X   
