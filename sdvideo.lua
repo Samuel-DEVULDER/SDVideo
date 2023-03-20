@@ -812,7 +812,96 @@ elseif MODE==20 or MODE==21 then
 		0x100*b.base[4],0x010*g.base[4],0x001*r.base[4],0x111*w.base[4]
 		}
     end
-elseif MODE==22 then
+elseif MODE==22 or MODE==23 then
+	CONFIG.asm_mode	 = MODE%2==0 and 4 or 5
+    CONFIG.px_size   = {4,1}
+    CONFIG.interlace = 'I' 
+    CONFIG.dither    = 	vac(3,9)
+			
+	CONFIG.palette   = function(CONVERTER,VIDEO)
+		local H = {r={},g={},b={},w={}}
+		for i=0,255 do H.r[i]=0; H.g[i]=0; H.b[i]=0; H.w[i]=0 end		local function map(vals, histo)
+			local t={}; t[0] = 0
+			local k,v0,v1=1,0,PALETTE.linear(vals[1])
+			local e,h=0,{}
+			local avg = 0; for i=0,255 do avg = avg + histo[i]/256 end
+			for i=0,255 do h[i]=histo[i]/avg + 1/16 end
+			for i=0,255 do
+				local v = PALETTE.linear(i)
+				if v>=v1 and vals[k+1] then 
+					k,v0,v1=k+1,v1,PALETTE.linear(vals[k+1]) 
+				end
+				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
+				t[i] = k-1 + f
+				if histo then
+				 
+					local DIV=2
+					f = round(f*DIV)/DIV
+					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
+				end
+			end
+			return t,math.abs(e)
+		end
+
+        for i,f in ipairs(arg) do
+            local TMP = CONVERTER:new(f,nil,3)
+            if TMP then
+                local stat = VIDEO:new(TMP.file,TMP.fps,80,50,80,50,TMP.interlace,
+					function(self, x,y, r,g,b)
+					H.r[r], H.g[g], H.b[b] = H.r[r]+1, H.g[g]+1, H.b[b]+1
+					local t = math.floor(r*.30 + g*.59 + b*.11)
+					H.w[t] = H.w[t]+1
+				end)
+                stat.super_next_image = stat.next_image
+                stat.mill = {'|', '/', '-', '\\'}
+                stat.mill[0] = stat.mill[4]
+                function stat:next_image()
+                    self:super_next_image()
+                    io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
+                                    self.mill[self.cpt % 4],
+                                    percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
+                    io.stderr:flush()
+                end
+                while stat.running do stat:next_image() end
+            end
+        end
+		local ef = {}; for i=0,15 do ef[i] = PALETTE.ef[1+i] end
+		local r,g,b,w,t,e
+		for i=1,12 do for j=i+1,13 do for k=j+1,14 do for l=k+1,15 do
+			t,e = map({ef[i],ef[j],ef[k],ef[l]}, H.r)
+			if r==nil or e<=r.err then r = {err=e, base={0,i,j,k,l}} end
+			t,e = map({ef[i],ef[j],ef[k],ef[l]}, H.g)
+			if g==nil or e<=g.err then g = {err=e, base={0,i,j,k,l}} end
+			t,e = map({ef[i],ef[j],ef[k],ef[l]}, H.b)
+			if b==nil or e<=b.err then b = {err=e, base={0,i,j,k,l}} end
+			t,e = map({ef[i],ef[j],ef[k],ef[l]}, H.w)
+			if w==nil or e<=w.err then w = {err=e, base={0,i,j,k,l}} end
+		end end end end
+		io.stderr:write(string.rep(' ',79)..'\r')
+        io.stderr:flush()
+
+		print('b', unpack(b.base))
+		print('r', unpack(r.base))
+		print('g', unpack(g.base))
+		print('w', unpack(w.base))
+
+		return {
+			0x000,
+			
+			0x100*b.base[2],0x010*g.base[2],0x001*r.base[2],
+			0x100*b.base[3],0x010*g.base[3],0x001*r.base[3],
+			0x100*b.base[4],0x010*g.base[4],0x001*r.base[4],
+			
+							0x010*g.base[4]+0x001*r.base[5],
+			0x100*b.base[5]                +0x001*r.base[4],
+			0x100*b.base[5]+0x010*g.base[4]                ,
+			
+			0x100*b.base[3]+0x010*g.base[3]+0x001*r.base[3],
+			0x100*b.base[4]+0x010*g.base[4]+0x001*r.base[4],
+			0x100*b.base[5]+0x010*g.base[5]+0x001*r.base[5]
+		}
+    end
+elseif MODE==24 then
 	CONFIG.asm_mode	 = 6
     CONFIG.px_size   = {2,1}
     CONFIG.interlace = 'I'
@@ -1605,7 +1694,7 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, interlace, pset
 			-- 13fps /4 --> 66%
 			-- 17fps /4 --> 60%
 			local t,THR = {},math.floor(8000/5)
-			THR = math.floor(1.2*2000000/CYCLES/math.abs(FPS))
+			THR = math.floor(1.3*2000000/CYCLES/math.abs(FPS))
 			for i=0,7999 do if prev[i]~=curr[i] then table.insert(t,i) end end
 			-- print('+', m, #t)
 			for _,m in ipairs{2,4} do
@@ -1892,7 +1981,7 @@ elseif MODE==1 then
 		pset(self, x,y, r,g,b)
 		self.pset = pset
     end
-elseif MODE==2 or MODE==4 or MODE==10 or MODE==14 or MODE==18 or MODE==20 then
+elseif MODE==2 or MODE==4 or MODE==10 or MODE==14 or MODE==18 or MODE==20 or MODE==22 then
     -- MO (not transcode)
     function VIDEO:pset(x,y, r,g,b)
         if not self.dither then	self:init_dither(); self._cache = {} end
@@ -1906,7 +1995,7 @@ elseif MODE==2 or MODE==4 or MODE==10 or MODE==14 or MODE==18 or MODE==20 then
         if o==0 then v=v*16 end
         self.image[p] = self.image[p] + v
     end
-elseif MODE==3 or MODE==5 or MODE==11 or MODE==15 or MODE==19 or MODE==21 then
+elseif MODE==3 or MODE==5 or MODE==11 or MODE==15 or MODE==19 or MODE==21 or MODE==23 then
     -- TO (transcode)
     function VIDEO:pset(x,y, r,g,b)
         if not self.dither then self:init_dither(); self._cache = {} end
@@ -2094,7 +2183,7 @@ elseif MODE==16 or MODE==17 then
 		pset(self,x,y,r,g,b)
 		self.pset = pset
     end
-elseif MODE==22 then
+elseif MODE==24 then
 	local otab = {}
 	for i=0,159 do otab[i] = 4^(3-(i%4)) end
 	VIDEO.plot = function(self,p,o,c)
