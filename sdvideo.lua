@@ -88,7 +88,7 @@ end
 -- ===========================================================================
 -- utiliser un fps<0 si la taille 100% doit etre conservee
 local MODE          = env('MODE',7)
-local FPS           = env('FPS',11)
+local FPS           = env('FPS',13)
 -- MODE=21
 
 local FFMPEG        = locate('ffmpeg', 'tools')
@@ -375,7 +375,7 @@ function PALETTE.unlinear(u)
 end
     
 if MODE==0 then
-    CONFIG.interlace = 'p' -- 'i' -- 'i3' -- 'i' -- 'iii' -- 'i3'
+    CONFIG.interlace = 'I' -- 'p' -- 'i' -- 'i3' -- 'i' -- 'iii' -- 'i3'
     CONFIG.dither    = 
 	-- compo(norm,vac)(8,8)
 	-- compo(norm,vac)(16,16)
@@ -393,7 +393,7 @@ if MODE==0 then
 	-- compo(norm,vac)(13,13)
 elseif MODE==1 then
     CONFIG.px_size   = {1,3}
-    CONFIG.interlace = 'i' -- 'iii'
+    CONFIG.interlace = 'I' -- 'i' -- 'iii'
     CONFIG.dither    = --compo(norm,bayer,3){{1,2,3}}
 		-- compo(norm,vac)(13,5)
 		compo(norm,vac)(9,3)
@@ -433,7 +433,7 @@ elseif MODE==4 or MODE==5 then
              0x100,0x400,0x900,0xF00})
 elseif MODE==6 or MODE==7 then
     CONFIG.px_size   = {4,2}
-    CONFIG.interlace = ZIGZAG and 'i3' or 'p'
+    CONFIG.interlace = 'I' -- ZIGZAG and 'i3' or 'p'
     CONFIG.dither    = 
 		compo(norm,bayer){{1,4},{5,8},{3,2},{7,6}}
 		
@@ -608,7 +608,7 @@ elseif MODE==18 or MODE==19 then
 elseif MODE==20 or MODE==21 then
 	CONFIG.asm_mode	 = MODE%2==0 and 4 or 5
     CONFIG.px_size   = {4,1}
-    CONFIG.interlace = 'i3'
+    CONFIG.interlace = 'I' -- 'i3'
     CONFIG.dither    = 
 	-- compo(bayer,1){{1},{3},{2},{4}}
 	
@@ -815,8 +815,12 @@ elseif MODE==20 or MODE==21 then
 elseif MODE==22 then
 	CONFIG.asm_mode	 = 6
     CONFIG.px_size   = {2,1}
-    CONFIG.interlace = 'p'
-    CONFIG.dither    = compo(norm,bayer,2){{1},{2}} --  norm(vac(4,7)) -- norm(vac(7,13)) -- compo(norm,bayer,2){{1},{2}} --  compo(norm,bayer,2){{1},{2}} -- norm(vac(4,8)) -- 
+    CONFIG.interlace = 'I'
+    CONFIG.dither    = 
+						norm(vac(7,13))
+						-- norm(vac(5,11))
+						-- compo(norm,bayer,3){{1},{2}} 
+						-- norm(vac(4,7)) -- norm(vac(7,13)) -- compo(norm,bayer,2){{1},{2}} --  compo(norm,bayer,2){{1},{2}} -- norm(vac(4,8)) -- 
 	CONFIG.palette   = function(CONVERTER,VIDEO)
 		local H = {w={}} for i=0,255 do H.w[i]=0 end		
 		local function map(vals, histo)
@@ -824,7 +828,7 @@ elseif MODE==22 then
 			local k,v0,v1=1,0,PALETTE.linear(vals[1])
 			local e,h=0,{}
 			local avg = 0; for i=0,255 do avg = avg + histo[i]/256 end
-			for i=0,255 do h[i]=histo[i]/avg + 1/16 end
+			for i=0,255 do h[i]=histo[i]/avg + 0.5*1/16 end
 			for i=0,255 do
 				local v = PALETTE.linear(i)
 				if v>=v1 and vals[k+1] then 
@@ -833,7 +837,7 @@ elseif MODE==22 then
 				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
 				t[i] = k-1 + f
 				if histo then
-					local DIV=2
+					local DIV=1
 					f = round(f*DIV)/DIV
 					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
 				end
@@ -846,7 +850,7 @@ elseif MODE==22 then
             if TMP then
                 local stat = VIDEO:new(TMP.file,TMP.fps,80,100,80,100,TMP.interlace,
 					function(self, x,y, r,g,b)
-					local t = math.floor(r*.30 + g*.59 + b*.11)
+					local t = math.floor(r*GRAY_R + g*GRAY_G + b*GRAY_B)
 					H.w[t] = H.w[t]+1
 				end)
                 stat.super_next_image = stat.next_image
@@ -1416,7 +1420,7 @@ function AUDIO:new(file)
 		size = size,
 		mute = '',
 		buf = '', -- buffer
-		vol = 1.5,
+		vol = 1.9,
 		running = true
 	}
 	for i=1,size do o.mute = o.mute .. string.char(0) end
@@ -1488,6 +1492,10 @@ function FILTER:byte(offset)
     local m,t = #self.t, self.t
     if true or m==1 then
         return t[1][offset]
+	elseif true then	
+		local v,d = 0,0
+        for i=1,m do v,d = v + t[i][offset]*i,d+i end
+        return round(v/d)
     elseif m==2 then
         -- do return round((self.t[1][offset]+2*self.t[2][offset])*.3333333) end
 
@@ -1575,6 +1583,106 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, interlace, pset
 					end
 				elseif val==nil then
 					i = nil
+				end
+				return i,val
+			end
+		end
+    elseif interlace=='I' then
+  		local dist = {}		
+		for i=0,255 do for j=0,255 do
+			local a,b,d = i,j,0
+			for k=0,3 do
+				d = d + math.abs((a % 4)-(b % 4))^2
+				a,b = math.floor(a/4),math.floor(b/4)
+			end
+			dist[i*256+j] = d
+		end end
+		local cpt,i2l = 0,{}
+		for i=0,7999 do i2l[i] = math.floor(i/40/CONFIG.px_size[2]) end
+		o.indices = function(prev,curr)
+			cpt = cpt + 1
+			-- 11fps /4 --> 71%
+			-- 13fps /4 --> 66%
+			-- 17fps /4 --> 60%
+			local t,THR = {},math.floor(8000/5)
+			THR = math.floor(2*2000000/CYCLES/math.abs(FPS))
+			for i=0,7999 do if prev[i]~=curr[i] then table.insert(t,i) end end
+			-- print('+', m, #t)
+			for _,m in ipairs{2,4} do
+				if t[THR] then   
+					local j = cpt%m
+					for i=#t,0,-1 do t[i]=nil end
+					for i=0,7999 do if prev[i]~=curr[i] and (i2l[i]%m)==j then table.insert(t,i) end end
+				end
+			end
+			if false and t[THR] and t[math.floor(THR*1.6)] then
+				m = 6
+				local j = cpt%m
+				for i=#t,0,-1 do t[i]=nil end
+				for i=0,7999 do if prev[i]~=curr[i] and (i2l[i]%m)==j then table.insert(t,i) end end
+			end
+			if false and t[THR] and t[math.floor(THR*1.3)] then
+				for i=#t,0,-1 do t[i]=nil end
+				local m = 0
+				for i=0,7999 do 
+					local d = MODE==22 and 100 or dist[prev[i]*256+curr[i]]
+					if (d or 0)>m then m=d else d = 1000 end
+					if d > m/8 then table.insert(t,i) end
+				end
+			end
+			-- print(' ', m, #t)
+			return pairs(t)
+		end
+    elseif interlace=='8x8' then
+  		local dist = {}		
+		for i=0,255 do for j=0,255 do
+			local a,b,d = i,j,0
+			for k=0,3 do
+				d = d + math.abs((a % 4)-(b % 4))^2
+				a,b = math.floor(a/4),math.floor(b/4)
+			end
+			dist[i*256+j] = d
+		end end
+		o.indices = function(prev,curr)
+			local t,THR = {},math.floor(1000/4)
+			for y=0,24 do for x=0,39 do
+				local i = x+y*320
+				local d = 0
+				for j=i,i+319,40 do
+					d = d + (dist[prev[j]*256+curr[j]] or 1000)
+				end
+				if d>0 then
+					table.insert(t, {i=i,e=d})  
+				end
+			end end 
+			if t[THR] then
+				table.sort(t, function(i,j)	return i.e>j.e end)
+				for i=#t,THR,-1 do t[i] = nil end
+			end
+			local l = {}
+			for _,t in ipairs(t) do for i=t.i,t.i+319,40 do l[i]=true end end
+			local ll = {}
+			for i=0,7999 do if l[i] then table.insert(ll,i) end end
+			return pairs(ll)
+		end
+    elseif interlace=='I' then
+        local i1,i2,i3,i4={},{},{},{}
+		for j=0,7999 do 
+			if inside(j%120,0,40) then table.insert(i1,j) 
+			elseif inside(j%120,40,80) then table.insert(i2,j) 
+			else table.insert(i3,j) end 
+		end
+		indices = i1
+		o.indices = function(prev,curr)
+			local i = 0
+			return function()
+				i = i+1
+				local val = indices[i]
+				if not val then
+					i = nil;
+					if     indices==i1 then indices=i2
+					elseif indices==i2 then indices=i3
+					else                    indices=i1 end
 				end
 				return i,val
 			end
