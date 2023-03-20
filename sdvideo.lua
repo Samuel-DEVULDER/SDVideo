@@ -1605,7 +1605,7 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, interlace, pset
 			-- 13fps /4 --> 66%
 			-- 17fps /4 --> 60%
 			local t,THR = {},math.floor(8000/5)
-			THR = math.floor(2*2000000/CYCLES/math.abs(FPS))
+			THR = math.floor(1.2*2000000/CYCLES/math.abs(FPS))
 			for i=0,7999 do if prev[i]~=curr[i] then table.insert(t,i) end end
 			-- print('+', m, #t)
 			for _,m in ipairs{2,4} do
@@ -1630,8 +1630,18 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, interlace, pset
 					if d > m/8 then table.insert(t,i) end
 				end
 			end
-			-- print(' ', m, #t)
-			return pairs(t)
+			local bak = {}
+			for _,v in ipairs(t) do 
+				if (v%40)==0 then bak[v],curr[v] = curr[v],prev[v] end
+			end
+			return function(a, i)
+				i=i+1
+				local v = a[i]
+				if v then 
+					if (v%40)==0 then curr[v] = bak[v] end
+					return i,v 
+				end
+			end, t, 0
 		end
     elseif interlace=='8x8' then
   		local dist = {}		
