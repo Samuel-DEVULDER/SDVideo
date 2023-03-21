@@ -55,7 +55,8 @@ DISTRO=SDDrive-$(VERSION)-$(OS)-$(MACHINE)
 
 BIN=bin/bootblk.raw bin/player0.raw bin/player1.raw \
     bin/player40.raw bin/player41.raw bin/player42.raw \
-	bin/player43.raw bin/player44.raw bin/player45.raw
+	bin/player43.raw bin/player44.raw bin/player45.raw \
+	bin/player46.raw
 
 TOOLS=tools/
 LUA=$(TOOLS)luajit$(EXE)

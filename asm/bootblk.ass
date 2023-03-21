@@ -33,8 +33,8 @@
 INI
   LDD   #$9100  adresse chargement
   STD   <$604F
-  STB   <$60FE  commande le demarrage a froid
-  STB   <$60FF  commande le demarrage a froid
+*  STB   <$60FE  commande le demarrage a froid
+*  STB   <$60FF  commande le demarrage a froid
   INC   <$60D1
   TFR   D,S
 

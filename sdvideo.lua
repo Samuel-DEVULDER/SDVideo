@@ -1694,7 +1694,7 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, interlace, pset
 			-- 13fps /4 --> 66%
 			-- 17fps /4 --> 60%
 			local t,THR = {},math.floor(8000/5)
-			THR = math.floor(1.3*2000000/CYCLES/math.abs(FPS))
+			THR = math.floor(1.5*2000000/CYCLES/math.abs(FPS))
 			for i=0,7999 do if prev[i]~=curr[i] then table.insert(t,i) end end
 			-- print('+', m, #t)
 			for _,m in ipairs{2,4} do
