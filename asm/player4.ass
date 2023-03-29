@@ -212,7 +212,7 @@ INIT
   ENDC
   
   LDA   >$FFF0        type d'ordinateur
-  BNE  INIT2          MO6  
+  LBNE  INIT2         MO6  
 
   IFEQ  (MODE-COL3MO)*(MODE-BM59)
   JSR   ERRORMO
@@ -326,9 +326,9 @@ INIT2
   ANDA  #$FB          clear mute bit 
   STA   ,X            modification PIA
   
-  IFEQ  (MODE-COL3MO)*(MODE-COL3TO)*(MODE-BM59)
+*  IFEQ  (MODE-COL3MO)*(MODE-COL3TO)*(MODE-BM59)
   JSR   PALETTE
-  ENDC
+*  ENDC
 
   IFEQ  MODE-BM59
   LDD   #$4001            memoire forme

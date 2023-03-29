@@ -477,13 +477,14 @@ elseif MODE==8 or MODE==9 then
              0X200,0x400,0x700,0xA00,0xF00})
 elseif MODE==10 or MODE==11 then
     CONFIG.px_size   = {4,1}
-    CONFIG.interlace = 'i3'
+    CONFIG.interlace = 'I' --'i3'
     CONFIG.dither    = --compo(bayer){{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
 		-- compo(bayer,2){{1},{3},{2},{4}}
 		-- compo(bayer){{1},{3},{2},{4}}
 		-- vac(5,19) --(7,29)
 		-- vac(5,17)
 		vac(3,13)
+		-- compo(bayer,2){{1},{1},{1},{1}}
 	for match in (package.path..';'):gmatch("(.-)?.lua;") do
 		package.path = package.path .. ';' .. match ..           "./lib/?.lua"
 		package.path = package.path .. ';' .. match ..          "../lib/?.lua"
@@ -520,7 +521,9 @@ elseif MODE==10 or MODE==11 then
             end
         end
 		reducer:boostBorderColors()
-		reducer:boostBorderColors()					 
+		-- reducer:boostBorderColors()					 
+		-- reducer:boostBorderColors()			
+		-- reducer:boostBorderColors()			
 		-- for i=1,16 do reducer:boostBorderColors() end
         io.stderr:write(string.rep(' ',79)..'\r')
         io.stderr:flush()
@@ -1696,9 +1699,10 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, interlace, pset
 			local t,THR = {},math.floor(8000/5)
 			THR = math.floor(1.5*2000000/CYCLES/math.abs(FPS))
 			for i=0,7999 do if prev[i]~=curr[i] then table.insert(t,i) end end
+			if not t[THR] then return ipairs(t) end
 			-- print('+', m, #t)
 			for _,m in ipairs{2,4} do
-				if t[THR] then   
+				if t[THR] then   	
 					local j = cpt%m
 					for i=#t,0,-1 do t[i]=nil end
 					for i=0,7999 do if prev[i]~=curr[i] and (i2l[i]%m)==j then table.insert(t,i) end end
@@ -1719,18 +1723,9 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, interlace, pset
 					if d > m/8 then table.insert(t,i) end
 				end
 			end
-			local bak = {}
-			for _,v in ipairs(t) do 
-				if (v%40)==0 then bak[v],curr[v] = curr[v],prev[v] end
-			end
-			return function(a, i)
-				i=i+1
-				local v = a[i]
-				if v then 
-					if (v%40)==0 then curr[v] = bak[v] end
-					return i,v 
-				end
-			end, t, 0
+			local z = {} for _,i in ipairs(t) do z[i] = true end
+			for i=0,7999 do if not z[i] then curr[i] = prev[i] end end
+			return ipairs(t)
 		end
     elseif interlace=='8x8' then
   		local dist = {}		
