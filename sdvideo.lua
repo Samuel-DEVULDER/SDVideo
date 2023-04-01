@@ -1697,12 +1697,12 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, interlace, pset
 			-- 13fps /4 --> 66%
 			-- 17fps /4 --> 60%
 			local t,THR = {},math.floor(8000/5)
-			THR = math.floor(1.5*2000000/CYCLES/math.abs(FPS))
+			THR = math.floor(1.33*2000000/CYCLES/math.abs(FPS))
 			for i=0,7999 do if prev[i]~=curr[i] then table.insert(t,i) end end
 			if not t[THR] then return ipairs(t) end
 			-- print('+', m, #t)
-			for _,m in ipairs{2,4} do
-				if t[THR] then   	
+			for _,m in ipairs{2,3,5,7,11} do
+				if fps>2.5*m and t[math.floor(THR*m/2)] then   	
 					local j = cpt%m
 					for i=#t,0,-1 do t[i]=nil end
 					for i=0,7999 do if prev[i]~=curr[i] and (i2l[i]%m)==j then table.insert(t,i) end end
@@ -2522,6 +2522,8 @@ function CONVERTER:process()
 	end
 	
     -- conversion
+    video:skip_image()
+    video:skip_image()
     video:skip_image()
     current_cycle = current_cycle + cycles_per_img
     video:next_image()
