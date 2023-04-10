@@ -389,8 +389,9 @@ if MODE==0 then
 	-- { 15, 40, 57, 23, 12, 59, 25, 52},
 	-- { 60, 32,  1, 36, 50,  4, 37, 10},
 	-- { 43, 16, 30, 64, 18, 31, 48, 22}}
-	compo(norm,vac)(7,7)
 	-- compo(norm,vac)(13,13)
+	compo(norm,vac)(7,7)
+	-- compo(norm,bayer,4){{1}}
 elseif MODE==1 then
     CONFIG.px_size   = {1,3}
     CONFIG.interlace = 'I' -- 'i' -- 'iii'
@@ -410,7 +411,7 @@ elseif MODE==2 or MODE==3 then
 			-- vac(4,17)
 elseif MODE==4 or MODE==5 then
     CONFIG.px_size   = {4,1}
-    CONFIG.interlace = 'ii'
+    CONFIG.interlace = 'I' -- 'ii'
     CONFIG.dither    = --bayer{{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
 		compo(bayer,2){{1},{3},{2},{4}}
 		-- vac(5,17) 
@@ -1690,41 +1691,38 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, interlace, pset
 			dist[i*256+j] = d
 		end end
 		local cpt,i2l = 0,{}
-		for i=0,7999 do i2l[i] = math.floor(i/40/CONFIG.px_size[2]) end
+		-- for i=0,7999 do i2l[i] = math.floor(i/40/CONFIG.px_size[2]) end
+		for i=0,199 do
+			for j=0,39 do i2l[i*40+j] = math.floor(i/math.min(#CONFIG.dither,2*CONFIG.px_size[2])) end
+		end
 		o.indices = function(prev,curr)
-			cpt = cpt + 1
-			-- 11fps /4 --> 71%
-			-- 13fps /4 --> 66%
-			-- 17fps /4 --> 60%
-			local t,THR = {},math.floor(8000/5)
-			THR = math.floor(1.33*2000000/CYCLES/math.abs(FPS))
+			cpt = cpt+1
+			local MIN_FPS = fps
+			local THR = 1+math.floor(1.0*2000000/CYCLES/MIN_FPS)
+			local t = {}
 			for i=0,7999 do if prev[i]~=curr[i] then table.insert(t,i) end end
 			if not t[THR] then return ipairs(t) end
-			-- print('+', m, #t)
-			for _,m in ipairs{2,3,5,7,11} do
-				if fps>2.5*m and t[math.floor(THR*m/2)] then   	
-					local j = cpt%m
-					for i=#t,0,-1 do t[i]=nil end
-					for i=0,7999 do if prev[i]~=curr[i] and (i2l[i]%m)==j then table.insert(t,i) end end
-				end
-			end
-			if false and t[THR] and t[math.floor(THR*1.6)] then
-				m = 6
-				local j = cpt%m
+			if false and t[THR] then 
+				local m = 2 -- math.ceil(#t / THR)
+				local z = 40*CONFIG.px_size[2]
+				local a = math.floor(8000*(cpt % m)/m/z)*z
+				local b = math.ceil (8000*((cpt % m)+1)/m/z-1)*z
 				for i=#t,0,-1 do t[i]=nil end
-				for i=0,7999 do if prev[i]~=curr[i] and (i2l[i]%m)==j then table.insert(t,i) end end
+				for i=a,b do if prev[i]~=curr[i] then table.insert(t,i) end end
 			end
-			if false and t[THR] and t[math.floor(THR*1.3)] then
+			if t[math.ceil(1.50*THR)] then
+				local m = 2 -- math.ceil(#t / THR);
+				local n = cpt % m
 				for i=#t,0,-1 do t[i]=nil end
-				local m = 0
-				for i=0,7999 do 
-					local d = MODE==22 and 100 or dist[prev[i]*256+curr[i]]
-					if (d or 0)>m then m=d else d = 1000 end
-					if d > m/8 then table.insert(t,i) end
-				end
+				for i=0,7999 do if prev[i]~=curr[i] and (i2l[i]%m)==n then table.insert(t,i) end end
 			end
-			local z = {} for _,i in ipairs(t) do z[i] = true end
-			for i=0,7999 do if not z[i] then curr[i] = prev[i] end end
+			if t[math.ceil(3.00*THR)] then
+				for i=#t,0,-1 do t[i]=nil end
+				for i=0,7999 do if prev[i]~=curr[i] then table.insert(t,i) end end
+			else
+				local z = {} for _,i in ipairs(t) do z[i] = true end
+				for i=0,7999 do if not z[i] then curr[i] = prev[i] end end
+			end
 			return ipairs(t)
 		end
     elseif interlace=='8x8' then
@@ -2381,7 +2379,7 @@ function CONVERTER:_stat()
     io.stderr:flush()
 
 	-- nb de trames vidéos par image
-	local avg_trames = (stat.trames/stat.cpt) * 1.10 -- 10% safety margin
+	local avg_trames = (stat.trames/stat.cpt) * 1.15 -- 15% safety margin
 	-- nombre de trames théoriques max par image
 	local max_trames = 1000000/(self.fps*CYCLES)
 	-- rapport entre les deux
