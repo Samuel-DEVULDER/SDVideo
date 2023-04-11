@@ -1710,13 +1710,25 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, interlace, pset
 				for i=#t,0,-1 do t[i]=nil end
 				for i=a,b do if prev[i]~=curr[i] then table.insert(t,i) end end
 			end
-			if t[math.ceil(1.50*THR)] then
+			-- if t[math.ceil(1.95*THR)] then
+				-- local m = math.min(4, math.ceil(#t / THR))
+				-- local n = cpt % m
+				-- for i=#t,0,-1 do t[i]=nil end
+				-- for i=0,7999 do if prev[i]~=curr[i] and (i2l[i]%m)==n then table.insert(t,i) end end
+			-- end
+			if t[math.ceil(1.95*THR)] then
 				local m = 2 -- math.ceil(#t / THR);
 				local n = cpt % m
 				for i=#t,0,-1 do t[i]=nil end
 				for i=0,7999 do if prev[i]~=curr[i] and (i2l[i]%m)==n then table.insert(t,i) end end
 			end
-			if t[math.ceil(3.00*THR)] then
+			if t[math.ceil(1.95*THR)] then
+				local m = 4 -- math.ceil(#t / THR);
+				local n = cpt % m
+				for i=#t,0,-1 do t[i]=nil end
+				for i=0,7999 do if prev[i]~=curr[i] and (i2l[i]%m)==n then table.insert(t,i) end end
+			end
+			if t[math.ceil(3.0*THR)] then
 				for i=#t,0,-1 do t[i]=nil end
 				for i=0,7999 do if prev[i]~=curr[i] then table.insert(t,i) end end
 			else
