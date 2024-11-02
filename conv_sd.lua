@@ -165,7 +165,8 @@ function AUDIO:new(file)
 	local LRA='LRA=11'
 	local tp='tp=-2'
 	local loudnorm = '-af loudnorm='..I..':'..LRA..' '
-	if true then
+	loudnorm = '-filter:a dynaudnorm=r=0.6:s=8:m=30 '
+	if false then
 		io.stderr:write('> analyzing audio...')
 		io.stderr:flush()
 		local measured={}
@@ -203,11 +204,10 @@ function AUDIO:new(file)
 		-- 'dynaudnorm=p=0.71:s=12:g=15:m=12:f=8000 ' ..
 		loudnorm ..
 		'-f u8 -ac 1 -ar '..hz..' -acodec pcm_u8 pipe:', POPEN_READBIN)),
-		vol=2.2,
 		size = size,
 		mute = '',
 		buf = '', -- buffer
-		vol = 1.9,
+		vol = 1.6,
 		running = true
 	}
 	for i=1,size do o.mute = o.mute .. string.char(128) end
@@ -229,7 +229,7 @@ function AUDIO:next_sample()
 	end
 	local v = 0
 	for i=1,siz do v = v + buf:byte(i) end
-	self.buf,v = buf:sub(siz+1),self.vol*(v/(siz*4)-32) + 32 + math.random()
+	self.buf,v = buf:sub(siz+1),self.vol*(v/(siz*4)-32) + 31.5 + math.random()
 	if v<0 then v=0 elseif v>63 then v=63 end
 	return math.floor(v)
 end
