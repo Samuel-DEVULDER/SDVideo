@@ -33,9 +33,10 @@ BM59   set 6  Memoire forme, palette 4 couls
 *MODE SET GRAY
    
 ****************************************************
-*                Version 2018.07.14                *
+*                Version 2024.02.11                *
 ****************************************************
 * Historique
+* 2024.02.11 168 cycles/ech = 5952.38hz
 * 2018.07.14 adresse SD_LB0 calculee selon version 
 * 2018.07.02 deplacement de la zone SD_LB0 en <$51 
 * 2018.02.04 ajout du son
@@ -699,14 +700,14 @@ STOP
 
 *-----------------------------------------------------
 * Trame de deplacement 8 bits + 1 octet
-* s6 0 1 | DD DD DD DD | VV VV VV VV             (115)
+* s6 0 1 | DD DD DD DD | VV VV VV VV             (114)
 *-----------------------------------------------------
 TRAME_01
   REPT  8,READ_BIT    lecture deplacement         (48)
-  LEAX  2,X                                        (5)
+  LEAX  3,X                                        (5)
   ABX                                              (3)
   REPT  8,READ_BIT    lecture video               (48)
-  STB   ,X+                                        (6)
+  STB   -1,X                                       (5)
   RTS                                              (5)  
 
 *-----------------------------------------------------
@@ -718,7 +719,7 @@ DEB_BLOC
   BNE   DEB_BLOC      attente debut de bloc        (3)
   
 *-----------------------------------------------------
-* TRAITE UNE TRAME DE 3 OCTETS            (54+115=169)   
+* TRAITE UNE TRAME DE 3 OCTETS            (54+114=168)   
 *-----------------------------------------------------
 TRAME
   REPT  6,READ_BIT    lecture donnee son          (36)
@@ -731,27 +732,11 @@ TRAME
 
 *-----------------------------------------------------
 * Trame de video 4 pixels (P1 P2 P3 P4)
-* s6 0 0 | VV VV VV VV | VV VV VV VV             (115)
+* s6 0 0 | VV VV VV VV | VV VV VV VV             (114)
 *-----------------------------------------------------  
 TRAME_00
   REPT  8,READ_BIT    lecture video               (48)
   STB   ,X+                                        (6)
-  REPT  8,READ_BIT    lecture video               (48)
-  STB   ,X+                                        (6)
-  NOP                 attente                      (2)
-  RTS                                              (5)
-
-TRAME_1X
-  GET_BIT
-  BCS   TRAME_11
-  
-*-----------------------------------------------------
-* Trame de video 6 pixels (P1 P2 -- -- P3 P4)
-* s6 1 0 | VV VV VV VV | VV VV VV VV             (115)
-*-----------------------------------------------------  
-TRAME_10
-  REPT  8,READ_BIT    lecture video               (48)
-  STB   ,X++                                       (7)
   REPT  7,READ_BIT    lecture video               (42)
   CMPA  >$A7BF        lecture bit                  (5)
   VAR   PATCH_CYC,-2
@@ -760,11 +745,23 @@ TRAME_10
   RTS                                              (5)
 
 *-----------------------------------------------------
+* Trame de video 6 pixels (P1 P2 -- -- P3 P4)
+* s6 1 0 | VV VV VV VV | VV VV VV VV             (114)
+*-----------------------------------------------------  
+TRAME_10
+  REPT  8,READ_BIT    lecture video               (48)
+  STB   ,X++                                       (7)
+  REPT  8,READ_BIT    lecture video               (48)
+  STB   ,X+                                        (6)
+  RTS                                              (5)
+
+*-----------------------------------------------------
 * Trame de position
-* s6 1 1 | 00 0P PP PP | PP PP PP PP             (115)
+* s6 1 1 | 00 0P PP PP | PP PP PP PP             (114)
 *-----------------------------------------------------
 TRAME_11
   REPT  3,GET_BIT     lecture bits poids fort     (12)
+  BCS   TRAME_11_FIN                               (3)
   LDB   #$00          to/mo                        (2)
   VAR   PATCH_POS,-1
   REPT  5,READ_BIT    lecture bits poids fort     (30)
@@ -773,11 +770,7 @@ TRAME_11
   VAR   POS,-2
   REPT  8,READ_BIT    lecture bits poids faible   (48)
   ABX                 ajout poids faible           (3)
-  CMPX  #$1FFF        sentinelle fin video ?       (4)
-  VAR   PATCH_EOF,-2
-  BNE   POS1                                       (3)
-  JMP   FIN           sortie
-POS1
+  ORCC  #0            attente                      (3)
   RTS                 nouvelle trame               (5)
   
 *-----------------------------------------------------
@@ -787,6 +780,7 @@ POS1
 FIN_BLOC
   REPT  6,READ_BIT    lecture donnee son          (36)
   STB   <$CD          joue echantillon             (4)  
+  
   REPT  5,READ_BIT    lecture donnee son          (30)
   LSLB                6 bits en tout               (2)
   STB   BUF1          mise en buffer               (5)
@@ -794,11 +788,11 @@ FIN_BLOC
   REPT  5,READ_BIT    lecture donnee son          (30)
   LSLB                6 bits en tout               (2)
   STB   BUF2          mise en buffer               (5)
-  
+
 * Lecture CRC a toute vitesse
   REPT  16,GET_BIT    lecture CRC                 (64)
 
-  CMPB  1,X           attente                      (5)
+  CMPB  ,X            attente                      (4)
   CMPB  1,X           attente                      (5)
   CMPB  1,X           attente                      (5)
   CMPB  1,X           attente                      (5)
@@ -807,52 +801,61 @@ FIN_BLOC
   LDB   #0            lecture buffer 1             (2)
   VAR   BUF1,-1
   STB   <$CD          joue echantillon             (4)
+* son à 168 cycles
   
 * Lecture $FF
   REPT  8,READ_BIT    lecture octet $FF           (48)
   CMPB  #$FE          $FF pas trouve?              (2)
   BEQ   FIN_SPECIAL   cas particulier              (3)
+* 53
 
-* On doit attendre 110 cycles pour se caler
+* On doit attendre 109 cycles pour se caler
 * sur le dernier echantillon audio. On pourrait en
 * profiter pour tester le clavier (41 cycles TO8/TO9+,
 * 25 cycles TO9/TO8proto#14/TO9DE), 32 cycles TO7, 
 * 181 cycles TO7/70).
-*
-* 110 = 3+2 + 21*(3+2)
-*
-  NOP                                              (2)
-  LDD   #$7F00+21                                  (3)
+  LDB   #21                                        (2)
 WAIT1 
   DECB                decompte                     (2)
   BNE   WAIT1         pas termine                  (3)
+  NOP                                              (2)
+
   LDB   #0                                         (2)
   VAR   BUF2,-1
   STB   <$CD          joue buffer2                 (4)
-  
-* attente 169-93-8-4 = 64 = 4 + 12*5
-  NOP                                              (2)
-  LDB   #12                                        (2)
+* 168
+
+* attente pour se caller juste au debut du prochain bloc
+* 168 - 105 = 63 = 3+12*5
+
+  LDD   #$7F00+12                                  (3)
 WAIT2
   DECB                                             (2)
   BNE   WAIT2                                      (3)
 
-* bouclage nouveau bloc
+* bouclage nouveau bloc. 
+* Prochain son dans 8+4+53+40 = 105
   LEAS  -170*2,S                                   (8)
   JMP   DEB_BLOC                                   (4)
   
-* on a obtenu le $FE sans avoir lu $FF. 
+* on a obtenu le $FE sans avoir lu $FF, du coup pas
+* DEB_BLOC. 
 FIN_SPECIAL
-* attente 169-53-5-4 = 2 + 21*5
-  LDB   #21
+* attente 168-53-5-4 = 106 = 2+2+2 + 20*5
+  NOP
+  NOP
+  LDB   #20
 WAIT3
   DECB
   BNE   WAIT3
 
   LDB   BUF2                                       (5)
   STB   <$CD                                       (4)
-* attente 169-36-4-8-4 = 117 = 2+5*23
-  LDB   #23                                        (2)
+  
+* attente 168-36-4-8-4 = 116 = 2+2+2 + 22*5
+  NOP                                              (2)
+  NOP                                              (2)
+  LDB   #22                                        (2)
 WAIT4
   DECB                                             (2)
   BNE   WAIT4                                      (3)

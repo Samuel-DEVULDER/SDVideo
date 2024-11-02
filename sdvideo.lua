@@ -7,7 +7,7 @@
 -- différents entre les gammes d'ordinateurs thomson. Reférez vous au
 -- README.html pour avoir tous les détails.
 --
--- Le son joue à 5.9 kHz.
+-- Le son joue à ~5.9 kHz.
 --
 -- Variables d'environnement:
 -- ==========================
@@ -49,6 +49,8 @@ local function exists(file)
          -- Permission denied, but it exists
          return true
       end
+      local f = io.open(file,'r')
+	  if f then f:close() return true end
    end
    return ok, err
 end
@@ -66,7 +68,7 @@ local function locate(file,...)
 			for _,root in ipairs{pwd, pwd .. '..' .. sep} do
 				for _,dir in ipairs{'', ...} do
 					dir = dir=='' and dir or dir..sep
-					local tmp = root .. dir .. file .. ext
+					local tmp = (root .. dir .. file .. ext):gsub('[\\/]',sep)
 					if exists(tmp) then return tmp end
 				end
 			end
@@ -87,8 +89,8 @@ end
 
 -- ===========================================================================
 -- utiliser un fps<0 si la taille 100% doit etre conservee
-local MODE          = env('MODE',7)
-local FPS           = env('FPS',13)
+local MODE          = env('MODE',0)
+local FPS           = env('FPS',16)
 -- MODE=21
 
 local FFMPEG        = locate('ffmpeg', 'tools')
@@ -98,13 +100,13 @@ local BIN           = locate('bin/')
 local POPEN_READBIN = FFMPEG:match(".*%.exe") and "rb" or "r"
 
 -- constants
-local CYCLES        = 169 -- CYCLES per audio sample
+local CYCLES        = 168 -- CYCLES per audio sample
 local FPS_MAX       = 30
 local FILTER_DEPTH  = 2
-local FILTER_THRES  = 0.005*0 + .02*0 + .03*0 + 1/24*0 + 1/48
+local FILTER_THRES  = 1/16 -- 0.005*0 + .02*0 + .03*0 + 1/24*0 + 1/48
 local FILTER_ALPHA  = env('ALPHA',0)
 local EXPONENTIAL   = true
-local ZIGZAG        = true
+local ZIGZAG        = false
 local BUFFER_SIZE   = 4096
 local CONFIG        = nil
 -- local GRAY_R		= 0.30
@@ -318,6 +320,15 @@ local function norm(t)
     end
     return t
 end
+local function transp(t)
+    local m,n=#t,#t[1]
+    for i=1,m do
+        for j=1,i-1 do
+            t[i][j],t[j][i] = t[j][i],t[i][j]
+        end
+    end
+    return t
+end
 local function compo(f,g,...) -- let's do functionnal programming
     if g==nil then
 		if type(f)=='function' then
@@ -343,7 +354,7 @@ end
 -- init global data
 CONFIG = {
     interlace   = 'p',
-	asm_mode    = (MODE<6 and MODE) or (MODE%2==0 and 4 or 5),
+	asm_mode    = (MODE==25 and 0) or (MODE<6 and MODE) or (MODE%2==0 and 4 or 5),
     px_size     = {1,1},
     dither      = {1},
     palette     = compo{0x000,0x00F,0x0F0,0x0FF,
@@ -359,7 +370,11 @@ function PALETTE.linear(u)
 	if not PALETTE.__linear then 
 		PALETTE.__linear = {}
 		for u=0,255 do
-			PALETTE.__linear[u] = u<10.31475 and u/3294.6 or (((u+14.025)/269.025)^2.4)
+			PALETTE.__linear[u] = 
+				u<10.31475 and u/3294.6 or (((u+14.025)/269.025)^2.4)
+				-- (u/255)^1.8
+				-- (u/255)^1.5
+				-- (u/255)^(2.4/2.2)
 		end
 	end
 	return PALETTE.__linear[u]
@@ -390,8 +405,51 @@ if MODE==0 then
 	-- { 60, 32,  1, 36, 50,  4, 37, 10},
 	-- { 43, 16, 30, 64, 18, 31, 48, 22}}
 	-- compo(norm,vac)(13,13)
-	compo(norm,vac)(7,7)
-	-- compo(norm,bayer,4){{1}}
+	-- compo(norm,vac)(7,7)
+	-- compo(norm,vac)(16,8)
+	compo(norm,vac)(8,7)
+	-- compo(norm,bayer,3){{1}}
+	-- CONFIG.dither = compo(norm,bayer,3){{1}}
+	-- CONFIG.dither = compo(norm,bayer){
+		-- { 7,13,11, 4},
+		-- {12,16,14, 8},
+		-- {10,15, 6, 2},
+		-- { 5, 9, 3, 1} 
+		
+		-- { 5,10,12, 7},
+		-- { 9,15,16,13},
+		-- { 3, 6,14,11},
+		-- { 1, 2, 8, 4}
+	-- }
+	CONFIG.dither = compo(norm,bayer,2){{1,2},{3,4}}
+	-- CONFIG.dither = compo(norm){{1}}
+	-- CONFIG.dither = compo(norm){
+		-- { 7,21,33,43,36,19, 9, 4},
+		-- {16,27,51,55,49,29,14,11},
+		-- {31,47,57,61,59,45,35,23},
+		-- {41,53,60,64,62,52,40,38},
+		-- {37,44,58,63,56,46,30,22},
+		-- {15,28,48,54,50,26,17,10},
+		-- { 8,18,34,42,32,20, 6, 2},
+		-- { 5,13,25,39,24,12, 3, 1}
+	-- }
+	-- CONFIG.dither = compo(norm,transp){
+		-- {16,49,25,43,29,50,38,11},
+		-- {31, 6,52,10,58, 2,24,55},
+		-- {41,21,59,15,33,48, 9,63},
+		-- { 4,45,36,27,42,19,35,28},
+		-- {51,18, 8,64, 3,53,60,14},
+		-- {39,54,30,47,23,12,44,26},
+		-- { 1,22,13,56,40,32, 7,57},
+		-- {34,61,37, 5,17,62,20,46}
+	-- }
+	CONFIG.dither = compo(norm, bayer, 1, transp){
+		{ 7,13,11, 4},
+		{12,16,14, 8},
+		{10,15, 6, 2},
+		{ 5, 9, 3, 1} 
+	}
+	-- CONFIG.dither = compo(norm,bayer,3){{1}}
 elseif MODE==1 then
     CONFIG.px_size   = {1,3}
     CONFIG.interlace = 'I' -- 'i' -- 'iii'
@@ -401,6 +459,16 @@ elseif MODE==1 then
 		-- compo(norm,vac)(23,7)
 		-- compo(norm,vac)(17,5)
 		-- compo(norm,vac)(16,5)
+	-- CONFIG.dither = compo(norm){
+		-- { 21,19,20, 39,37,38, 33,31,32, 12,10,11},
+		-- { 36,34,35, 48,46,47, 42,40,41, 24,22,23},
+		-- { 30,28,29, 45,43,44, 18,16,17,  6, 4, 5},
+		-- { 15,13,14, 27,25,26,  9, 7, 8,  3, 1, 2} 
+	-- }	
+	CONFIG.dither = --compo(norm,bayer,1){{1,2,3,10,11,12},{7,8,9,6,4,5,6}}
+		-- compo(norm,bayer,2){{3,1,2}}
+		compo(norm,bayer,2){{3,1,2,4}}
+	CONFIG.dither = compo(norm, bayer){{3,1,2}}
 elseif MODE==2 or MODE==3 then
     CONFIG.px_size   = {4,1}
     CONFIG.interlace = 'i3'
@@ -434,10 +502,12 @@ elseif MODE==4 or MODE==5 then
              0x100,0x400,0x900,0xF00})
 elseif MODE==6 or MODE==7 then
     CONFIG.px_size   = {4,2}
-    CONFIG.interlace = 'I' -- ZIGZAG and 'i3' or 'p'
+    CONFIG.interlace = 'p' --'I' -- ZIGZAG and 'i3' or 'p'
     CONFIG.dither    = 
-		compo(norm,bayer){{1,4},{5,8},{3,2},{7,6}}
-		
+		compo(norm,bayer)
+		-- norm
+		{{1,4},{5,8},{3,2},{7,6}}
+			
 	-- b: 0     3   14
 	-- r: 0     1   6   15
 	-- g: 0     1   4   8       15
@@ -461,10 +531,97 @@ elseif MODE==6 or MODE==7 then
              0x008,0x608,0xF08,
              0x00F,0x60F,0xF0F,
              0x030,0x060,0x090,0x0F0})
+
+	CONFIG.palette   = function(CONVERTER,VIDEO)
+		local H = {r={},g={},b={}}
+		for i=0,255 do H.r[i]=0; H.g[i]=0; H.b[i]=0 end	
+		local function map(vals, histo)
+			local t={}; t[0] = 0
+			local k,v0,v1=1,0,PALETTE.linear(vals[1])
+			local e,h=0,{}
+			local avg = 0; for i=0,255 do avg = avg + histo[i]/256 end
+			for i=0,255 do h[i]=histo[i]/avg + 1/16 end
+			for i=0,255 do
+				local v = PALETTE.linear(i)
+				if v>=v1 and vals[k+1] then 
+					k,v0,v1=k+1,v1,PALETTE.linear(vals[k+1]) 
+				end
+				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
+				t[i] = k-1 + f
+				if histo then
+					local DIV=8 -- 2
+					f = round(f*DIV)/DIV
+					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
+				end
+			end
+			return t,math.abs(e)
+		end
+
+        for i,f in ipairs(arg) do
+            local TMP = CONVERTER:new(f,nil,1)
+            if TMP then
+                local stat = VIDEO:new(TMP.file,TMP.fps,80,50,80,50,TMP.interlace,
+					function(self, x,y, r,g,b)
+					H.r[r], H.g[g], H.b[b] = H.r[r]+1, H.g[g]+1, H.b[b]+1
+				end)
+                stat.super_next_image = stat.next_image
+                stat.mill = {'|', '/', '-', '\\'}
+                stat.mill[0] = stat.mill[4]
+                function stat:next_image()
+                    self:super_next_image()
+                    io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
+                                    self.mill[self.cpt % 4],
+                                    percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
+                    io.stderr:flush()
+                end
+                while stat.running do stat:next_image() end
+            end
+        end
+		local ef = {}; for i=0,15 do ef[i] = PALETTE.ef[1+i] end
+		-- g=5, r=4, b=3
+		local r,g,b,t,e
+		for i=1,14 do for j=i+1,15 do 
+			t,e = map({ef[i],ef[j]}, H.b)
+			if b==nil or e<=b.err then b = {err=e, base={0,i,j}} end
+		end end
+		for i=1,13 do for j=i+1,14 do for k=j+1,15 do
+			t,e = map({ef[i],ef[j],ef[k]}, H.r)
+			if r==nil or e<=r.err then r = {err=e, base={0,i,j,k}} end
+		end end end
+		for i=1,12 do for j=i+1,13 do for k=j+1,14 do for l=k+1,15 do
+			t,e = map({ef[i],ef[j],ef[k]}, H.g)
+			if g==nil or e<=g.err then g = {err=e, base={0,i,j,k,l}} end
+		end end end end
+
+		io.stderr:write(string.rep(' ',79)..'\r')
+        io.stderr:flush()
+
+		print('b', unpack(b.base))
+		print('r', unpack(r.base))
+		print('g', unpack(g.base))
+
+		return {
+			0x001*r.base[1]+0x100*b.base[1],0x001*r.base[1]+0x100*b.base[2],0x001*r.base[1]+0x100*b.base[3],
+			0x001*r.base[2]+0x100*b.base[1],0x001*r.base[2]+0x100*b.base[2],0x001*r.base[2]+0x100*b.base[3],
+			0x001*r.base[3]+0x100*b.base[1],0x001*r.base[3]+0x100*b.base[2],0x001*r.base[3]+0x100*b.base[3],
+			0x001*r.base[4]+0x100*b.base[1],0x001*r.base[4]+0x100*b.base[2],0x001*r.base[4]+0x100*b.base[3],
+			
+			0x010*g.base[2],0x010*g.base[3],0x010*g.base[4],0x010*g.base[5]
+		}
+    end
 elseif MODE==8 or MODE==9 then
+	ZIGZAG = false
     CONFIG.px_size   = {4,3}
-    CONFIG.interlace = ZIGZAG and 'ii' or 'p'
+    CONFIG.interlace = 'I' -- ZIGZAG and 'ii' or 'p'
     CONFIG.dither    = compo(norm,bayer,2){{1}}
+	-- CONFIG.dither    = compo(norm,bayer){{1}}
+	-- CONFIG.dither    = compo(norm){{1,2},{3,4}}
+	-- CONFIG.dither    = compo(norm,bayer,3){{1}}
+	-- CONFIG.dither    = compo(norm,bayer,1){{1}}
+	-- CONFIG.dither    = norm{{1,2},{2,1}}
+	-- CONFIG.dither    = compo(norm,vac)(3,4)
+	-- CONFIG.dither    = compo(norm,vac)(12,16)
+	CONFIG.dither    = compo(norm,bayer){{1}}
     CONFIG.palette   = compo(
         EXPONENTIAL and
             {0x000,
@@ -476,6 +633,77 @@ elseif MODE==8 or MODE==9 then
              0X002,0x004,0x007,0x00A,0x00F,
              0X020,0x040,0x070,0x0A0,0x0F0,
              0X200,0x400,0x700,0xA00,0xF00})
+			 
+	CONFIG.palette   = function(CONVERTER,VIDEO)
+		local H = {r={},g={},b={}}
+		for i=0,255 do H.r[i]=0; H.g[i]=0; H.b[i]=0 end	
+		local function map(vals, histo)
+			local t={}; t[0] = 0
+			local k,v0,v1=1,0,PALETTE.linear(vals[1])
+			local e,h=0,{}
+			local avg = 0; for i=0,255 do avg = avg + histo[i]/256 end
+			for i=0,255 do h[i]=histo[i]/avg + 1/16 end
+			for i=0,255 do
+				local v = PALETTE.linear(i)
+				if v>=v1 and vals[k+1] then 
+					k,v0,v1=k+1,v1,PALETTE.linear(vals[k+1]) 
+				end
+				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
+				t[i] = k-1 + f
+				if histo then
+					local DIV=4--2
+					f = round(f*DIV)/DIV
+					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
+				end
+			end
+			return t,math.abs(e)
+		end
+
+        for i,f in ipairs(arg) do
+            local TMP = CONVERTER:new(f,nil,1)
+            if TMP then
+                local stat = VIDEO:new(TMP.file,TMP.fps,80,50,80,50,TMP.interlace,
+					function(self, x,y, r,g,b)
+					H.r[r], H.g[g], H.b[b] = H.r[r]+1, H.g[g]+1, H.b[b]+1
+				end)
+                stat.super_next_image = stat.next_image
+                stat.mill = {'|', '/', '-', '\\'}
+                stat.mill[0] = stat.mill[4]
+                function stat:next_image()
+                    self:super_next_image()
+                    io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
+                                    self.mill[self.cpt % 4],
+                                    percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
+                    io.stderr:flush()
+                end
+                while stat.running do stat:next_image() end
+            end
+        end
+		local ef = {}; for i=0,15 do ef[i] = PALETTE.ef[1+i] end
+		local r,g,b,t,e
+		for i=1,11 do for j=i+1,12 do for k=j+1,13 do for l=k+1,14 do for m=l+1,15 do
+			t,e = map({ef[i],ef[j],ef[k],ef[l],ef[m]}, H.r)
+			if r==nil or e<=r.err then r = {err=e, base={0,i,j,k,l,m}} end
+			t,e = map({ef[i],ef[j],ef[k],ef[l],ef[m]}, H.g)
+			if g==nil or e<=g.err then g = {err=e, base={0,i,j,k,l,m}} end
+			t,e = map({ef[i],ef[j],ef[k],ef[l],ef[m]}, H.b)
+			if b==nil or e<=b.err then b = {err=e, base={0,i,j,k,l,m}} end
+		end end end end end
+		io.stderr:write(string.rep(' ',79)..'\r')
+        io.stderr:flush()
+
+		print('b', unpack(b.base))
+		print('r', unpack(r.base))
+		print('g', unpack(g.base))
+
+		return {
+			0x000,			
+			0x001*r.base[2],0x001*r.base[3],0x001*r.base[4],0x001*r.base[5],0x001*r.base[6],
+			0x010*g.base[2],0x010*g.base[3],0x010*g.base[4],0x010*g.base[5],0x010*g.base[6],
+			0x100*b.base[2],0x100*b.base[3],0x100*b.base[4],0x100*b.base[5],0x100*b.base[6]
+		}
+    end
+
 elseif MODE==10 or MODE==11 then
     CONFIG.px_size   = {4,1}
     CONFIG.interlace = 'I' --'i3'
@@ -821,6 +1049,8 @@ elseif MODE==22 or MODE==23 then
     CONFIG.px_size   = {4,1}
     CONFIG.interlace = 'I' 
     CONFIG.dither    = 	vac(3,9)
+	
+	CONFIG.dither    = compo(bayer,1){{1},{3},{2},{4}}
 			
 	CONFIG.palette   = function(CONVERTER,VIDEO)
 		local H = {r={},g={},b={},w={}}
@@ -914,6 +1144,20 @@ elseif MODE==24 then
 						-- norm(vac(5,11))
 						-- compo(norm,bayer,3){{1},{2}} 
 						-- norm(vac(4,7)) -- norm(vac(7,13)) -- compo(norm,bayer,2){{1},{2}} --  compo(norm,bayer,2){{1},{2}} -- norm(vac(4,8)) -- 
+	CONFIG.dither    = compo(norm,bayer,2){{1},{2}} 
+	
+	CONFIG.dither = compo(norm,bayer){
+		{13,25,21, 7},
+		{14,26,22, 8},
+		{23,31,27,15},
+		{24,32,28,16},
+		{19,29,11, 3},
+		{20,30,12, 4},
+		{ 9,17, 5, 1},
+		{10,18, 6, 2} 
+	}
+
+	
 	CONFIG.palette   = function(CONVERTER,VIDEO)
 		local H = {w={}} for i=0,255 do H.w[i]=0 end		
 		local function map(vals, histo)
@@ -930,7 +1174,7 @@ elseif MODE==24 then
 				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
 				t[i] = k-1 + f
 				if histo then
-					local DIV=1
+					local DIV=8
 					f = round(f*DIV)/DIV
 					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
 				end
@@ -968,6 +1212,8 @@ elseif MODE==24 then
 		io.stderr:write(string.rep(' ',79)..'\r')
         io.stderr:flush()
 
+CONFIG.dither    = compo(norm,bayer){{1},{2}} 
+	
 		print('w', unpack(w.base))
 
 		return {
@@ -975,6 +1221,9 @@ elseif MODE==24 then
 			0,0,0,0,0,0,0,0,0,0,0,0
 		}
     end
+elseif MODE==25 then
+    CONFIG.interlace = 'p'
+    CONFIG.dither    = {{1}}
 else
     error("Invalid MODE="..MODE)
 end
@@ -1453,15 +1702,16 @@ end
 local AUDIO = {}
 function AUDIO:new(file)
 	-- value such that group_size*1000000/cycles is the most integer
-	local size = 25 -- 6
+	local size = 21 -- 6
 	if false then
 		local min = 10
-		for i=1,16 do
+		for i=1,32 do
 			local x = i*1000000/CYCLES
 			x = math.abs(x-round(x))
 			if x<min then size,min = i,x end
 			print(i,x,size)
 		end
+		print('size='..size)
 	end
 	
 	local hz = round(size*1000000/CYCLES)
@@ -1469,7 +1719,7 @@ function AUDIO:new(file)
 	local LRA='LRA=11'
 	local tp='tp=-1'
 	local norm = '-af loudnorm='..I..':'..LRA..' '
-	norm = '-filter:a dynaudnorm=p=0.9:s=5 '
+	norm = '-filter:a dynaudnorm=r=0.6:s=8:m=30 '
 	if false then
 		io.stderr:write('> analyzing audio...')
 		io.stderr:flush()
@@ -1513,7 +1763,7 @@ function AUDIO:new(file)
 		size = size,
 		mute = '',
 		buf = '', -- buffer
-		vol = 1.9,
+		vol = 1.6,
 		running = true
 	}
 	for i=1,size do o.mute = o.mute .. string.char(0) end
@@ -1523,6 +1773,13 @@ function AUDIO:new(file)
 end
 function AUDIO:close()
 	self.stream:close()
+end
+function AUDIO:compressor(v)
+	local t,m,s = 24,32,v>=0 and 1 or -1
+	self.comp_ratio = self.comp_ratio or (m-t)/(m*self.vol-t)
+	v = math.abs(v * self.vol)
+	if v>t then v = t + (v-t)*self.comp_ratio end
+	return v*s
 end
 function AUDIO:next_sample()
 	local buf,siz = self.buf,self.size
@@ -1535,7 +1792,7 @@ function AUDIO:next_sample()
 	end
 	local v = 0
 	for i=1,siz do v = v + ((buf:byte(i)+128)%256)-128 end
-	self.buf,v = buf:sub(siz+1),self.vol*v/(siz*4) + 32 + math.random()
+	self.buf,v = buf:sub(siz+1),self:compressor(v/(siz*4)) + 31.5 + math.random()
 	if v<0 then v=0 elseif v>63 then v=63 end
 	return math.floor(v)
 end
@@ -1543,8 +1800,8 @@ end
 -- ===========================================================================-- PALETTE support
 -- VIDEO filter aimed at mixing dropped frammes
 local FILTER = {}
-function FILTER:new()
-    local o = {t={},cur={},map={}}
+function FILTER:new(video)
+    local o = {t={},cur={},map={}, alpha=.3333*0+.70*0, video=video}
     setmetatable(o, self)
     self.__index = self
 	for i=0,320*200*3-1 do o.cur[i] = 0 end
@@ -1566,7 +1823,15 @@ function FILTER:push(bytecode)
     table.insert(self.t, t)
     return self
 end
-if FILTER_ALPHA>0 then
+if false then
+function FILTER:push(bytecode)
+    local t,a,b = self.t[#self.t] or {},self.alpha,1-self.alpha
+    for i=1,bytecode:len() do t[i] = round((t[i] or 0)*a + b*bytecode:byte(i)) end
+    table.insert(self.t, t)
+    return self
+end
+end
+if false and FILTER_ALPHA>0 then
 function FILTER:push(bytecode)
     local t,map,cur = {},self.map,self.cur
     for i=1,bytecode:len() do 
@@ -1579,30 +1844,145 @@ function FILTER:push(bytecode)
 end
 end
 function FILTER:flush()
+	self.rnd = nil -- math.random()
     for i=FILTER_DEPTH,#self.t do table.remove(self.t,1) end
 end
 function FILTER:byte(offset)
     local m,t = #self.t, self.t
-    if true or m==1 then
-        return t[1][offset]
+	if true then return t[m][offset] end -- aucun traitement
+	if m==1 then
+	    return t[1][offset]
+	elseif false then
+		local f = math.max
+		if m==2 then return f(t[1][offset],t[2][offset]) end
+		local l = {}
+		for i=1,m do l[i]=t[i][offset] end
+		return f(unpack(l))
+	elseif false then
+		local y = math.floor((offset-1)/self.video.width)
+		return t[(y%2)*(m-1)+1][offset]
+	elseif true then
+		if false then
+			local function f(a,b,...) if a>0 and b then return f(a*b,...) else return a end end
+			local l = {}
+			for i=1,m do l[i]=t[i][offset] end
+			return round(f(unpack(l))^(1/m))
+		end
+		if m==2 then return round(math.sqrt(t[1][offset]*t[2][offset])) end
+		local v=1
+		for i=1,m do v=v*t[i][offset] end
+		return round(v^(1/m))
+		-- return t[round(0.25*(1+3*m))][offset]
+	elseif false then	
+		local v,w,n = 0,0,2
+        for i=1,m do v,w = v + t[i][offset]^n,w+1 end
+        return round((v/w)^(1/n))
+	elseif false then
+		local y = math.floor((offset-1)*CONFIG.px_size[1]/320)
+		local o = 1+math.abs((y % (2*m-1)) - (m-1))
+		return t[o][offset]
+	elseif false then
+		local v,w,d=0,0,0
+		for i=1,m do w=math.exp(-0.125*(i-m/2)^2); v,d=v+w*t[i][offset],d+w end
+		return round(v/d)
+	elseif false then
+		if not self.offset_cache then self.offset_cache = {} end
+		if not self.offset_cache[m] then
+			self.offset_cache[m] = {}
+			local f = math.floor
+			for i=1,#t[1] do
+				self.offset_cache[m][i] = m-f(m*320*f((i-1)/320)/#t[1])
+			end
+		end
+		return t[self.offset_cache[m][offset]][offset]
+	elseif false then
+		return round(0.5*(t[1][offset]+t[m][offset]))
+	elseif false then	
+		local a=.5; local b,v=1-a,t[1][offset]
+        for i=2,m do v=a*v+b*t[i][offset] end
+		return round(v)
+	elseif false then	
+		local v,m1,m2 = 0,0,0
+        for i=1,m do m2=1.6^i; m1,m2=m1+t[i][offset]*m2,m1+m2 end
+		m1,m2 = m1/m2,0
+		for i=1,m do m2 = m2 + (t[i][offset]-m1)^2 end
+		v = t[m][offset]
+		local e1,e2 = (v-m1)^2,m2/m
+		return e1<e2 and round(m1) or v
+	elseif false then	
+		local v,m1,m2 = 0,0,0
+        for i=1,m-1 do v=t[i][offset]; m1,m2=m1+v,m2+v*v end
+		m1,m2,v = m1/(m-1),m2/(m-1),t[m][offset]
+		local e1,e2 = (v-m1)^2,m2-m1^2
+		if e1<2*e2 then
+			-- if e1>0 then print(e2/e1, m1,m2,v, e1,e2) end
+			m1=0.666; v,m2=t[1][offset],1-m1
+			for i=2,m do v=m1*v+m2*t[i][offset] end
+			return round(v)
+		else	
+			return v
+		end
+	elseif false then	
+		local a,d,v,w=0,0,0,0
+        for i=1,m-1 do a = a + t[i][offset] end; a = a/(m-1)
+		for i=1,m do local t=t[i][offset]; w=0.01 + (t-a)^2; v,d=v+t*w,d+w end
+		return round(v/d)
+	elseif false then
+		if self.k==nil then self.k = math.floor(CONFIG.px_size[2]*320/CONFIG.px_size[1]) end
+		local k = math.floor(offset/self.k) % (m-1)
+		return t[1+k][offset]
+	elseif false then	
+		local v,m1,m2 = 0,0,0
+        for i=1,m do v=t[i][offset]; m1,m2=m1+v,m2+v*v end
+		m1,m2,v = m1/m,m2/m,t[m][offset]
+		local e1,e2 = (v-m1)^2,m2-m1^2
+		-- if e1>=e2 then print("*",(e1/e2),m) else print "-" end
+        return e1<e2 and round(m1) or v
 	elseif true then	
-		local v,d = 0,0
-        for i=1,m do v,d = v + t[i][offset]*i,d+i end
+		local v,m1,m2 = 0,0,0
+        for i=1,m-1 do v=t[i][offset]; m1,m2=m1+v,m2+v*v end
+		m1,m2,v = m1/(m-1),m2/(m-1),t[m][offset]
+		local e1,e2 = (v-m1)^2,m2-m1^2
+		-- if e1>e2 then print "*" else print "-" end
+        return e1<e2 and round(m1) or v
+	elseif false then	
+		local v = 0
+        for i=1,m do v = math.max(v,t[i][offset]) end
+        return v
+	elseif true then	
+		local v,d,f1,f2 = 0,0,0,1
+        for i=1,m do v,d,f1,f2 = v + t[i][offset]*f2,d+f2,f2,f1+f2 end
+        return round(v/d)		
+	elseif true then	
+		local v,d,w = 0,0
+        for i=1,m do w=2^i; v,d = v + t[i][offset]*w,d+w end
         return round(v/d)
-    elseif m==2 then
+	elseif false then	
+		local v,d,w = 0,0
+        for i=1,m do w=i^1.5; v,d = v + t[i][offset]*w,d+w end
+        return round(v/d)
+	elseif false then	
+		local v,d,w = 0,0
+        for i=1,m do w=i*i; v,d = v + t[i][offset]*w,d+w end
+        return round(v/d)
+	elseif true then	
+		local v,d,w = 0,0
+        for i=1,m do w=i; v,d = v + t[i][offset]*w,d+w end
+        return round(v/d)
+    elseif true then
         -- do return round((self.t[1][offset]+2*self.t[2][offset])*.3333333) end
 
         -- new strategy to improve compression: if change is small, keep previous value
-        local a,b = t[1][offset],t[2][offset]
+        local a,b = t[1][offset],t[m][offset]
         local la,lb =
             -- (a/255)^2.2,(b/255)^2.2
             PALETTE.linear(a),PALETTE.linear(b)
 		-- if math.abs(la-lb)>0 and la+lb>0 then print (math.abs(la-lb)/math.max(la,lb)) end
         if la~=lb 
-		and	math.abs(la-lb)<FILTER_THRES*math.max(la,lb)
-		and math.random()>.001
+		and	math.abs(la-lb)<FILTER_THRES -- *math.max(la,lb)
+		and (self.rnd or math.random())>.25
 		then
-            b,t[2][offset]=a,a
+            b,t[m][offset]=a,a
         end
         return b
     elseif m==3 then
@@ -1684,13 +2064,34 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, interlace, pset
   		local dist = {}		
 		for i=0,255 do for j=0,255 do
 			local a,b,d = i,j,0
-			for k=0,3 do
-				d = d + math.abs((a % 4)-(b % 4))^2
-				a,b = math.floor(a/4),math.floor(b/4)
+			if MODE==0 or MODE==1 then
+				for k=0,7 do
+					d = d + ((a % 2)==(b % 2) and 0 or 1)
+					a,b = math.floor(a/2),math.floor(b/2)
+				end
+			elseif MODE==24 then
+				local a,b,f = i,j,function(a,b)
+					a,b = a%4, b%4
+					return a*b==0 and 10 or math.abs(a-b)
+				end
+				d = 0
+				for k=0,3 do
+					d,a,b = d + f(a,b),math.floor(a/4),math.floor(b/4)
+				end
+			else 
+				local function t(x)
+					return math.floor(x/8)%16,math.floor(x/128)*128+(x%8)
+				end
+				local a1,a2 = t(i)
+				local b1,b2 = t(j)
+				d = (a1*b1==0 and 16 or 0)+(a2*b2==0 and 16 or 0)+(a1==b1 and 0 or 1)+(a2==b2 and 0 or 1)
+				-- d = i==j and 0 or 2
 			end
+			
 			dist[i*256+j] = d
 		end end
-		local cpt,i2l = 0,{}
+		for i=-65536,-1 do dist[i] = 8 end
+		local cpt,full,i2l = 0,0,{}
 		-- for i=0,7999 do i2l[i] = math.floor(i/40/CONFIG.px_size[2]) end
 		for i=0,199 do
 			for j=0,39 do i2l[i*40+j] = math.floor(i/math.min(#CONFIG.dither,2*CONFIG.px_size[2])) end
@@ -1698,10 +2099,62 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, interlace, pset
 		o.indices = function(prev,curr)
 			cpt = cpt+1
 			local MIN_FPS = fps
+						
 			local THR = 1+math.floor(1.0*2000000/CYCLES/MIN_FPS)
 			local t = {}
 			for i=0,7999 do if prev[i]~=curr[i] then table.insert(t,i) end end
-			if not t[THR] then return ipairs(t) end
+			
+			-- do return ipairs(t) end
+			
+			-- on oublei les trucs sophistiqués
+			-- if not t[THR] then full=full+1; return ipairs(t) end
+			
+			-- if t[THR] and math.random()>.25 
+			-- then 
+				-- t = {} local b,c,d=0,0,0
+				-- prev[8000] = 0 ; curr[8000] = 0
+				-- for i=0,8000 do 
+					-- b,c,d = c,d,dist[prev[i]*256+curr[i]]
+					-- if c>1 or (c==1 and b+d==0-- and not t[THR]
+					-- ) then
+						-- table.insert(t,i-1) 
+					-- end 
+				-- end
+			-- end
+			
+			
+			-- do return ipairs(t) end
+			
+			
+			if t[THR] and math.random()>.125 and MODE>1
+			then 
+				local d = {}
+				for i=0,7999 do d[i] = dist[prev[i]*256+curr[i]] end
+				d[-1] = 0; d[8000] = 0
+
+				local ztl = #t
+				t = {}
+				for i=0,7999 do 
+					if d[i]>1 or (d[i]==1 and d[i-1]+d[i+1]>0) then 
+						table.insert(t,i) 
+					end 
+				end
+				
+				if #t<THR then
+					local q = {}
+					for i=0,7999 do if d[i]==1 and d[i-1]+d[i+1]==0 then table.insert(q,i) end end
+					local tl = #t
+					for i=#t+1,THR-1 do
+						t[i] = table.remove(q, math.random(#q))
+					end
+					-- print(ztl..'   '..tl..'   '..THR..'   '..#q..'    ')
+					table.sort(t)
+				end
+			end
+			
+			if CONFIG.px_size[2]==1 then return ipairs(t) end
+			-- do return ipairs(t) end
+			
 			if false and t[THR] then 
 				local m = 2 -- math.ceil(#t / THR)
 				local z = 40*CONFIG.px_size[2]
@@ -1716,19 +2169,23 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, interlace, pset
 				-- for i=#t,0,-1 do t[i]=nil end
 				-- for i=0,7999 do if prev[i]~=curr[i] and (i2l[i]%m)==n then table.insert(t,i) end end
 			-- end
+			-- if t[math.ceil(1.95*THR)] then
 			if t[math.ceil(1.95*THR)] then
 				local m = 2 -- math.ceil(#t / THR);
 				local n = cpt % m
 				for i=#t,0,-1 do t[i]=nil end
 				for i=0,7999 do if prev[i]~=curr[i] and (i2l[i]%m)==n then table.insert(t,i) end end
 			end
-			if t[math.ceil(1.95*THR)] then
+			if false and --CONFIG.px_size[2]*4<8 and 
+			t[math.ceil(1.95*THR)] then
 				local m = 4 -- math.ceil(#t / THR);
 				local n = cpt % m
+				-- if n==1 or n==2 then n=3-n end
 				for i=#t,0,-1 do t[i]=nil end
 				for i=0,7999 do if prev[i]~=curr[i] and (i2l[i]%m)==n then table.insert(t,i) end end
 			end
-			if t[math.ceil(3.0*THR)] then
+			if t[math.ceil(3.0*THR)] or full<.55*cpt then
+			    full=full+1
 				for i=#t,0,-1 do t[i]=nil end
 				for i=0,7999 do if prev[i]~=curr[i] then table.insert(t,i) end end
 			else
@@ -1895,7 +2352,7 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, interlace, pset
 	o.zero = (MODE>=3) and ((MODE%2)==1) and 0xC0 or 0x00
     for i=0,7999+3 do o.image[i]=o.zero end
 
-    o.filter = FILTER:new()
+    o.filter = FILTER:new(o)
 
 	o:pset(0,0,0,0,0)
 
@@ -1936,35 +2393,27 @@ function VIDEO:transcode(p, o, v)
 end
 if MODE==0 then
     -- GRAY
-	local function pset(self, x,y, r,g,b)
-		if self._r[r]+self._g[g]+self._b[b]>=self.dither:get(x,y) then
-			local f = math.floor((x+y*320)/8)
-			self.image[f] = self.image[f] + self._mask[x]
-		end
-	end
-    function VIDEO:pset(x,y, r,g,b)
+	function VIDEO:pset(x,y, r,g,b)
         if not self.dither then 
 			self:init_dither()
-            self._linear = {}
-            for i=0,255 do self._linear[i]=PALETTE.linear(i) end
-            self._mask = {}
-            for i=0,319 do self._mask[i]=2^(7-(i%8)) end
-			-- local dith = {}
-			-- for x=0,319 do for y=0,199 do
-				-- dith[x + 320*y] = self.dither:get(x,y)
-			-- end end
-			-- self.dither = dith
-			self._r = {}
-			self._g = {}
-			self._b = {}
+			local _mask,_dith,_r,_g,_b = {},{},{},{},{}
+			for x=0,319 do for y=0,199 do
+				_dith[x + 320*y] = self.dither:get(x,y)
+				_mask[x + 320*y] = 2^(7-(x%8))
+			end end
 			for i=0,255 do
-				self._r[i] = self._linear[i]*GRAY_R
-				self._g[i] = self._linear[i]*GRAY_G
-				self._b[i] = self._linear[i]*GRAY_B
+				local l = PALETTE.linear(i)
+				_r[i],_g[i],_b[i] = l*GRAY_R,l*GRAY_G,l*GRAY_B
 			end
-        end
-		pset(self,x,y,r,g,b)
-		self.pset = pset
+			self.pset = function(self, x,y, r,g,b)
+				x = x+320*y
+				if _r[r] + _g[g] + _b[b] >= _dith[x] then
+					local i,f = self.image,math.floor(x/8)
+					i[f] = i[f] + _mask[x]
+				end
+			end
+		end
+		self:pset(x,y,r,g,b)
     end
 elseif MODE==1 then
     -- RGB
@@ -2035,6 +2484,20 @@ elseif MODE==6 or MODE==7 then
 	local function pset(self, x,y, r,g,b)
 		local f,d = self._linear,self.dither:get(x,y)
         r,g,b = f[r][1],f[g][2],f[b][3]
+		if true then
+		r = math.floor(r) +
+        -- (r%1>self.dither:get(x,3*y+0) and 1 or 0)
+        -- (r%1>=(r>=1 and d or self.dither:get(x,3*y+0)) and 1 or 0)
+        (r%1>d and 1 or 0)
+        g = math.floor(g) +
+        -- (g%1>self.dither:get(x,3*y+1) and 1 or 0)
+        -- (g%1>=(g>=1 and d or self.dither:get(x,3*y+1)) and 1 or 0)
+        (g%1>d and 1 or 0)
+        b = math.floor(b) +
+        -- (b%1>self.dither:get(x,3*y+2) and 1 or 0)
+        -- (b%1>=(b>=1 and d or self.dither:get(x,3*y+2)) and 1 or 0)
+        (b%1>d and 1 or 0)
+		else
         r = math.floor(r) +
         -- (r%1>self.dither:get(x,3*y+0) and 1 or 0)
         (r%1>=(r>=1 and d or self.dither:get(x,3*y+0)) and 1 or 0)
@@ -2047,6 +2510,7 @@ elseif MODE==6 or MODE==7 then
         -- (b%1>self.dither:get(x,3*y+2) and 1 or 0)
         (b%1>=(b>=1 and d or self.dither:get(x,3*y+2)) and 1 or 0)
         -- (b%1>d and 1 or 0)
+		end
 
         self:plot(math.floor(x/2) + y*80,x%2,r,g,b)
 	end
@@ -2094,13 +2558,16 @@ elseif MODE==8 or MODE==9 then
 		local f,d,int = self._linear,self.dither:get(x,y),math.floor
         r,g,b = f[r],f[g],f[b]
         r = int(r) + 
-			(r%1>(r>=1 and d or self.dither:get(x,3*y+0)) and 1 or 0)
+			(r%1>d and 1 or 0)
+			-- (r%1>(r>=1 and d or self.dither:get(x,3*y+0)) and 1 or 0)
 			-- (r%1>self.dither:get(x,3*y+0) and 1 or 0)
         g = int(g) + 
-			(g%1>(g>=1 and d or self.dither:get(x,3*y+1)) and 1 or 0)
+			(g%1>d and 1 or 0)
+			-- (g%1>(g>=1 and d or self.dither:get(x,3*y+1)) and 1 or 0)
 			-- (g%1>self.dither:get(x,3*y+1) and 1 or 0)
         b = int(b) + 
-			(b%1>(b>=1 and d or self.dither:get(x,3*y+2)) and 1 or 0)
+			(b%1>d and 1 or 0)
+			-- (b%1>(b>=1 and d or self.dither:get(x,3*y+2)) and 1 or 0)
 			-- (b%1>self.dither:get(x,3*y+2) and 1 or 0)
         if g>0 then g=g+5  end
         if b>0 then b=b+10 end
@@ -2214,6 +2681,58 @@ elseif MODE==24 then
         end
 		pset(self,x,y,r,g,b)
 		self.pset = pset
+    end
+elseif MODE==25 then
+    function VIDEO:pset(x,y, r,g,b)
+		self._mask = {}
+		for i=0,320*200-1 do self._mask[i]={math.floor(i/8),2^(7-(i%8))} end
+
+		self._r = {}
+		self._g = {}
+		self._b = {}
+		for i=0,255 do
+			local lin = PALETTE.linear(i)
+			self._r[i] = lin*GRAY_R*255
+			self._g[i] = lin*GRAY_G*255
+			self._b[i] = lin*GRAY_B*255
+		end
+		
+		self._gray = {} for i=0,320*200-1 do self._gray[i] = 0 end
+		self._flush = self.filter.flush
+		self.filter.flush = function(filter) 
+			self._flush(filter)
+			
+			-- https://en.wikipedia.org/wiki/Otsu's_method
+			local histo = self._histo or {}
+			for i=0,255 do histo[i] = 0 end
+			self._histo = histo
+			for i=0,320*200-1 do local g = self._gray[i]; histo[g] = histo[g]+1 end
+			local wB,sumB,sum1,maximum,level = 0,0,0,-1,256
+			for i=0,255 do sum1 = sum1 + i*histo[i] end
+			for i=0,255 do
+				local wF = 320*200-wB
+				if wB>0 and wF>0 then
+					local mF = (sum1-sumB)/wF
+					local v = wB * wF * ((sumB / wB) - mF) * ((sumB / wB) - mF)
+					if v > maximum then	maximum,level = v,i end
+				end
+				wF = histo[i]
+				wB,sumB = wB + wF,sumB + i*wF
+			end		
+			for i=0,320*200-1 do 
+				if self._gray[i]>level then
+					local a,b = unpack(self._mask[i])
+					self.image[a] = self.image[a] + b
+				end
+				self._gray[i] = 0
+			end			
+		end
+
+		self.zero = 0
+		self.pset = function(self, x,y, r,g,b)
+			self._gray[x+y*320] = math.floor(0.5+self._r[r]+self._g[g]+self._b[b])
+		end
+		self:pset(x,y,r,g,b)
     end
 else
     error('Invalid MODE: ' .. MODE)
