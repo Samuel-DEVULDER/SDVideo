@@ -22,20 +22,16 @@
 * Le chargement et le lancement du programme sont
 * realises grace a un secteur de boot.
 
-GRAY   set 0	Memoire forme: N&B
-COL1   set 1	Memoire forme: R/G/B
-COL2MO set 2	Memoire fond, pas transcodage
-COL2TO set 3  Memoire fond, transcodage
-COL3MO set 4  Memoire fond, palette, pas trans.
-COL3TO set 5  Memoire fond, palette, transcodage
-BM59   set 6  Memoire forme, palette 4 couls
+MODE_BW     set 0	  Memoire forme: N&B
+MODE_RGB    set 1	  Memoire forme: R/G/B
+MODE_BM59   set 2   Memoire forme, palette 4 couls
+MODE_PAL    set 3   Memoire fond, palette
 
-*MODE SET GRAY
-   
 ****************************************************
-*                Version 2024.02.11                *
+*                Version 2024.03.11                *
 ****************************************************
 * Historique
+* 2024.03.11 marche sur TO ou MO.
 * 2024.02.11 168 cycles/ech = 5952.38hz
 * 2018.07.14 adresse SD_LB0 calculee selon version 
 * 2018.07.02 deplacement de la zone SD_LB0 en <$51 
@@ -47,6 +43,7 @@ BM59   set 6  Memoire forme, palette 4 couls
 *------------------------------------------------------
   ORG   $9100
 START SET *
+  LEAS  START,PCR
   BRA   INIT          initialisations 
 
 *------------------------------------------------------
@@ -158,21 +155,25 @@ READ_BIT MACRO
 INIT
   ORCC  #$50          desactive les interruptions 
   LDA   >$FFF2        $FFF2: $F0(MO) et $70(TO)
-  LBPL  INIT3         TO detecte
+  BPL  INIT_TO        TO detecte
 
-  IFEQ  (MODE-COL2TO)*(MODE-COL3TO)
-  JSR   ERRORMO
-  FCC   /Cette video requiert une machine TO/
-  FCB   0
+*------------------------------------------------------
+* Initialisations communes MO5/MO6/PC128
+*------------------------------------------------------
+  IFEQ  (MODE-MODE_PAL)*(MODE-MODE_BM59)
+* MO5   -> 00
+* MO5N  -> 01
+* MO5NR -> 01
+* MO6   -> 01
+* PC128 -> 01
+  LDA   >$FFF0       type d'ordinateur
+  BEQ  ERROR        
   ENDC
 
-*------------------------------------------------------
-* Initialisations communes MO5-MO6 
-*------------------------------------------------------
   LDU   #$1F40        fin memoire video+1 ligne
   LDX   #$A7C0        adresse selection banque video
-  
-  IFEQ  MODE-GRAY     gris
+
+  IFEQ  (MODE-MODE_BW)*(MODE-MODE_BM59)
   LDB   #1            memoire forme
   ORB   ,X
   STB   ,X            
@@ -182,9 +183,14 @@ INIT
   JSR   ECRAN1        remplissage fond
   FCB   %01110000     blanc sur noir
   INC   ,X            memoire forme  
+  IFEQ  MODE-MODE_BM59
+  LDD   #$5900        mode $59/tour noir
+  ELSE
+  LDD   #$0000        mode std/tour noir
+  ENDC
   ENDC
 
-  IFEQ  MODE-COL1     
+  IFEQ  MODE-MODE_RGB
   LDB   #1            memoire forme
   ORB   ,X
   STB   ,X            
@@ -198,28 +204,23 @@ INIT
   FCB   %00100000
   FCB   %00010000
   INC   ,X            memoire forme  
+  LDD   #$0000        mode std/tour noir
   ENDC
 
-  IFEQ  (MODE-COL2MO)*(MODE-COL3MO)
-  LDB   #254          memoire forme
+  IFEQ  MODE-MODE_PAL
+  LDB   #254          memoire fond
   ANDB  ,X
   STB   ,X            
   JSR   ECRAN1        remplissage fond noir/noir
   FCB   %00000000
-  INC   ,X            memoire fond
+  INC   ,X            memoire forme
   JSR   ECRAN1        remplissage forme XXXX----
   FCB   %11110000
-  DEC   ,X            memoire forme
+  LDD   #$0000        mode std/tour noir
   ENDC
-  
-  LDA   >$FFF0        type d'ordinateur
-  LBNE  INIT2         MO6  
 
-  IFEQ  (MODE-COL3MO)*(MODE-BM59)
-  JSR   ERRORMO
-  FCC   /Cette video requiert un MO6/
-  FCB   0
-  ENDC
+  TST   >$FFF0
+  BNE   INIT_GEN2
 
 *------------------------------------------------------
 * Initialisations MO5 
@@ -231,131 +232,73 @@ INIT
   JMP   INIT8         suite des initialisations
 
 *------------------------------------------------------
-* Erreur MO
+* Erreur
 *------------------------------------------------------
-ERRORMO
-  LDX   #ERRORMO0
-  BSR   MO_PUTS
+ERROR
+  LDX   #ERRORMSG
+  BSR   PUTS
   
-  PULS  X             message
-  LDA   #-1
-ERRORMO1 
-  INCA
-  TST   A,X           calcule longueur message
-  BNE   ERRORMO1  
-  
-  LDB   #32
-  NEGA
-  ADDA  #40           centrage message
-  LSRA
-  BEQ   ERRORMO3
-ERRORMO2
-  SWI   
-  FCB   2
-  DECA
-  BNE   ERRORMO2
-  
-ERRORMO3
-  BSR   MO_PUTS       affichage message
+ERROR2
+  BSR   GETC          attente appui touche
+  TSTB
+  BEQ   ERROR2
 
-  SWI                 beep
-  FCB   8
-  
-ERRORMO4
-  SWI                 attente appui touche
-  FCB   10
-  BEQ   ERRORMO4
-  
-  SWI                 beep
-  FCB   8
-  
-  SWI
-  FCB   0             reset
+RESET
+  JMP   [$FFFE]       reset
 
-ERRORMO5
+PUTC
   SWI
-  FCB   2
-MO_PUTS
+  FCB   $82
+  JMP   $E803
+
+GETC
+  SWI
+  FCB   $8A
+  JMP   $E806
+  
+  BSR   PUTC  
+PUTS
   LDB   ,X+
-  BNE   ERRORMO5
+  BNE   PUTS-2
   RTS
-  
-ERRORMO0
-  FCB   $14           cursor off
-  FCB   27,$50+1,27,$47 couleur
-  FCB   $1F,$40+11,$41 locate 0,12
-  FCB   $18,10        eff ligne descente
-  FCB   $18,10        eff ligne descente
-  FCB   $18,11        eff ligne remontee
-  FCB   $1B,$68       blocage couleur 
-  FCB   0
-
-*------------------------------------------------------
-* Initialisations PALETTE
-*------------------------------------------------------  
-PALETTE
-  PSHS  D,X,U,DP
-  TFR   X,D
-  TFR   A,DP
-PALETTE1
-  LDA   <$E7
-  BPL   PALETTE1
-PALETTE2
-  LDA	  <$E7
-  BMI	  PALETTE2
-  LDX   #200
-PALETTE3
-  LEAX  -1,X
-  BNE   PALETTE3
-  LDX   #16
-  LDU   #PALDATA
-  CLR   <$DB
-PALETTE4
-  PULU  D
-  STB   <$DA
-  STA   <$DA
-  LEAX  -1,X
-  BNE   PALETTE4
-  PULS  D,X,U,DP,PC
-    
-*------------------------------------------------------
-* Initialisations MO6 / TO8 / TO9+
-*------------------------------------------------------
-INIT2
-  CLR   $1D,X         change couleur cadre (noir)
-  LDA   ,X            PIA systeme 
-  ANDA  #$FB          clear mute bit 
-  STA   ,X            modification PIA
-  
-*  IFEQ  (MODE-COL3MO)*(MODE-COL3TO)*(MODE-BM59)
-  JSR   PALETTE
-*  ENDC
-
-  IFEQ  MODE-BM59
-  LDD   #$4001            memoire forme
-  STA   <$5F          force reset ecran
-  ORB   ,X
-  STB   ,X            
-  JSR   ECRAN1        remplissage forme avec 0
-  FCB   %00000000
-  ENDC
-  
-  JMP   INIT8         suite des initialisations
 
 *------------------------------------------------------
 * Initialisations communes TO7-TO8 
 *------------------------------------------------------
-INIT3
-  IFEQ  (MODE-COL2MO)*(MODE-COL3MO)
-  JSR   ERRORTO
-  FCC   /Cette video requiert une machine MO/
-  FCB   0
-  ENDC
+INIT_TO
+  LDB   #$81          patch des adresses pour TO (=CMPA)
+  STB   GETC
+  STB   PUTC
   
+  LDB   #$E0          valeur adresse EXCMD (poids fort)
+  STB   PATCH_READ    adresse execution EXCMD (pour CMD18)
+  STB   PATCH_FIN     adresse execution EXCMD (pour CMD12)
+  LDB   #$E7          Valeur espace I/O
+  STB   PATCH_CYC     pour compenser 1 cycle
+  
+  LDB   #$40
+  STB   PATCH_ECR
+  LDB   #2
+  STB   PATCH_POS
+
+* $FFF0
+* T9000 -> 00
+* TO7   -> 00
+* TO770 -> 01
+* TO9   -> 02
+* TO8   -> 03
+* TO9+  -> 06
+  LDA   >$FFF0       type d'ordinateur
+  CMPA  #3
+  IFEQ  (MODE-MODE_PAL)*(MODE-MODE_BM59)
+  BCS   ERROR 
+  ENDC
+  PSHS  CC
+
   LDU   #$5F40        fin memoire video+1 ligne
   LDX   #$E7C0        base regs TO
-  
-  IFEQ  MODE-GRAY     gris
+
+  IFEQ  (MODE-MODE_BW)*(MODE-MODE_BM59)
   LDB   #1            memoire forme
   ORB   3,X
   STB   3,X            
@@ -365,9 +308,14 @@ INIT3
   JSR   ECRAN1        remplissage fond N/B
   FCB   %11111000
   INC   3,X           memoire forme  
+  IFEQ  MODE-MODE_BM59
+  LDD   #$5900
+  ELSE
+  LDD   #$0000
+  ENDC
   ENDC
 
-  IFEQ  MODE-COL1     
+  IFEQ  MODE-MODE_RGB     
   LDB   #1            memoire forme
   ORB   3,X
   STB   3,X            
@@ -381,9 +329,10 @@ INIT3
   FCB   %11010000
   FCB   %11001000
   INC   3,X           memoire forme  
+  LDD   #$0000
   ENDC
 
-  IFEQ  (MODE-COL2TO)*(MODE-COL3TO)
+  IFEQ  MODE-MODE_PAL
   LDB   #254          memoire forme
   ANDB  3,X
   STB   3,X            
@@ -393,115 +342,57 @@ INIT3
   JSR   ECRAN1        remplissage forme XXXX----
   FCB   %11110000
   DEC   3,X           memoire forme
-  ENDC
-  
-  IFEQ  MODE-BM59
-  LDB   #1            memoire forme
-  ORB   3,X
-  STB   3,X            
-  JSR   ECRAN1        remplissage forme avec 0
-  FCB   %00000000
-*  STB   <$5F          force reset ecran
+  LDD   #$2008
   ENDC
 
-*------------------------------------------------------
-* Patch les adresses pour les TO
-*------------------------------------------------------
-PATCH_TO
-  LDB   #$E0          valeur adresse EXCMD (poids fort)
-  STB   PATCH_READ    adresse execution EXCMD (pour CMD18)
-  STB   PATCH_FIN     adresse execution EXCMD (pour CMD12)
-  LDB   #$E7          Valeur espace I/O
-  STB   PATCH_CYC     pour compenser 1 cycle
-  TFR   U,D
-  STA   PATCH_EOF     patch sentinelle fin video
-  ANDA  #$40
-  STA   PATCH_ECR
-  REPT  5,LSRA
-  STA   PATCH_POS
-  
-  LDB   >$FFF0        type d'ordinateur
+  PULS  CC
+  BCC   INIT_GEN2
 
-  IFEQ  MODE-COL2TO
-  BNE   PATCH2
-  JSR   ERRORTO
-  FCC   %Cette video requiert un TO7/70 ou plus%
-  FCB   0
-PATCH2
-  ENDC
-
-  CMPB  #3            TO8
-  BEQ   INIT2
-  CMPB  #6            TO9+
-  BEQ   *-4           beq INIT2 en court
-
-  IFEQ  (MODE-COL3TO)*(MODE-BM59)
-  JSR   ERRORTO
-  FCC   %Cette video requiert un TO8/TO9+%
-  FCB   0
-  ENDC
 *------------------------------------------------------
 * Initialisations TO7 et TO7/70
 *------------------------------------------------------
-INIT4
   LDB   3,X           port A du PIA systeme
   ANDB  #$15          couleur cadre 0 (noir) 
   STB   3,X           change couleur cadre
   JMP   INIT8         suite des initialisations
-
+  
 *------------------------------------------------------
-* Erreur TO
+* Initialisations MO6 / PC128 / TO8 / TO9+
+* A = mode video
+* B = indexe de la couleur noir
 *------------------------------------------------------
-ERRORTO
-  LDX   #ERRORTO0
-  BSR   TO_PUTS
+INIT_GEN2
+  STD   $1C,X         mode video + couleur cadre (noir)
+  LDA   ,X            PIA systeme 
+  ANDA  #$FB          clear mute bit 
+  STA   ,X            modification PIA
   
-  PULS  X             message
-  LDA   #-1
-ERRORTO1 
-  INCA
-  TST   A,X           calcule longueur message
-  BNE   ERRORTO1  
-  
-  LDB   #32
-  NEGA
-  ADDA  #40           centrage message
-  LSRA
-  BEQ   ERRORTO3
-ERRORTO2
-  JSR   $E803
-  DECA
-  BNE   ERRORTO2
-  
-ERRORTO3
-  BSR   TO_PUTS       affichage message
-  LDB   #7
-  JSR   $E803         beep
-  
-ERRORTO4
-  JSR   $E806         attente appui touche
-  TSTB
-  BEQ   ERRORTO4
-  LDB   #7
-  JSR   $E803         beep
-  JMP   [$FFFE]       reset
+  LSLB
+  STB   $1B,X
 
-ERRORTO5
-  JSR   $E803  
-TO_PUTS
-  LDB   ,X+
-  BNE   ERRORTO5
-  RTS
-  
-ERRORTO0
-  FCB   $14           cursor off
-  FCB   $1B,$51,27,$47 couleur
-  FCB   $1F,$40+11,$41 locate 0,12
-  FCB   $18,10        eff ligne descente
-  FCB   $18,10        eff ligne descente
-  FCB   $18,11        eff ligne remontee
-  FCB   $1B,$68       blocage couleur 
-  FCB   0
+PALETTE1
+  LDA   <$E7-$C0,X
+  BPL   PALETTE1
+PALETTE2
+  LDA	  <$E7-$C0,X
+  BMI	  PALETTE2
+  LDD   #250
+
+  STB   <$5F          force reset ecran au reboot
+  STB   <$FE
+
+PALETTE3
+  SUBD  #1
+  BNE   PALETTE3
+  LDU   #PALDATA
+PALETTE4
+  PULU  D
+  STB   <$DA-$C0,X
+  STA   <$DA-$C0,X
+  CMPU  #PALDATA+32
+  BNE   PALETTE4
+
+  JMP   INIT8         suite des initialisations
   
 *------------------------------------------------------
 * Initialise la memoire video avec la valeur suivant
@@ -571,11 +462,6 @@ ECRAN32
 * L'adresse de SD_LB0 passe de $208E-$608E a $2051-$6051
 * pour tous les controleurs a partir de juillet 2018
 INIT8
-  IFEQ  MODE-BM59
-  LDB   #$59
-  STB   $1C,X         changement mode video
-  ENDC
-
   TFR   DP,A          valeur de DP dans A
   LDB   #$51          adresse de SD_LB0 version recente
   TFR   D,X           stockee dans le registre X   
@@ -614,7 +500,7 @@ INIT9
   CLRA
 INIT10
   STA   <$CD
-  LDB   #20
+  LDB   #200          1ms
 INIT11
   DECB
   BNE   INIT11
@@ -744,6 +630,10 @@ TRAME_00
   STB   ,X+                                        (6)
   RTS                                              (5)
 
+TRAME_1X
+  GET_BIT
+  BCS   TRAME_11
+
 *-----------------------------------------------------
 * Trame de video 6 pixels (P1 P2 -- -- P3 P4)
 * s6 1 0 | VV VV VV VV | VV VV VV VV             (114)
@@ -761,7 +651,10 @@ TRAME_10
 *-----------------------------------------------------
 TRAME_11
   REPT  3,GET_BIT     lecture bits poids fort     (12)
-  BCS   TRAME_11_FIN                               (3)
+  BCC   TRAME_11_ok                                (3)
+  REPT  13,GET_BIT    on termine la trame en cours
+  JMP   FIN
+TRAME_11_ok
   LDB   #$00          to/mo                        (2)
   VAR   PATCH_POS,-1
   REPT  5,READ_BIT    lecture bits poids fort     (30)
@@ -772,6 +665,7 @@ TRAME_11
   ABX                 ajout poids faible           (3)
   ORCC  #0            attente                      (3)
   RTS                 nouvelle trame               (5)
+
   
 *-----------------------------------------------------
 * FIN DE BLOC: 2 octets a lire 
@@ -801,7 +695,7 @@ FIN_BLOC
   LDB   #0            lecture buffer 1             (2)
   VAR   BUF1,-1
   STB   <$CD          joue echantillon             (4)
-* son à 168 cycles
+* son a 168 cycles
   
 * Lecture $FF
   REPT  8,READ_BIT    lecture octet $FF           (48)
@@ -862,8 +756,20 @@ WAIT4
   LEAS  -170*2,S                                   (8)
   JMP   TRAME                                      (4)
 
+ERRORMSG
+  FCB   $14           cursor off
+  FCB   $1F,$21,$21   haut fenetre = 11
+  FCB   $1F,$11,$13   bas  fenetre = 13
+  FCB   $1B,$40       forme noir
+  FCB   $1B,$51       fond  rouge
+  FCB   $C            cls
+  FCB   10,9,9,9,9    centrage
+  FCC   /MO6, TO8, TO9+ or PC128 required/
+  FCB   $7            beep
+  FCB   0
+  
 * pile permettant de boucler 170 trames
-  RMB 2*170,0
+  RMB   2*170-(*-ERRORMSG),0
 STACK
 
 PALDATA
@@ -871,9 +777,8 @@ PALDATA
 *  FDB   $F00,$F0F,$FF0,$FFF
 *  FDB   $222,$006,$060,$066
 *  FDB   $600,$606,$660,$666
-  
+    
   ECHO *************************************
-  ECHO * B/W=&GRAY
   ECHO * ORG=$START
   ECHO * END=$STACK
   ECHO * LEN=&(STACK-START)

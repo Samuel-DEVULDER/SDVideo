@@ -1210,11 +1210,13 @@ function replace_yt(arg)
 				local IN,line,file = assert(io.popen(YT_DL..' --restrict-filenames -o "%(title)s--%(id)s" --get-filename ' .. vid, 'r'))
 				for line in IN:lines() do file = file or line .. '.mkv' end
 				IN:close()
-				local ok = file and exists(file) and 0 or 1
-				ok = ok==0 and 0 or os.execute(YT_DL .. ' -f 18 --merge-output-format mkv -o "'.. file .. '" ' .. vid)
-				ok = ok==0 and 0 or os.execute(YT_DL .. ' -f "best[height<=200]" --merge-output-format mkv -o "'.. file .. '" ' .. vid)
-				ok = ok==0 and 0 or os.execute(YT_DL .. ' --merge-output-format mkv -o "'.. file .. '" ' .. vid)
-				if ok==0 then table.insert(out, file) end
+				if file then 
+					local ok = exists(file) and 0 or 1
+					ok = ok==0 and 0 or os.execute(YT_DL .. ' -f 18 --merge-output-format mkv -o "'.. file .. '" ' .. vid)
+					ok = ok==0 and 0 or os.execute(YT_DL .. ' -f "best[height<=200]" --merge-output-format mkv -o "'.. file .. '" ' .. vid)
+					ok = ok==0 and 0 or os.execute(YT_DL .. ' --merge-output-format mkv -o "'.. file .. '" ' .. vid)
+					if ok==0 then table.insert(out, file) end
+				end
 			end
 		else
 			table.insert(out,vid)

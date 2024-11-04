@@ -26,7 +26,7 @@
 --    Avec le débit de la carte SD dans SD-drive, la valeur de 11
 --    images/secondes est un bon compromis. C'est la valeur par défaut.
 --
--- MODE=0..22 (défaut: 7)
+-- MODE=0..8 (défaut: 1)
 --    Mode de sortie. Regardez le README.html pour les détails.
 --
 -- Work in progress!
@@ -89,10 +89,8 @@ end
 
 -- ===========================================================================
 -- utiliser un fps<0 si la taille 100% doit etre conservee
-local MODE          = env('MODE',0)
+local MODE          = env('MODE',1)
 local FPS           = env('FPS',16)
--- MODE=21
-
 local FFMPEG        = locate('ffmpeg', 'tools')
 local YT_DL         = locate('yt-dlp', 'tools')
 local BIN           = locate('bin/')
@@ -102,10 +100,6 @@ local POPEN_READBIN = FFMPEG:match(".*%.exe") and "rb" or "r"
 -- constants
 local CYCLES        = 168 -- CYCLES per audio sample
 local FPS_MAX       = 30
-local FILTER_DEPTH  = 2
-local FILTER_THRES  = 1/16 -- 0.005*0 + .02*0 + .03*0 + 1/24*0 + 1/48
-local FILTER_ALPHA  = env('ALPHA',0)
-local EXPONENTIAL   = true
 local ZIGZAG        = false
 local BUFFER_SIZE   = 4096
 local CONFIG        = nil
@@ -353,10 +347,9 @@ end
 -- ===========================================================================
 -- init global data
 CONFIG = {
-    interlace   = 'p',
-	asm_mode    = (MODE==25 and 0) or (MODE<6 and MODE) or (MODE%2==0 and 4 or 5),
+	asm_mode    = 0,
     px_size     = {1,1},
-    dither      = {1},
+    dither      = {{1}},
     palette     = compo{0x000,0x00F,0x0F0,0x0FF,
                         0xF00,0xF0F,0xFF0,0xFFF,
                         0x666,0x338,0x383,0x388,
@@ -388,845 +381,6 @@ function PALETTE.unlinear(u)
     return u<0 and 0 or u>1 and 255 or u<0.00313 and (u*3294.6) or ((u^(1/2.4))*269.025-14.025)
     -- return u<0 and 0 or u>1 and 255 or (u^(1/2.2))*255
 end
-    
-if MODE==0 then
-    CONFIG.interlace = 'I' -- 'p' -- 'i' -- 'i3' -- 'i' -- 'iii' -- 'i3'
-    CONFIG.dither    = 
-	-- compo(norm,vac)(8,8)
-	-- compo(norm,vac)(16,16)
-	-- compo(norm,bayer,4){{1}}
-	-- norm{
-	-- {  6, 35, 49,  8, 39, 55, 13, 61},
-	-- { 26, 54, 19, 58, 24,  2, 51, 33},
-	-- { 45,  3, 41, 14, 44, 28, 38, 11},
-	-- { 21, 63, 29, 53,  7, 62, 17, 56},
-	-- { 47, 27,  9, 34, 46, 20, 42,  5},
-	-- { 15, 40, 57, 23, 12, 59, 25, 52},
-	-- { 60, 32,  1, 36, 50,  4, 37, 10},
-	-- { 43, 16, 30, 64, 18, 31, 48, 22}}
-	-- compo(norm,vac)(13,13)
-	-- compo(norm,vac)(7,7)
-	-- compo(norm,vac)(16,8)
-	compo(norm,vac)(8,7)
-	-- compo(norm,bayer,3){{1}}
-	-- CONFIG.dither = compo(norm,bayer,3){{1}}
-	-- CONFIG.dither = compo(norm,bayer){
-		-- { 7,13,11, 4},
-		-- {12,16,14, 8},
-		-- {10,15, 6, 2},
-		-- { 5, 9, 3, 1} 
-		
-		-- { 5,10,12, 7},
-		-- { 9,15,16,13},
-		-- { 3, 6,14,11},
-		-- { 1, 2, 8, 4}
-	-- }
-	CONFIG.dither = compo(norm,bayer,2){{1,2},{3,4}}
-	-- CONFIG.dither = compo(norm){{1}}
-	-- CONFIG.dither = compo(norm){
-		-- { 7,21,33,43,36,19, 9, 4},
-		-- {16,27,51,55,49,29,14,11},
-		-- {31,47,57,61,59,45,35,23},
-		-- {41,53,60,64,62,52,40,38},
-		-- {37,44,58,63,56,46,30,22},
-		-- {15,28,48,54,50,26,17,10},
-		-- { 8,18,34,42,32,20, 6, 2},
-		-- { 5,13,25,39,24,12, 3, 1}
-	-- }
-	-- CONFIG.dither = compo(norm,transp){
-		-- {16,49,25,43,29,50,38,11},
-		-- {31, 6,52,10,58, 2,24,55},
-		-- {41,21,59,15,33,48, 9,63},
-		-- { 4,45,36,27,42,19,35,28},
-		-- {51,18, 8,64, 3,53,60,14},
-		-- {39,54,30,47,23,12,44,26},
-		-- { 1,22,13,56,40,32, 7,57},
-		-- {34,61,37, 5,17,62,20,46}
-	-- }
-	CONFIG.dither = compo(norm, bayer, 1, transp){
-		{ 7,13,11, 4},
-		{12,16,14, 8},
-		{10,15, 6, 2},
-		{ 5, 9, 3, 1} 
-	}
-	-- CONFIG.dither = compo(norm,bayer,3){{1}}
-elseif MODE==1 then
-    CONFIG.px_size   = {1,3}
-    CONFIG.interlace = 'I' -- 'i' -- 'iii'
-    CONFIG.dither    = --compo(norm,bayer,3){{1,2,3}}
-		-- compo(norm,vac)(13,5)
-		compo(norm,vac)(9,3)
-		-- compo(norm,vac)(23,7)
-		-- compo(norm,vac)(17,5)
-		-- compo(norm,vac)(16,5)
-	-- CONFIG.dither = compo(norm){
-		-- { 21,19,20, 39,37,38, 33,31,32, 12,10,11},
-		-- { 36,34,35, 48,46,47, 42,40,41, 24,22,23},
-		-- { 30,28,29, 45,43,44, 18,16,17,  6, 4, 5},
-		-- { 15,13,14, 27,25,26,  9, 7, 8,  3, 1, 2} 
-	-- }	
-	CONFIG.dither = --compo(norm,bayer,1){{1,2,3,10,11,12},{7,8,9,6,4,5,6}}
-		-- compo(norm,bayer,2){{3,1,2}}
-		compo(norm,bayer,2){{3,1,2,4}}
-	CONFIG.dither = compo(norm, bayer){{3,1,2}}
-elseif MODE==2 or MODE==3 then
-    CONFIG.px_size   = {4,1}
-    CONFIG.interlace = 'i3'
-    CONFIG.dither    = --bayer{{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
-			--bayer{{1,2},{9,10},{5,6},{13,14},{3,4},{11,12},{7,8},{15,16}}
-			compo(bayer,2){{1},{3},{2},{4}}
-			-- vac(5,19) -- (7,29)
-			-- vac(4,17)
-elseif MODE==4 or MODE==5 then
-    CONFIG.px_size   = {4,1}
-    CONFIG.interlace = 'I' -- 'ii'
-    CONFIG.dither    = --bayer{{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
-		compo(bayer,2){{1},{3},{2},{4}}
-		-- vac(5,17) 
-		-- vac(7,29)
-    CONFIG.palette   = compo(
-        -- EXPONENTIAL and
-            -- {0x000,0x00F,0x0F0,0xF00,
-			 -- 0x0CC,0xC0C,0xCC0,0xFFF,
-             -- 0x001,0x010,0x100,0x111,
-             -- 0x005,0x050,0x500,0x555}
-        EXPONENTIAL and
-            {0x000,0x00E,0x0E0,0xE00,
-			 0x0BB,0xB0B,0xBB0,0xFFF,
-             0x001,0x010,0x100,0x111,
-             0x004,0x040,0x400,0x555}
-        or
-            {0x000,0x444,0x999,0xFFF,
-             0x001,0x004,0x009,0x00F,
-             0x010,0x040,0x090,0x0F0,
-             0x100,0x400,0x900,0xF00})
-elseif MODE==6 or MODE==7 then
-    CONFIG.px_size   = {4,2}
-    CONFIG.interlace = 'p' --'I' -- ZIGZAG and 'i3' or 'p'
-    CONFIG.dither    = 
-		compo(norm,bayer)
-		-- norm
-		{{1,4},{5,8},{3,2},{7,6}}
-			
-	-- b: 0     3   14
-	-- r: 0     1   6   15
-	-- g: 0     1   4   8       15
-
-	
-    CONFIG.palette   = compo(
-        EXPONENTIAL and
-            {0x000,0x100,0xD00,
-             0x001,0x101,0xD01,
-             0x004,0x104,0xD04,
-             0x00D,0x10D,0xD0D,
-             0x010,0x030,0x060,0x0D0}
-			 -- {0x000,0x300,0xE00,
-			  -- 0x001,0x301,0xE01,
-			  -- 0x006,0x306,0xE06,
-			  -- 0x00F,0x30F,0xE0F,
-			  -- 0x010,0x040,0x080,0x0F0}
-        or
-            {0x000,0x600,0xF00,
-             0x004,0x604,0xF04,
-             0x008,0x608,0xF08,
-             0x00F,0x60F,0xF0F,
-             0x030,0x060,0x090,0x0F0})
-
-	CONFIG.palette   = function(CONVERTER,VIDEO)
-		local H = {r={},g={},b={}}
-		for i=0,255 do H.r[i]=0; H.g[i]=0; H.b[i]=0 end	
-		local function map(vals, histo)
-			local t={}; t[0] = 0
-			local k,v0,v1=1,0,PALETTE.linear(vals[1])
-			local e,h=0,{}
-			local avg = 0; for i=0,255 do avg = avg + histo[i]/256 end
-			for i=0,255 do h[i]=histo[i]/avg + 1/16 end
-			for i=0,255 do
-				local v = PALETTE.linear(i)
-				if v>=v1 and vals[k+1] then 
-					k,v0,v1=k+1,v1,PALETTE.linear(vals[k+1]) 
-				end
-				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
-				t[i] = k-1 + f
-				if histo then
-					local DIV=8 -- 2
-					f = round(f*DIV)/DIV
-					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
-				end
-			end
-			return t,math.abs(e)
-		end
-
-        for i,f in ipairs(arg) do
-            local TMP = CONVERTER:new(f,nil,1)
-            if TMP then
-                local stat = VIDEO:new(TMP.file,TMP.fps,80,50,80,50,TMP.interlace,
-					function(self, x,y, r,g,b)
-					H.r[r], H.g[g], H.b[b] = H.r[r]+1, H.g[g]+1, H.b[b]+1
-				end)
-                stat.super_next_image = stat.next_image
-                stat.mill = {'|', '/', '-', '\\'}
-                stat.mill[0] = stat.mill[4]
-                function stat:next_image()
-                    self:super_next_image()
-                    io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
-                                    self.mill[self.cpt % 4],
-                                    percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
-                    io.stderr:flush()
-                end
-                while stat.running do stat:next_image() end
-            end
-        end
-		local ef = {}; for i=0,15 do ef[i] = PALETTE.ef[1+i] end
-		-- g=5, r=4, b=3
-		local r,g,b,t,e
-		for i=1,14 do for j=i+1,15 do 
-			t,e = map({ef[i],ef[j]}, H.b)
-			if b==nil or e<=b.err then b = {err=e, base={0,i,j}} end
-		end end
-		for i=1,13 do for j=i+1,14 do for k=j+1,15 do
-			t,e = map({ef[i],ef[j],ef[k]}, H.r)
-			if r==nil or e<=r.err then r = {err=e, base={0,i,j,k}} end
-		end end end
-		for i=1,12 do for j=i+1,13 do for k=j+1,14 do for l=k+1,15 do
-			t,e = map({ef[i],ef[j],ef[k]}, H.g)
-			if g==nil or e<=g.err then g = {err=e, base={0,i,j,k,l}} end
-		end end end end
-
-		io.stderr:write(string.rep(' ',79)..'\r')
-        io.stderr:flush()
-
-		print('b', unpack(b.base))
-		print('r', unpack(r.base))
-		print('g', unpack(g.base))
-
-		return {
-			0x001*r.base[1]+0x100*b.base[1],0x001*r.base[1]+0x100*b.base[2],0x001*r.base[1]+0x100*b.base[3],
-			0x001*r.base[2]+0x100*b.base[1],0x001*r.base[2]+0x100*b.base[2],0x001*r.base[2]+0x100*b.base[3],
-			0x001*r.base[3]+0x100*b.base[1],0x001*r.base[3]+0x100*b.base[2],0x001*r.base[3]+0x100*b.base[3],
-			0x001*r.base[4]+0x100*b.base[1],0x001*r.base[4]+0x100*b.base[2],0x001*r.base[4]+0x100*b.base[3],
-			
-			0x010*g.base[2],0x010*g.base[3],0x010*g.base[4],0x010*g.base[5]
-		}
-    end
-elseif MODE==8 or MODE==9 then
-	ZIGZAG = false
-    CONFIG.px_size   = {4,3}
-    CONFIG.interlace = 'I' -- ZIGZAG and 'ii' or 'p'
-    CONFIG.dither    = compo(norm,bayer,2){{1}}
-	-- CONFIG.dither    = compo(norm,bayer){{1}}
-	-- CONFIG.dither    = compo(norm){{1,2},{3,4}}
-	-- CONFIG.dither    = compo(norm,bayer,3){{1}}
-	-- CONFIG.dither    = compo(norm,bayer,1){{1}}
-	-- CONFIG.dither    = norm{{1,2},{2,1}}
-	-- CONFIG.dither    = compo(norm,vac)(3,4)
-	-- CONFIG.dither    = compo(norm,vac)(12,16)
-	CONFIG.dither    = compo(norm,bayer){{1}}
-    CONFIG.palette   = compo(
-        EXPONENTIAL and
-            {0x000,
-             0x001,0x002,0x004,0x008,0x00F,
-             0x010,0x020,0x040,0x080,0x0F0,
-             0x100,0x200,0x400,0x800,0xF00}
-        or
-            {0x000,
-             0X002,0x004,0x007,0x00A,0x00F,
-             0X020,0x040,0x070,0x0A0,0x0F0,
-             0X200,0x400,0x700,0xA00,0xF00})
-			 
-	CONFIG.palette   = function(CONVERTER,VIDEO)
-		local H = {r={},g={},b={}}
-		for i=0,255 do H.r[i]=0; H.g[i]=0; H.b[i]=0 end	
-		local function map(vals, histo)
-			local t={}; t[0] = 0
-			local k,v0,v1=1,0,PALETTE.linear(vals[1])
-			local e,h=0,{}
-			local avg = 0; for i=0,255 do avg = avg + histo[i]/256 end
-			for i=0,255 do h[i]=histo[i]/avg + 1/16 end
-			for i=0,255 do
-				local v = PALETTE.linear(i)
-				if v>=v1 and vals[k+1] then 
-					k,v0,v1=k+1,v1,PALETTE.linear(vals[k+1]) 
-				end
-				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
-				t[i] = k-1 + f
-				if histo then
-					local DIV=4--2
-					f = round(f*DIV)/DIV
-					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
-				end
-			end
-			return t,math.abs(e)
-		end
-
-        for i,f in ipairs(arg) do
-            local TMP = CONVERTER:new(f,nil,1)
-            if TMP then
-                local stat = VIDEO:new(TMP.file,TMP.fps,80,50,80,50,TMP.interlace,
-					function(self, x,y, r,g,b)
-					H.r[r], H.g[g], H.b[b] = H.r[r]+1, H.g[g]+1, H.b[b]+1
-				end)
-                stat.super_next_image = stat.next_image
-                stat.mill = {'|', '/', '-', '\\'}
-                stat.mill[0] = stat.mill[4]
-                function stat:next_image()
-                    self:super_next_image()
-                    io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
-                                    self.mill[self.cpt % 4],
-                                    percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
-                    io.stderr:flush()
-                end
-                while stat.running do stat:next_image() end
-            end
-        end
-		local ef = {}; for i=0,15 do ef[i] = PALETTE.ef[1+i] end
-		local r,g,b,t,e
-		for i=1,11 do for j=i+1,12 do for k=j+1,13 do for l=k+1,14 do for m=l+1,15 do
-			t,e = map({ef[i],ef[j],ef[k],ef[l],ef[m]}, H.r)
-			if r==nil or e<=r.err then r = {err=e, base={0,i,j,k,l,m}} end
-			t,e = map({ef[i],ef[j],ef[k],ef[l],ef[m]}, H.g)
-			if g==nil or e<=g.err then g = {err=e, base={0,i,j,k,l,m}} end
-			t,e = map({ef[i],ef[j],ef[k],ef[l],ef[m]}, H.b)
-			if b==nil or e<=b.err then b = {err=e, base={0,i,j,k,l,m}} end
-		end end end end end
-		io.stderr:write(string.rep(' ',79)..'\r')
-        io.stderr:flush()
-
-		print('b', unpack(b.base))
-		print('r', unpack(r.base))
-		print('g', unpack(g.base))
-
-		return {
-			0x000,			
-			0x001*r.base[2],0x001*r.base[3],0x001*r.base[4],0x001*r.base[5],0x001*r.base[6],
-			0x010*g.base[2],0x010*g.base[3],0x010*g.base[4],0x010*g.base[5],0x010*g.base[6],
-			0x100*b.base[2],0x100*b.base[3],0x100*b.base[4],0x100*b.base[5],0x100*b.base[6]
-		}
-    end
-
-elseif MODE==10 or MODE==11 then
-    CONFIG.px_size   = {4,1}
-    CONFIG.interlace = 'I' --'i3'
-    CONFIG.dither    = --compo(bayer){{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
-		-- compo(bayer,2){{1},{3},{2},{4}}
-		-- compo(bayer){{1},{3},{2},{4}}
-		-- vac(5,19) --(7,29)
-		-- vac(5,17)
-		vac(3,13)
-		-- compo(bayer,2){{1},{1},{1},{1}}
-	for match in (package.path..';'):gmatch("(.-)?.lua;") do
-		package.path = package.path .. ';' .. match ..           "./lib/?.lua"
-		package.path = package.path .. ';' .. match ..          "../lib/?.lua"
-		package.path = package.path .. ';' .. match ..    "../tools/lib/?.lua"
-		package.path = package.path .. ';' .. match .. "../../tools/lib/?.lua"
-	end
-    function getpicturesize() return 80,50 end
-    function waitbreak() end
-    run = function(name) require(name:gsub('%..*','')) end
-    run("color_reduction.lua")
-    CONFIG.palette   = function(CONVERTER,VIDEO)
-        local reducer = ColorReducer:new()
-        for i,f in ipairs(arg) do
-            local TMP = CONVERTER:new(f,nil,3)
-            if TMP then
-                local stat = VIDEO:new(TMP.file,TMP.fps,80,50,80,50,TMP.interlace,
-					function(self, x,y, r,g,b)
-                    local col = Color:new(r,g,b):toLinear()
-                    -- for i=1,1+1000*math.exp(-(x-40)^2/100) do
-                        reducer:add(col)
-                    -- end
-                end)
-                stat.super_next_image = stat.next_image
-                stat.mill = {'|', '/', '-', '\\'}
-                stat.mill[0] = stat.mill[4]
-                function stat:next_image()
-                    self:super_next_image()
-                    io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
-                                    self.mill[self.cpt % 4],
-                                    percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
-                    io.stderr:flush()
-                end
-                while stat.running do stat:next_image() end
-            end
-        end
-		reducer:boostBorderColors()
-		-- reducer:boostBorderColors()					 
-		-- reducer:boostBorderColors()			
-		-- reducer:boostBorderColors()			
-		-- for i=1,16 do reducer:boostBorderColors() end
-        io.stderr:write(string.rep(' ',79)..'\r')
-        io.stderr:flush()
-        local pal = reducer:buildPalette(16, true)
-        return pal
-    end
-elseif MODE==12 or MODE==13 then
-	CONFIG.asm_mode	 = MODE%2==0 and 2 or 3
-    CONFIG.px_size   = {4,1}
-    CONFIG.interlace = 'iii' -- 'i3'
-    CONFIG.dither    = --compo(norm,bayer,2){{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
-			-- compo(norm,bayer,3){{1},{3},{2},{4}}
-			compo(norm,vac)(7,29)
-elseif MODE==14 or MODE==15 then
-	CONFIG.asm_mode	 = MODE%2==0 and 4 or 5
-    CONFIG.px_size   = {4,1}
-    CONFIG.interlace = 'i3'
-    CONFIG.dither    = --compo(bayer,2){{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
-		-- compo(bayer,2){{1},{3},{2},{4}}
-		-- vac(5,19) -- (7,29)
-		vac(5,17)
-	CONFIG.palette   = compo{
-		0x000, 0x111, 0x101, 0x013, 
-		0x510, 0x130, 0x772, 0xf11, 
-	    0x25f, 0xf50, 0xea0, 0x579, 
-		0xfa8, 0x3ff, 0xff2, 0xfff} -- Dawnbriger16
-elseif MODE==16 or MODE==17 then
-	CONFIG.asm_mode	 = MODE%2==0 and 4 or 5
-    CONFIG.px_size   = {4,1}
-    CONFIG.interlace = 'p' -- 'i3'
-    CONFIG.dither    = 
-		-- compo(norm,bayer,1){{1},{3},{2},{4}}
-		-- compo(norm,vac)(7,29)
-		-- compo(norm,vac)(5,19)
-		compo(norm,vac)(3,11)
-		-- compo(norm){{1}}
-		-- compo(norm,bayer,1){{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
-	CONFIG.palette   = compo{
-		0x000, 0x111, 0x222, 0x333,
-		0x444, 0x555, 0x666, 0x777,
-		0x888, 0x999, 0xAAA, 0xBBB,
-		0xCCC, 0xDDD, 0xEEE, 0xFFF}
-elseif MODE==18 or MODE==19 then
-	CONFIG.asm_mode	 = MODE%2==0 and 4 or 5
-    CONFIG.px_size   = {4,1}
-    CONFIG.interlace = 'i3'
-    CONFIG.dither    = 
-	-- compo(bayer,1){{1},{3},{2},{4}}
-	-- vac(5,19) -- (7,29)
-	-- vac(7,29)
-	-- vac(5,17) --
-	vac(3,11)
-	-- vac(3,13)
-	-- vac(4,16)
-	CONFIG.palette   = compo{
-		-- 0 1 4 7 14
-		-- 0x000, 
-		-- 0x100,0x400,0x700,
-		-- 0x010,0x040,0x070,
-		-- 0x001,0x004,0x007,
-		-- 0x07E,0xE07,0xE70,
-		-- 0x414,0x747,0xEEE
-		
-		-- 0x000,0x100,0x010,0x001,
-		-- 0x111,0x400,0x040,0x004,
-		-- 0x777,0xF00,0x0F0,0xFF0,
-		-- 0x00F,0xF0F,0x0FF,0xFFF
-
-		0x000,0x400,0x040,0x004,
-		0x111,0x044,0x404,0x440,
-		0x777,0xE00,0x0E0,0xEE0,
-		0x00E,0xE0E,0x0EE,0xEEE
-		
-		-- 0x000,0xd00,0x0d0,0xdd0,
-		-- 0x00d,0xd0d,0x0dd,0xddd,
-		-- 0x100,0x010,0x001,
-		-- 0x400,0x040,0x004,
-		-- 0x444,0x888
-		
-		-- 0x000,0x0DD,0xD0D,0xDD0,
-        -- 0x001,0x004,0x007,0x00D,
-        -- 0x010,0x040,0x070,0x0D0,
-        -- 0x100,0x400,0x700,0xD00
-	}
-elseif MODE==20 or MODE==21 then
-	CONFIG.asm_mode	 = MODE%2==0 and 4 or 5
-    CONFIG.px_size   = {4,1}
-    CONFIG.interlace = 'I' -- 'i3'
-    CONFIG.dither    = 
-	-- compo(bayer,1){{1},{3},{2},{4}}
-	
-	-- {{1},{3},{2},{4}}
-	-- {{8,6,7},{3,1,5},{4,2,9}}
-	
-	---- x--- x--- x--- x-x- xxx- xxx- xxx- xxxx
-	---- ---- --x- -x-x -x-x -x-x x-xx xxxx xxxx
-	---- --x- x--- --x- x-x- x-xx xxx- x-xx xxxx
-	---- ---- --x- -x-x -x-x -x-x x-xx xxxx xxxx 
-	---       ~~~~                ~~~~  
---	0	 2	  4	   6	8	 10	  12	14	16
-	               
-	---- x--- x---
-	---- ---- -x--
-	---- x--- --x-
-	---- ---- ---x
-	
-	-- {{1,2},{2,1}}
-	-- vac(5,19) -- (7,29)
-	-- vac(7,29)
-	-- vac(5,17) --
-	-- vac(3,11)
-	vac(3,9)
-			 
-	-- vac(4,16)
-	-- vac(3,13)
-			 
-			
-	-- vac(4,16)
-			 
-	CONFIG.palette   = compo{
-		-- 0 1 4 7 14
-		-- 0x000, 
-		-- 0x100,0x400,0x700,
-		-- 0x010,0x040,0x070,
-		-- 0x001,0x004,0x007,
-		-- 0x07E,0xE07,0xE70,
-		-- 0x414,0x747,0xEEE
-		
-		-- 0x000,0x100,0x010,0x001,
-		-- 0x111,0x400,0x040,0x004,
-		-- 0x777,0xF00,0x0F0,0xFF0,
-		-- 0x00F,0xF0F,0x0FF,0xFFF
-
-		-- 0x000,0x100,0x010,0x001,
-		-- 0x222,0x200,0x020,0x002,
-		-- 0x666,0x400,0x040,0x004,
-		-- 0xCCC,0x800,0x080,0x008
-		
-		-- 0 1 2
-		
-		-- 000 100 200 010 110 210 020 120 220 
-		-- 001 101 201 011 111 211 021 121 221
-		-- 002 102 202 012 112 212	022 122 222
-		
-		-- 000 200 020 220 002 202 022 222
-		
-		-- 000 100 200 010     210 020 120 220 
-		                                   
-		-- 002 102 202 012     212	022 122 222
-		
-		
--- 0       0       0
--- 1       103     0.13563332965521
--- 2       130     0.22322795731681
--- 3       149     0.30054379441578
--- 4       164     0.37123768047415
--- 5       177     0.43965717384092
--- 6       188     0.50288645803257
--- 7       198     0.56471150570493
--- 8       207     0.62396039167508
--- 9       215     0.67954246963309
--- 10      223     0.73791040877273
--- 11      230     0.79129794033263
--- 12      237     0.84687323150986
--- 13      243     0.89626935337427
--- 14      249     0.9473065367332
--- 15      255     1
-		
-		
-		-- 3*4+5
-		-- 0 2 5 13=d
-		-- 2*3+4
-		-- 0x000,0x00d,0x0d0,0x0dd,0xd00,0xd0d,0xdd0,0xDDD,
-		
-		-- 0x000, 0x008, 0x080, 0x088, 0x800, 0x808, 0x880, 0x888, -- 8
-		-- 0x100, 0x300,
-		-- 0x010, 0x030,
-		-- 0x001, 0x003,
-		-- 0x222, 0x555
-		
-		-- 0x000,0x800,0x080,0x880,
-		-- 0x008,0x808,0x088,0x888,
-		      -- 0x001,0x003,
-		-- 0x300,0x301,0x303,
-		-- 0x010,0x030,0x222
-		
-		-- dune:
-		-- 0x000,0x111,0x333,0x880,
-		-- 0x100,0x010,0x001,0x808,
-		-- 0x300,0x030,0x003,0x088,
-		-- 0x800,0x080,0x008,0x888
-		
-		0x000,0x222,0x666,0xcc0,
-		0x200,0x020,0x002,0xc0c,
-		0x600,0x060,0x006,0x0cc,
-		0xc00,0x0c0,0x00c,0xccc
-	
-		
-		-- 0x100,0x010,0x001,
-		-- 0x400,0x040,0x004,
-		-- 0x444,0x888
-		
-		-- 0x000,0x0DD,0xD0D,0xDD0,
-        -- 0x001,0x004,0x007,0x00D,
-        -- 0x010,0x040,0x070,0x0D0,
-        -- 0x100,0x400,0x700,0xD00
-		
-		-- ok:
-		-- 0x000,0x0DD,0xD0D,0xDD0,
-        -- 0x001,0x003,0x006,0x00D,
-        -- 0x010,0x030,0x060,0x0D0,
-        -- 0x100,0xDDD,0x600,0xD00
-	}
-	CONFIG.palette   = function(CONVERTER,VIDEO)
-		local H = {r={},g={},b={},w={}}
-		for i=0,255 do H.r[i]=0; H.g[i]=0; H.b[i]=0; H.w[i]=0 end		local function map(vals, histo)
-			local t={}; t[0] = 0
-			local k,v0,v1=1,0,PALETTE.linear(vals[1])
-			local e,h=0,{}
-			local avg = 0; for i=0,255 do avg = avg + histo[i]/256 end
-			for i=0,255 do h[i]=histo[i]/avg + 1/16 end
-			for i=0,255 do
-				local v = PALETTE.linear(i)
-				if v>=v1 and vals[k+1] then 
-					k,v0,v1=k+1,v1,PALETTE.linear(vals[k+1]) 
-				end
-				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
-				t[i] = k-1 + f
-				if histo then
-				 
-					local DIV=2
-					f = round(f*DIV)/DIV
-					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
-				end
-			end
-			return t,math.abs(e)
-		end
-
-        for i,f in ipairs(arg) do
-            local TMP = CONVERTER:new(f,nil,3)
-            if TMP then
-                local stat = VIDEO:new(TMP.file,TMP.fps,80,50,80,50,TMP.interlace,
-					function(self, x,y, r,g,b)
-					H.r[r], H.g[g], H.b[b] = H.r[r]+1, H.g[g]+1, H.b[b]+1
-					local t = math.floor(r*.30 + g*.59 + b*.11)
-					H.w[t] = H.w[t]+1
-				end)
-                stat.super_next_image = stat.next_image
-                stat.mill = {'|', '/', '-', '\\'}
-                stat.mill[0] = stat.mill[4]
-                function stat:next_image()
-                    self:super_next_image()
-                    io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
-                                    self.mill[self.cpt % 4],
-                                    percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
-                    io.stderr:flush()
-                end
-                while stat.running do stat:next_image() end
-            end
-        end
-		local ef = {}; for i=0,15 do ef[i] = PALETTE.ef[1+i] end
-		local r,g,b,w,t,e
-		for i=1,13 do for j=i+1,14 do for k=j+1,15 do
-			t,e = map({ef[i],ef[j],ef[k]}, H.r)
-			if r==nil or e<=r.err then r = {err=e, base={0,i,j,k}} end
-			t,e = map({ef[i],ef[j],ef[k]}, H.g)
-			if g==nil or e<=g.err then g = {err=e, base={0,i,j,k}} end
-			t,e = map({ef[i],ef[j],ef[k]}, H.b)
-			if b==nil or e<=b.err then b = {err=e, base={0,i,j,k}} end
-			t,e = map({ef[i],ef[j],ef[k]}, H.w)
-			if w==nil or e<=w.err then w = {err=e, base={0,i,j,k}} end
-		end end end
-		io.stderr:write(string.rep(' ',79)..'\r')
-        io.stderr:flush()
-
-		print('b', unpack(b.base))
-		print('r', unpack(r.base))
-		print('g', unpack(g.base))
-		print('w', unpack(w.base))
-
-		return {
-		-- 0x000,0x111,0x333,0x880,
-		-- 0x100,0x010,0x001,0x808,
-		-- 0x300,0x030,0x003,0x088,
-		-- 0x800,0x080,0x008,0x888
-		0x000*w.base[1],0x111*w.base[2],0x111*w.base[3],0x110*w.base[4],
-		0x100*b.base[2],0x010*g.base[2],0x001*r.base[2],0x101*w.base[4],
-		0x100*b.base[3],0x010*g.base[3],0x001*r.base[3],0x011*w.base[4],
-		0x100*b.base[4],0x010*g.base[4],0x001*r.base[4],0x111*w.base[4]
-		}
-    end
-elseif MODE==22 or MODE==23 then
-	CONFIG.asm_mode	 = MODE%2==0 and 4 or 5
-    CONFIG.px_size   = {4,1}
-    CONFIG.interlace = 'I' 
-    CONFIG.dither    = 	vac(3,9)
-	
-	CONFIG.dither    = compo(bayer,1){{1},{3},{2},{4}}
-			
-	CONFIG.palette   = function(CONVERTER,VIDEO)
-		local H = {r={},g={},b={},w={}}
-		for i=0,255 do H.r[i]=0; H.g[i]=0; H.b[i]=0; H.w[i]=0 end		local function map(vals, histo)
-			local t={}; t[0] = 0
-			local k,v0,v1=1,0,PALETTE.linear(vals[1])
-			local e,h=0,{}
-			local avg = 0; for i=0,255 do avg = avg + histo[i]/256 end
-			for i=0,255 do h[i]=histo[i]/avg + 1/16 end
-			for i=0,255 do
-				local v = PALETTE.linear(i)
-				if v>=v1 and vals[k+1] then 
-					k,v0,v1=k+1,v1,PALETTE.linear(vals[k+1]) 
-				end
-				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
-				t[i] = k-1 + f
-				if histo then
-				 
-					local DIV=2
-					f = round(f*DIV)/DIV
-					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
-				end
-			end
-			return t,math.abs(e)
-		end
-
-        for i,f in ipairs(arg) do
-            local TMP = CONVERTER:new(f,nil,3)
-            if TMP then
-                local stat = VIDEO:new(TMP.file,TMP.fps,80,50,80,50,TMP.interlace,
-					function(self, x,y, r,g,b)
-					H.r[r], H.g[g], H.b[b] = H.r[r]+1, H.g[g]+1, H.b[b]+1
-					local t = math.floor(r*.30 + g*.59 + b*.11)
-					H.w[t] = H.w[t]+1
-				end)
-                stat.super_next_image = stat.next_image
-                stat.mill = {'|', '/', '-', '\\'}
-                stat.mill[0] = stat.mill[4]
-                function stat:next_image()
-                    self:super_next_image()
-                    io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
-                                    self.mill[self.cpt % 4],
-                                    percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
-                    io.stderr:flush()
-                end
-                while stat.running do stat:next_image() end
-            end
-        end
-		local ef = {}; for i=0,15 do ef[i] = PALETTE.ef[1+i] end
-		local r,g,b,w,t,e
-		for i=1,12 do for j=i+1,13 do for k=j+1,14 do for l=k+1,15 do
-			t,e = map({ef[i],ef[j],ef[k],ef[l]}, H.r)
-			if r==nil or e<=r.err then r = {err=e, base={0,i,j,k,l}} end
-			t,e = map({ef[i],ef[j],ef[k],ef[l]}, H.g)
-			if g==nil or e<=g.err then g = {err=e, base={0,i,j,k,l}} end
-			t,e = map({ef[i],ef[j],ef[k],ef[l]}, H.b)
-			if b==nil or e<=b.err then b = {err=e, base={0,i,j,k,l}} end
-			t,e = map({ef[i],ef[j],ef[k],ef[l]}, H.w)
-			if w==nil or e<=w.err then w = {err=e, base={0,i,j,k,l}} end
-		end end end end
-		io.stderr:write(string.rep(' ',79)..'\r')
-        io.stderr:flush()
-
-		print('b', unpack(b.base))
-		print('r', unpack(r.base))
-		print('g', unpack(g.base))
-		print('w', unpack(w.base))
-
-		return {
-			0x000,
-			
-			0x100*b.base[2],0x010*g.base[2],0x001*r.base[2],
-			0x100*b.base[3],0x010*g.base[3],0x001*r.base[3],
-			0x100*b.base[4],0x010*g.base[4],0x001*r.base[4],
-			
-							0x010*g.base[4]+0x001*r.base[5],
-			0x100*b.base[5]                +0x001*r.base[4],
-			0x100*b.base[5]+0x010*g.base[4]                ,
-			
-			0x100*b.base[3]+0x010*g.base[3]+0x001*r.base[3],
-			0x100*b.base[4]+0x010*g.base[4]+0x001*r.base[4],
-			0x100*b.base[5]+0x010*g.base[5]+0x001*r.base[5]
-		}
-    end
-elseif MODE==24 then
-	CONFIG.asm_mode	 = 6
-    CONFIG.px_size   = {2,1}
-    CONFIG.interlace = 'I'
-    CONFIG.dither    = 
-						norm(vac(7,13))
-						-- norm(vac(5,11))
-						-- compo(norm,bayer,3){{1},{2}} 
-						-- norm(vac(4,7)) -- norm(vac(7,13)) -- compo(norm,bayer,2){{1},{2}} --  compo(norm,bayer,2){{1},{2}} -- norm(vac(4,8)) -- 
-	CONFIG.dither    = compo(norm,bayer,2){{1},{2}} 
-	
-	CONFIG.dither = compo(norm,bayer){
-		{13,25,21, 7},
-		{14,26,22, 8},
-		{23,31,27,15},
-		{24,32,28,16},
-		{19,29,11, 3},
-		{20,30,12, 4},
-		{ 9,17, 5, 1},
-		{10,18, 6, 2} 
-	}
-
-	
-	CONFIG.palette   = function(CONVERTER,VIDEO)
-		local H = {w={}} for i=0,255 do H.w[i]=0 end		
-		local function map(vals, histo)
-			local t={}; t[0] = 0
-			local k,v0,v1=1,0,PALETTE.linear(vals[1])
-			local e,h=0,{}
-			local avg = 0; for i=0,255 do avg = avg + histo[i]/256 end
-			for i=0,255 do h[i]=histo[i]/avg + 0.5*1/16 end
-			for i=0,255 do
-				local v = PALETTE.linear(i)
-				if v>=v1 and vals[k+1] then 
-					k,v0,v1=k+1,v1,PALETTE.linear(vals[k+1]) 
-				end
-				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
-				t[i] = k-1 + f
-				if histo then
-					local DIV=8
-					f = round(f*DIV)/DIV
-					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
-				end
-			end
-			return t,math.abs(e)
-		end
-
-        for i,f in ipairs(arg) do
-            local TMP = CONVERTER:new(f,nil,3)
-            if TMP then
-                local stat = VIDEO:new(TMP.file,TMP.fps,80,100,80,100,TMP.interlace,
-					function(self, x,y, r,g,b)
-					local t = math.floor(r*GRAY_R + g*GRAY_G + b*GRAY_B)
-					H.w[t] = H.w[t]+1
-				end)
-                stat.super_next_image = stat.next_image
-                stat.mill = {'|', '/', '-', '\\'}
-                stat.mill[0] = stat.mill[4]
-                function stat:next_image()
-                    self:super_next_image()
-                    io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
-                                    self.mill[self.cpt % 4],
-                                    percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
-                    io.stderr:flush()
-                end
-                while stat.running do stat:next_image() end
-            end
-        end
-		local ef = {}; for i=0,15 do ef[i] = PALETTE.ef[1+i] end
-		local r,g,b,w,t,e
-		for i=1,13 do for j=i+1,14 do for k=j+1,15 do
-			t,e = map({ef[i],ef[j],ef[k]}, H.w)
-			if w==nil or e<=w.err then w = {err=e, base={0,i,j,k}} end
-		end end end
-		io.stderr:write(string.rep(' ',79)..'\r')
-        io.stderr:flush()
-
-CONFIG.dither    = compo(norm,bayer){{1},{2}} 
-	
-		print('w', unpack(w.base))
-
-		return {
-			0x000*w.base[1],0x111*w.base[2],0x111*w.base[3],0x111*w.base[4],
-			0,0,0,0,0,0,0,0,0,0,0,0
-		}
-    end
-elseif MODE==25 then
-    CONFIG.interlace = 'p'
-    CONFIG.dither    = {{1}}
-else
-    error("Invalid MODE="..MODE)
-end
 
 -- ===========================================================================
 -- PALETTE support
@@ -1238,14 +392,6 @@ function PALETTE:init(pal)
                    self.ef[1+(math.floor(p/16)%16)],
                    self.ef[1+math.floor(p/256)]}
     end
-end
-function PALETTE.exp_lin(n)
-    return n<=PALETTE.ef[2]
-           -- and -(n/PALETTE.ef[2])^1.27
-           -- and -(n/PALETTE.ef[2])^2.2
-           -- and -n/PALETTE.ef[2]
-           and -PALETTE.linear(n)/PALETTE.linear(PALETTE.ef[2]) -- -1..0
-           or  1-math.log(n/255)/math.log(PALETTE.ef[2]/255)    -- 0..1
 end
 function PALETTE:file_content()
     local buf = ''
@@ -1718,46 +864,11 @@ function AUDIO:new(file)
 	local I='I=-8' -- volume final -24=superbas, -16=fable
 	local LRA='LRA=11'
 	local tp='tp=-1'
-	local norm = '-af loudnorm='..I..':'..LRA..' '
-	norm = '-filter:a dynaudnorm=r=0.6:s=8:m=30 '
-	if false then
-		io.stderr:write('> analyzing audio...')
-		io.stderr:flush()
-		local measured={}
-		local IN,line = assert(io.popen(FFMPEG..' -i "'..file ..'" -ar '..hz..' -af loudnorm=print_format=json -ac 1 -vn -f null x 2>&1', 'r'))
-		for line in IN:lines() do
-			-- print(line)
-			local k,v = line:match('"([^"]+)" : "([^"]+)"')
-			if k then
-				measured[k] = v
-				-- print(k,v)
-			-- elseif line:match('speed=') then -- debug
-				-- io.stderr:write(line)
-				-- io.stderr:flush()
-			end
-		end
-		IN:close()	
-		io.stderr:write('\r                                     \r')
-		io.stderr:flush()
-		norm = '-af loudnorm=linear=true:'..I..':'..LRA..':'..tp.. 
-		':measured_I=' .. measured['input_i'] ..
-		':measured_LRA=' .. measured['input_lra'] ..
-		':measured_tp=' .. measured['input_tp'] ..
-		':measured_thresh=' .. measured['input_thresh'] ..
-		':offset=' .. measured['target_offset'].. 
-		' '
-		-- print(norm)
-	end
+	local norm = '-filter:a dynaudnorm=r=0.6:s=8:m=30 '
 	
 	local o = {
 		hz = hz,
 		stream = assert(io.popen(FFMPEG..' -i "'..file ..'" -v 0 ' ..
-		-- 'dynaudnorm=f=8000:c:b:s=10:m=4 ' ..
-		-- 'dynaudnorm=p=0.71:m=100:s=10:g=15 ' ..
-		-- 'dynaudnorm=p=0.71:m=6:s=10:g=15 ' ..
-		-- 'dynaudnorm=p=0.71:s=12:g=15:m=12:f=8000 ' ..
-		-- 'loudnorm=I=-16:LRA=11:TP=-1.5 ' ..
-		-- '-af loudnorm=I=-16:LRA=11 ' ..
 		norm ..
 		'-ac 1 -ar '..hz..' -f s8 -c:a pcm_s8 pipe:', POPEN_READBIN)),
 		size = size,
@@ -1797,77 +908,33 @@ function AUDIO:next_sample()
 	return math.floor(v)
 end
 
--- ===========================================================================-- PALETTE support
+-- ===========================================================================
 -- VIDEO filter aimed at mixing dropped frammes
 local FILTER = {}
 function FILTER:new(video)
-    local o = {t={},cur={},map={}, alpha=.3333*0+.70*0, video=video}
+    local o = {t={},i=0,cur={},video=video}
     setmetatable(o, self)
     self.__index = self
 	for i=0,320*200*3-1 do o.cur[i] = 0 end
-	local alpha = FILTER_ALPHA
-	for i=0,255 do
-		local x = PALETTE.linear(i)
-		o.map[i] = {}
-		for j=0,255 do
-			local y = PALETTE.linear(j)
-			local z = x*alpha + (1-alpha)*y
-			o.map[i][j] = round(PALETTE.unlinear(z))
-		end
-	end
     return o
 end
 function FILTER:push(bytecode)
-    local t = {}
+	self.i = self.i + 1
+    local t = self.t[self.i]
+	if t==nil then t = {}; self.t[self.i] = t end
     for i=1,bytecode:len() do t[i] = bytecode:byte(i) end
-    table.insert(self.t, t)
     return self
-end
-if false then
-function FILTER:push(bytecode)
-    local t,a,b = self.t[#self.t] or {},self.alpha,1-self.alpha
-    for i=1,bytecode:len() do t[i] = round((t[i] or 0)*a + b*bytecode:byte(i)) end
-    table.insert(self.t, t)
-    return self
-end
-end
-if false and FILTER_ALPHA>0 then
-function FILTER:push(bytecode)
-    local t,map,cur = {},self.map,self.cur
-    for i=1,bytecode:len() do 
-		local x =map[cur[i]][bytecode:byte(i)] 
-		t[i], cur[i] = x, x
-	end
-    -- table.insert(self.t, t)
-	self.t[1] = t
-    return self
-end
 end
 function FILTER:flush()
 	self.rnd = nil -- math.random()
-    for i=FILTER_DEPTH,#self.t do table.remove(self.t,1) end
+	self.i = 0
 end
 function FILTER:byte(offset)
-    local m,t = #self.t, self.t
+    local m,t = self.i, self.t
 	if true then return t[m][offset] end -- aucun traitement
 	if m==1 then
 	    return t[1][offset]
-	elseif false then
-		local f = math.max
-		if m==2 then return f(t[1][offset],t[2][offset]) end
-		local l = {}
-		for i=1,m do l[i]=t[i][offset] end
-		return f(unpack(l))
-	elseif false then
-		local y = math.floor((offset-1)/self.video.width)
-		return t[(y%2)*(m-1)+1][offset]
 	elseif true then
-		if false then
-			local function f(a,b,...) if a>0 and b then return f(a*b,...) else return a end end
-			local l = {}
-			for i=1,m do l[i]=t[i][offset] end
-			return round(f(unpack(l))^(1/m))
-		end
 		if m==2 then return round(math.sqrt(t[1][offset]*t[2][offset])) end
 		local v=1
 		for i=1,m do v=v*t[i][offset] end
@@ -2000,7 +1067,7 @@ end
 -- ===========================================================================-- PALETTE support
 -- flux video
 local VIDEO = {}
-function VIDEO:new(file, fps, w, h, screen_width, screen_height, interlace, pset)
+function VIDEO:new(file, fps, w, h, screen_width, screen_height, pset)
     local o = {
         file = file,
         cpt = 1, -- compteur image
@@ -2008,7 +1075,6 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, interlace, pset
         height = h,
         screen_width = screen_width or w,
         screen_height = screen_height or h,
-        interlace = interlace,
         fps = fps or 10,
         image = {},
         dither = nil,
@@ -2025,335 +1091,35 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, interlace, pset
     setmetatable(o, self)
     self.__index = self
 
-    -- initialise la progression dans les octets de l'image
-    local function inside(x,min,max) return min<=x and x<max end
     local indices = {}
-	local function fill(steps)
-		local mod = 40*steps[#steps]
-		for _,k in ipairs(steps) do -- {1,5,3,7,2,6,4,8} do
-			k = k*40
-			for i=0,7999 do if inside(i%mod,k-40,k) then table.insert(indices, i) end end
-		end
+	local cpt,full,i2l = 0,0,{}
+	-- for i=0,7999 do i2l[i] = math.floor(i/40/CONFIG.px_size[2]) end
+	for i=0,199 do
+		for j=0,39 do i2l[i*40+j] = math.floor(i/math.min(#CONFIG.dither,CONFIG.px_size[2])) end
 	end
-    if interlace=='p' or interlace=='a' then
-		fill{1}
-    elseif interlace=='i' then
-        fill{1,2}
-		local i1={}
-		for j=0,7999 do if inside(j%80,40,44) then table.insert(i1,j) end end
-		o.indices = function(prev,curr)
-			local i,bak = 0,{}
-			return function()
-				i = i+1
-				local val = indices[i]
-				if val==1 then
-					for _,j in ipairs(i1) do
-						bak[j],curr[j] = curr[j],prev[j] 
-					end
-				elseif val==40 then
-					for _,j in ipairs(i1) do
-						curr[j] = bak[j]
-					end
-				elseif val==nil then
-					i = nil
-				end
-				return i,val
-			end
+	o.indices = function(prev,curr)
+		cpt = cpt+1
+		local MIN_FPS = fps
+					
+		local THR = 1+math.floor(1.0*2000000/CYCLES/MIN_FPS)
+		local t = {}
+		for i=0,7999 do if prev[i]~=curr[i] then table.insert(t,i) end end
+		
+		if t[math.ceil(1.95*THR)] and CONFIG.px_size[2]==1 then
+			local m = 2 -- math.ceil(#t / THR);
+			local n = cpt % m
+			for i=#t,0,-1 do t[i]=nil end
+			for i=0,7999 do if prev[i]~=curr[i] and (i2l[i]%m)==n then table.insert(t,i) end end
 		end
-    elseif interlace=='I' then
-  		local dist = {}		
-		for i=0,255 do for j=0,255 do
-			local a,b,d = i,j,0
-			if MODE==0 or MODE==1 then
-				for k=0,7 do
-					d = d + ((a % 2)==(b % 2) and 0 or 1)
-					a,b = math.floor(a/2),math.floor(b/2)
-				end
-			elseif MODE==24 then
-				local a,b,f = i,j,function(a,b)
-					a,b = a%4, b%4
-					return a*b==0 and 10 or math.abs(a-b)
-				end
-				d = 0
-				for k=0,3 do
-					d,a,b = d + f(a,b),math.floor(a/4),math.floor(b/4)
-				end
-			else 
-				local function t(x)
-					return math.floor(x/8)%16,math.floor(x/128)*128+(x%8)
-				end
-				local a1,a2 = t(i)
-				local b1,b2 = t(j)
-				d = (a1*b1==0 and 16 or 0)+(a2*b2==0 and 16 or 0)+(a1==b1 and 0 or 1)+(a2==b2 and 0 or 1)
-				-- d = i==j and 0 or 2
-			end
-			
-			dist[i*256+j] = d
-		end end
-		for i=-65536,-1 do dist[i] = 8 end
-		local cpt,full,i2l = 0,0,{}
-		-- for i=0,7999 do i2l[i] = math.floor(i/40/CONFIG.px_size[2]) end
-		for i=0,199 do
-			for j=0,39 do i2l[i*40+j] = math.floor(i/math.min(#CONFIG.dither,2*CONFIG.px_size[2])) end
-		end
-		o.indices = function(prev,curr)
-			cpt = cpt+1
-			local MIN_FPS = fps
-						
-			local THR = 1+math.floor(1.0*2000000/CYCLES/MIN_FPS)
-			local t = {}
-			for i=0,7999 do if prev[i]~=curr[i] then table.insert(t,i) end end
-			
-			-- do return ipairs(t) end
-			
-			-- on oublei les trucs sophistiqués
-			-- if not t[THR] then full=full+1; return ipairs(t) end
-			
-			-- if t[THR] and math.random()>.25 
-			-- then 
-				-- t = {} local b,c,d=0,0,0
-				-- prev[8000] = 0 ; curr[8000] = 0
-				-- for i=0,8000 do 
-					-- b,c,d = c,d,dist[prev[i]*256+curr[i]]
-					-- if c>1 or (c==1 and b+d==0-- and not t[THR]
-					-- ) then
-						-- table.insert(t,i-1) 
-					-- end 
-				-- end
-			-- end
-			
-			
-			-- do return ipairs(t) end
-			
-			
-			if t[THR] and math.random()>.125 and MODE>1
-			then 
-				local d = {}
-				for i=0,7999 do d[i] = dist[prev[i]*256+curr[i]] end
-				d[-1] = 0; d[8000] = 0
-
-				local ztl = #t
-				t = {}
-				for i=0,7999 do 
-					if d[i]>1 or (d[i]==1 and d[i-1]+d[i+1]>0) then 
-						table.insert(t,i) 
-					end 
-				end
-				
-				if #t<THR then
-					local q = {}
-					for i=0,7999 do if d[i]==1 and d[i-1]+d[i+1]==0 then table.insert(q,i) end end
-					local tl = #t
-					for i=#t+1,THR-1 do
-						t[i] = table.remove(q, math.random(#q))
-					end
-					-- print(ztl..'   '..tl..'   '..THR..'   '..#q..'    ')
-					table.sort(t)
-				end
-			end
-			
-			if CONFIG.px_size[2]==1 then return ipairs(t) end
-			-- do return ipairs(t) end
-			
-			if false and t[THR] then 
-				local m = 2 -- math.ceil(#t / THR)
-				local z = 40*CONFIG.px_size[2]
-				local a = math.floor(8000*(cpt % m)/m/z)*z
-				local b = math.ceil (8000*((cpt % m)+1)/m/z-1)*z
-				for i=#t,0,-1 do t[i]=nil end
-				for i=a,b do if prev[i]~=curr[i] then table.insert(t,i) end end
-			end
-			-- if t[math.ceil(1.95*THR)] then
-				-- local m = math.min(4, math.ceil(#t / THR))
-				-- local n = cpt % m
-				-- for i=#t,0,-1 do t[i]=nil end
-				-- for i=0,7999 do if prev[i]~=curr[i] and (i2l[i]%m)==n then table.insert(t,i) end end
-			-- end
-			-- if t[math.ceil(1.95*THR)] then
-			if t[math.ceil(1.95*THR)] then
-				local m = 2 -- math.ceil(#t / THR);
-				local n = cpt % m
-				for i=#t,0,-1 do t[i]=nil end
-				for i=0,7999 do if prev[i]~=curr[i] and (i2l[i]%m)==n then table.insert(t,i) end end
-			end
-			if false and --CONFIG.px_size[2]*4<8 and 
-			t[math.ceil(1.95*THR)] then
-				local m = 4 -- math.ceil(#t / THR);
-				local n = cpt % m
-				-- if n==1 or n==2 then n=3-n end
-				for i=#t,0,-1 do t[i]=nil end
-				for i=0,7999 do if prev[i]~=curr[i] and (i2l[i]%m)==n then table.insert(t,i) end end
-			end
-			if t[math.ceil(3.0*THR)] or full<.55*cpt then
-			    full=full+1
-				for i=#t,0,-1 do t[i]=nil end
-				for i=0,7999 do if prev[i]~=curr[i] then table.insert(t,i) end end
-			else
-				local z = {} for _,i in ipairs(t) do z[i] = true end
-				for i=0,7999 do if not z[i] then curr[i] = prev[i] end end
-			end
-			return ipairs(t)
-		end
-    elseif interlace=='8x8' then
-  		local dist = {}		
-		for i=0,255 do for j=0,255 do
-			local a,b,d = i,j,0
-			for k=0,3 do
-				d = d + math.abs((a % 4)-(b % 4))^2
-				a,b = math.floor(a/4),math.floor(b/4)
-			end
-			dist[i*256+j] = d
-		end end
-		o.indices = function(prev,curr)
-			local t,THR = {},math.floor(1000/4)
-			for y=0,24 do for x=0,39 do
-				local i = x+y*320
-				local d = 0
-				for j=i,i+319,40 do
-					d = d + (dist[prev[j]*256+curr[j]] or 1000)
-				end
-				if d>0 then
-					table.insert(t, {i=i,e=d})  
-				end
-			end end 
-			if t[THR] then
-				table.sort(t, function(i,j)	return i.e>j.e end)
-				for i=#t,THR,-1 do t[i] = nil end
-			end
-			local l = {}
-			for _,t in ipairs(t) do for i=t.i,t.i+319,40 do l[i]=true end end
-			local ll = {}
-			for i=0,7999 do if l[i] then table.insert(ll,i) end end
-			return pairs(ll)
-		end
-    elseif interlace=='I' then
-        local i1,i2,i3,i4={},{},{},{}
-		for j=0,7999 do 
-			if inside(j%120,0,40) then table.insert(i1,j) 
-			elseif inside(j%120,40,80) then table.insert(i2,j) 
-			else table.insert(i3,j) end 
-		end
-		indices = i1
-		o.indices = function(prev,curr)
-			local i = 0
-			return function()
-				i = i+1
-				local val = indices[i]
-				if not val then
-					i = nil;
-					if     indices==i1 then indices=i2
-					elseif indices==i2 then indices=i3
-					else                    indices=i1 end
-				end
-				return i,val
-			end
-		end
-    elseif interlace=='i3' then
-		fill{1,2,3}
-		local i1,i2={},{}
-		for j=0,7999 do 
-			if     inside(j%120,40,44) then	table.insert(i1,j)
-			elseif inside(j%120,80,84) then table.insert(i2,j)
-			end
-		end
-		o.indices = function(prev,curr)
-			local i,bak = 0,{}
-			return function()
-				i = i+1
-				local val = indices[i]
-				-- print(i,val); io.stdout:flush()
-				if val==1 then
-					for _,j in ipairs(i1) do
-						bak[j],curr[j] = curr[j],prev[j] 
-					end
-				elseif val==40 then
-					for _,j in ipairs(i2) do
-						bak[j],curr[j-40],curr[j] = curr[j],bak[j-40],prev[j]
-					end
-				elseif val==80 then
-					for _,j in ipairs(i2) do
-						curr[j] = bak[j]
-					end
-				elseif val==nil then
-					return nil
-				end
-				return i,val
-			end
-		end
-    elseif interlace=='ii' then
-		fill{1,2,3,4}
-		local i1,i2,i3={},{},{}
-		for j=0,7999 do 
-			if     inside(j%160, 40, 44) then table.insert(i1,j)
-			elseif inside(j%160, 80, 84) then table.insert(i2,j)
-			elseif inside(j%160,120,124) then table.insert(i3,j)
-			end
-		end
-		o.indices = function(prev,curr)
-			local i,bak = 0,{}
-			return function()
-				i = i+1
-				local val = indices[i]
-				-- print(i,val); io.stdout:flush()
-				if val==1 then
-					for _,j in ipairs(i1) do
-						bak[j],curr[j] = curr[j],prev[j] 
-					end
-				elseif val==40 then
-					for _,j in ipairs(i2) do
-						bak[j],curr[j-40],curr[j] = curr[j],bak[j-40],prev[j]
-					end
-				elseif val==80 then
-					for _,j in ipairs(i3) do
-						bak[j],curr[j-40],curr[j] = curr[j],bak[j-40],prev[j]
-					end
-				elseif val==120 then
-					for _,j in ipairs(i3) do
-						curr[j] = bak[j]
-					end
-				elseif val==nil then
-					return nil
-				end
-				return i,val
-			end
-		end
-    elseif interlace=='iii' then
-		fill{2,4}
-        for i=0,7999 do if inside(i%80,00,40) then table.insert(indices, i) end end
-		local i1={}
-		for j=0,7999 do if inside(j%80,0,4) then table.insert(i1,j) end end
-		o.indices = function(prev,curr)
-			local i,bak = 0,{}
-			return function()
-				i = i+1
-				local val = indices[i]
-				if val==40 then
-					for _,j in ipairs(i1) do
-						bak[j],curr[j] = curr[j],prev[j] 
-					end
-				elseif val==0 then
-					for _,j in ipairs(i1) do
-						curr[j] = bak[j]
-					end
-				elseif val==nil then
-					i = nil
-				end
-				return i,val
-			end
-		end
-    elseif interlace=='iiii' then
-		fill{1,5,3,7,2,6,4,8}
-    else
-        error('Unknown interlace: ' .. interlace)
-    end
+		
+		return ipairs(t)
+	end
 
 	if not o.indices then o.indices = function(prev,curr) return ipairs(indices) end end
 
-	o.zero = (MODE>=3) and ((MODE%2)==1) and 0xC0 or 0x00
-    for i=0,7999+3 do o.image[i]=o.zero end
+    for i=0,7999+3 do o.image[i]=0 end
 
     o.filter = FILTER:new(o)
-
 	o:pset(0,0,0,0,0)
 
     return o
@@ -2371,28 +1137,133 @@ function VIDEO:init_dither()
     end
     self.dither = m
 end
-function VIDEO:transcode(p, o, v)
-	if not self._transcode then
-		self._transcode = {}
-		for t=0,255 do 
-			local tab = {}
-			for v_=0,31 do
-				local v = v_ % 16
-				v = v + (v>=8 and -8 or 8)
-				if v_<16 then
-					v = v*8+t-(math.floor(t/8)%16)*8
-				else
-					v = (v>=8 and 128 or 0)+(v%8)+(math.floor(t/8)%16)*8
-				end
-				tab[v_] = v
-			end
-			self._transcode[t] = tab
-		end
+
+function VIDEO:pset(x,y, r,g,b)
+	if not self.dither then	self:init_dither(); self._cache = {} end
+	local k = PALETTE.key(r,g,b)
+	local t = self._cache[k]
+	if not t then
+		t = PALETTE:compute(self.dither.wh,r,g,b)
+		self._cache[k] = t
 	end
-	self.image[p] = self._transcode[self.image[p]][v + (o==0 and 0 or 16)]
+	local o,p,v = (x%2),math.floor(x/2) + y*40,t:byte(self.dither:get(x,y))
+	if o==0 then v=v*16 end
+	self.image[p] = self.image[p] + v
 end
-if MODE==0 then
-    -- GRAY
+
+if MODE==0 then -- Otsu
+    CONFIG.asm_mode  = 0
+    function VIDEO:pset(x,y, r,g,b)
+		self._mask = {}
+		for i=0,320*200-1 do self._mask[i]={math.floor(i/8),2^(7-(i%8))} end
+
+		self._r = {}
+		self._g = {}
+		self._b = {}
+		for i=0,255 do
+			local lin = PALETTE.linear(i)
+			self._r[i] = lin*GRAY_R*255
+			self._g[i] = lin*GRAY_G*255
+			self._b[i] = lin*GRAY_B*255
+		end
+		
+		self._gray = {} for i=0,320*200-1 do self._gray[i] = 0 end
+		self._flush = self.filter.flush
+		self.filter.flush = function(filter) 
+			self._flush(filter)
+			
+			-- https://en.wikipedia.org/wiki/Otsu's_method
+			local histo = self._histo
+			if histo==nil then histo = {}; self._histo = histo end
+			for i=0,255 do histo[i] = 0 end
+			for i=0,320*200-1 do local g = self._gray[i]; histo[g] = histo[g]+1 end
+			local wB,sumB,sum1,maximum,level = 0,0,0,-1,256
+			for i=0,255 do sum1 = sum1 + i*histo[i] end
+			for i=0,255 do
+				local wF = 320*200-wB
+				if wB>0 and wF>0 then
+					local mF = (sum1-sumB)/wF
+					local v = wB * wF * ((sumB / wB) - mF) * ((sumB / wB) - mF)
+					if v > maximum then	maximum,level = v,i end
+				end
+				wF = histo[i]
+				wB,sumB = wB + wF,sumB + i*wF
+			end		
+			for i=0,320*200-1 do 
+				if self._gray[i]>level then
+					local a,b = unpack(self._mask[i])
+					self.image[a] = self.image[a] + b
+				end
+				self._gray[i] = 0
+			end			
+		end
+
+		self.pset = function(self, x,y, r,g,b)
+			self._gray[x+y*320] = math.floor(0.5+self._r[r]+self._g[g]+self._b[b])
+		end
+		self:pset(x,y,r,g,b)
+    end
+elseif MODE==1 then -- N&B
+	CONFIG.asm_mode  = 0
+    CONFIG.dither    = 
+	-- compo(norm,vac)(8,8)
+	-- compo(norm,vac)(16,16)
+	-- compo(norm,bayer,4){{1}}
+	-- norm{
+	-- {  6, 35, 49,  8, 39, 55, 13, 61},
+	-- { 26, 54, 19, 58, 24,  2, 51, 33},
+	-- { 45,  3, 41, 14, 44, 28, 38, 11},
+	-- { 21, 63, 29, 53,  7, 62, 17, 56},
+	-- { 47, 27,  9, 34, 46, 20, 42,  5},
+	-- { 15, 40, 57, 23, 12, 59, 25, 52},
+	-- { 60, 32,  1, 36, 50,  4, 37, 10},
+	-- { 43, 16, 30, 64, 18, 31, 48, 22}}
+	-- compo(norm,vac)(13,13)
+	-- compo(norm,vac)(7,7)
+	-- compo(norm,vac)(16,8)
+	compo(norm,vac)(8,7)
+	-- compo(norm,bayer,3){{1}}
+	-- CONFIG.dither = compo(norm,bayer,3){{1}}
+	-- CONFIG.dither = compo(norm,bayer){
+		-- { 7,13,11, 4},
+		-- {12,16,14, 8},
+		-- {10,15, 6, 2},
+		-- { 5, 9, 3, 1} 
+		
+		-- { 5,10,12, 7},
+		-- { 9,15,16,13},
+		-- { 3, 6,14,11},
+		-- { 1, 2, 8, 4}
+	-- }
+	CONFIG.dither = compo(norm,bayer,2){{1,2},{3,4}}
+	-- CONFIG.dither = compo(norm){{1}}
+	-- CONFIG.dither = compo(norm){
+		-- { 7,21,33,43,36,19, 9, 4},
+		-- {16,27,51,55,49,29,14,11},
+		-- {31,47,57,61,59,45,35,23},
+		-- {41,53,60,64,62,52,40,38},
+		-- {37,44,58,63,56,46,30,22},
+		-- {15,28,48,54,50,26,17,10},
+		-- { 8,18,34,42,32,20, 6, 2},
+		-- { 5,13,25,39,24,12, 3, 1}
+	-- }
+	-- CONFIG.dither = compo(norm,transp){
+		-- {16,49,25,43,29,50,38,11},
+		-- {31, 6,52,10,58, 2,24,55},
+		-- {41,21,59,15,33,48, 9,63},
+		-- { 4,45,36,27,42,19,35,28},
+		-- {51,18, 8,64, 3,53,60,14},
+		-- {39,54,30,47,23,12,44,26},
+		-- { 1,22,13,56,40,32, 7,57},
+		-- {34,61,37, 5,17,62,20,46}
+	-- }
+	CONFIG.dither = compo(norm, bayer, 1, transp){
+		{ 7,13,11, 4},
+		{12,16,14, 8},
+		{10,15, 6, 2},
+		{ 5, 9, 3, 1} 
+	}
+	-- CONFIG.dither = compo(norm,bayer,3){{1}}
 	function VIDEO:pset(x,y, r,g,b)
         if not self.dither then 
 			self:init_dither()
@@ -2415,8 +1286,10 @@ if MODE==0 then
 		end
 		self:pset(x,y,r,g,b)
     end
-elseif MODE==1 then
-    -- RGB
+elseif MODE==2 then -- RGB
+	CONFIG.asm_mode  = 1
+    CONFIG.px_size   = {1,3}
+	CONFIG.dither    = compo(norm, bayer){{3,1,2}}
 	local function pset(self, x,y, r,g,b)
 		local f,d = self._linear,self.dither:get(x,y)
         local m,p,q = self._mask[x],math.floor((x+y*960)/8),self.image
@@ -2435,52 +1308,187 @@ elseif MODE==1 then
 		pset(self, x,y, r,g,b)
 		self.pset = pset
     end
-elseif MODE==2 or MODE==4 or MODE==10 or MODE==14 or MODE==18 or MODE==20 or MODE==22 then
-    -- MO (not transcode)
+elseif MODE==3 then -- BM59
+	CONFIG.asm_mode	 = 2
+    CONFIG.px_size   = {2,1}
+	CONFIG.dither    = compo(norm,bayer){{1},{2}} 	
+	CONFIG.palette   = function(CONVERTER,VIDEO)
+		local H = {w={}} for i=0,255 do H.w[i]=0 end		
+		local function map(vals, histo)
+			local t={}; t[0] = 0
+			local k,v0,v1=1,0,PALETTE.linear(vals[1])
+			local e,h=0,{}
+			local avg = 0; for i=0,255 do avg = avg + histo[i]/256 end
+			for i=0,255 do h[i]=histo[i]/avg + 0.5*1/16 end
+			for i=0,255 do
+				local v = PALETTE.linear(i)
+				if v>=v1 and vals[k+1] then 
+					k,v0,v1=k+1,v1,PALETTE.linear(vals[k+1]) 
+				end
+				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
+				t[i] = k-1 + f
+				if histo then
+					local DIV=8
+					f = round(f*DIV)/DIV
+					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
+				end
+			end
+			return t,math.abs(e)
+		end
+
+        for i,f in ipairs(arg) do
+            local TMP = CONVERTER:new(f,nil,3)
+            if TMP then
+                local stat = VIDEO:new(TMP.file,TMP.fps,80,100,80,100,
+					function(self, x,y, r,g,b)
+					local t = math.floor(r*GRAY_R + g*GRAY_G + b*GRAY_B)
+					H.w[t] = H.w[t]+1
+				end)
+                stat.super_next_image = stat.next_image
+                stat.mill = {'|', '/', '-', '\\'}
+                stat.mill[0] = stat.mill[4]
+                function stat:next_image()
+                    self:super_next_image()
+                    io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
+                                    self.mill[self.cpt % 4],
+                                    percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
+                    io.stderr:flush()
+                end
+                while stat.running do stat:next_image() end
+            end
+        end
+		local ef = {}; for i=0,15 do ef[i] = PALETTE.ef[1+i] end
+		local r,g,b,w,t,e
+		for i=1,13 do for j=i+1,14 do for k=j+1,15 do
+			t,e = map({ef[i],ef[j],ef[k]}, H.w)
+			if w==nil or e<=w.err then w = {err=e, base={0,i,j,k}} end
+		end end end
+		io.stderr:write(string.rep(' ',79)..'\r')
+        io.stderr:flush()
+
+	
+		print('w', unpack(w.base))
+
+		return {
+			0x000*w.base[1],0x111*w.base[2],0x111*w.base[3],0x111*w.base[4],
+			0,0,0,0,0,0,0,0,0,0,0,0
+		}
+    end
+	local otab = {}
+	for i=0,159 do otab[i] = 4^(3-(i%4)) end
+	VIDEO.plot = function(self,p,o,c)
+			self.image[p] = self.image[p] + c*o
+        end 
+	local function pset(self, x,y, r,g,b)
+		local l,f = self._l_R[r]+self._l_G[r]+self._l_B[b],math.floor
+		self:plot(f(x/4) + y*40, otab[x], f(l) +
+			(((l%1)>=self.dither:get(x,y)) and 1 or 0))
+	end
     function VIDEO:pset(x,y, r,g,b)
-        if not self.dither then	self:init_dither(); self._cache = {} end
-        local k = PALETTE.key(r,g,b)
-        local t = self._cache[k]
-        if not t then
-            t = PALETTE:compute(self.dither.wh,r,g,b)
-            self._cache[k] = t
+        if not self.dither then 
+			self:init_dither()
+            self._l_R = {}
+			self._l_G = {}
+			self._l_B = {}
+            local f = PALETTE.linear
+            for i=0,255 do
+				self._l_R[i]=f(i)*3*GRAY_R
+				self._l_G[i]=f(i)*3*GRAY_G
+				self._l_B[i]=f(i)*3*GRAY_B
+			end
         end
-        local o,p,v = (x%2),math.floor(x/2) + y*40,t:byte(self.dither:get(x,y))
-        if o==0 then v=v*16 end
-        self.image[p] = self.image[p] + v
+		pset(self,x,y,r,g,b)
+		self.pset = pset
     end
-elseif MODE==3 or MODE==5 or MODE==11 or MODE==15 or MODE==19 or MODE==21 or MODE==23 then
-    -- TO (transcode)
-    function VIDEO:pset(x,y, r,g,b)
-        if not self.dither then self:init_dither(); self._cache = {} end
-        local k = PALETTE.key(r,g,b)
-        local t = self._cache[k]
-        if not t then
-            t = PALETTE:compute(self.dither.wh,r,g,b)
-            self._cache[k] = t
+elseif MODE==4 then -- 453
+	CONFIG.asm_mode	 = 3
+    CONFIG.px_size   = {4,2}
+    CONFIG.dither    = compo(norm,bayer){{1,4},{5,8},{3,2},{7,6}}
+	CONFIG.palette   = function(CONVERTER,VIDEO)
+		local H = {r={},g={},b={}}
+		for i=0,255 do H.r[i]=0; H.g[i]=0; H.b[i]=0 end	
+		local function map(vals, histo)
+			local t={}; t[0] = 0
+			local k,v0,v1=1,0,PALETTE.linear(vals[1])
+			local e,h=0,{}
+			local avg = 0; for i=0,255 do avg = avg + histo[i]/256 end
+			for i=0,255 do h[i]=histo[i]/avg + 1/16 end
+			for i=0,255 do
+				local v = PALETTE.linear(i)
+				if v>=v1 and vals[k+1] then 
+					k,v0,v1=k+1,v1,PALETTE.linear(vals[k+1]) 
+				end
+				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
+				t[i] = k-1 + f
+				if histo then
+					local DIV=24 -- 2
+					f = round(f*DIV)/DIV
+					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
+				end
+			end
+			return t,math.abs(e)
+		end
+
+        for i,f in ipairs(arg) do
+            local TMP = CONVERTER:new(f,nil,1)
+            if TMP then
+                local stat = VIDEO:new(TMP.file,TMP.fps,80,50,80,50,
+					function(self, x,y, r,g,b)
+					H.r[r], H.g[g], H.b[b] = H.r[r]+1, H.g[g]+1, H.b[b]+1
+				end)
+                stat.super_next_image = stat.next_image
+                stat.mill = {'|', '/', '-', '\\'}
+                stat.mill[0] = stat.mill[4]
+                function stat:next_image()
+                    self:super_next_image()
+                    io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
+                                    self.mill[self.cpt % 4],
+                                    percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
+                    io.stderr:flush()
+                end
+                while stat.running do stat:next_image() end
+            end
         end
-        self:transcode(math.floor(x/2) + y*40,x%2,t:byte(self.dither:get(x,y)))
+		local ef = {}; for i=0,15 do ef[i] = PALETTE.ef[1+i] end
+		-- g=5, r=4, b=3
+		local r,g,b,t,e
+		for i=1,14 do for j=i+1,15 do 
+			t,e = map({ef[i],ef[j]}, H.b)
+			if b==nil or e<=b.err then b = {err=e, base={0,i,j}} end
+		end end
+		for i=1,13 do for j=i+1,14 do for k=j+1,15 do
+			t,e = map({ef[i],ef[j],ef[k]}, H.r)
+			if r==nil or e<=r.err then r = {err=e, base={0,i,j,k}} end
+		end end end
+		for i=1,12 do for j=i+1,13 do for k=j+1,14 do for l=k+1,15 do
+			t,e = map({ef[i],ef[j],ef[k]}, H.g)
+			if g==nil or e<=g.err then g = {err=e, base={0,i,j,k,l}} end
+		end end end end
+
+		io.stderr:write(string.rep(' ',79)..'\r')
+        io.stderr:flush()
+
+		print('b', unpack(b.base))
+		print('r', unpack(r.base))
+		print('g', unpack(g.base))
+
+		return {
+			0x001*r.base[1]+0x100*b.base[1],0x001*r.base[1]+0x100*b.base[2],0x001*r.base[1]+0x100*b.base[3],
+			0x001*r.base[2]+0x100*b.base[1],0x001*r.base[2]+0x100*b.base[2],0x001*r.base[2]+0x100*b.base[3],
+			0x001*r.base[3]+0x100*b.base[1],0x001*r.base[3]+0x100*b.base[2],0x001*r.base[3]+0x100*b.base[3],
+			0x001*r.base[4]+0x100*b.base[1],0x001*r.base[4]+0x100*b.base[2],0x001*r.base[4]+0x100*b.base[3],
+			
+			0x010*g.base[2],0x010*g.base[3],0x010*g.base[4],0x010*g.base[5]
+		}
     end
-elseif MODE==6 or MODE==7 then
-    if MODE%2==0 then
-        -- MO (not transcode)
-        function VIDEO:plot(p,o,r,g,b)
-            local p1,p2,img = p,p+40,self.image
-            if ZIGZAG and o==1 then p1,p2=p2,p1 end
-            o = o==0 and 16 or 1
-            local t = b+r*3
-            if t>0 then img[p1] = img[p1] +      t*o end
-            if g>0 then img[p2] = img[p2] + (g+11)*o end
-        end
-    else
-        -- TO (transcode)
-        function VIDEO:plot(p,o,r,g,b)
-            local t,o1,o2 = b+r*3,0,40
-            if ZIGZAG and o==1 then o1,o2=o2,o1 end
-            if t>0 then self:transcode(p+o1,o,t) end
-            if g>0 then self:transcode(p+o2,o,g+11) end
-        end
-    end
+    function VIDEO:plot(p,o,r,g,b)
+		local p1,p2,img = p,p+40,self.image
+		if ZIGZAG and o==1 then p1,p2=p2,p1 end
+		o = o==0 and 16 or 1
+		local t = b+r*3
+		if t>0 then img[p1] = img[p1] +      t*o end
+		if g>0 then img[p2] = img[p2] + (g+11)*o end
+	end
 	local function pset(self, x,y, r,g,b)
 		local f,d = self._linear,self.dither:get(x,y)
         r,g,b = f[r][1],f[g][2],f[b][3]
@@ -2522,38 +1530,90 @@ elseif MODE==6 or MODE==7 then
                 local t = PALETTE.linear(i)
                 self._linear[i]={t*3,t*4,t*2}
             end
-            if EXPONENTIAL then
-                for i=0,255 do
-                    local t = PALETTE.exp_lin(i)
-                    self._linear[i]={
-                        t<=0 and -t or 1+t*2,
-                        t<=0 and -t or 1+t*3,
-                        t<=0 and -t or 1+t
-                    }
-                end
-            end
         end
 		pset(self, x,y, r,g,b)
 		self.pset = pset
     end
-elseif MODE==8 or MODE==9 then
-    if MODE%2==0 then
-        -- MO (not transcode)
-        function VIDEO:plot(p,o,r,g,b)
-            o = o==0 and 16 or 1
-			local img = self.image
-            if r>0 then img[p] = img[p] + r*o end p=p+40
-            if g>0 then img[p] = img[p] + g*o end p=p+40
-            if b>0 then img[p] = img[p] + b*o end
+elseif MODE==5 then -- RGB6
+    CONFIG.asm_mode	 = 3
+    CONFIG.px_size   = {4,3}
+	CONFIG.dither    = compo(norm,bayer){{1}}
+	CONFIG.palette   = function(CONVERTER,VIDEO)
+		local H = {r={},g={},b={}}
+		for i=0,255 do H.r[i]=0; H.g[i]=0; H.b[i]=0 end	
+		local function map(vals, histo)
+			local t={}; t[0] = 0
+			local k,v0,v1=1,0,PALETTE.linear(vals[1])
+			local e,h=0,{}
+			local avg = 0; for i=0,255 do avg = avg + histo[i]/256 end
+			for i=0,255 do h[i]=histo[i]/avg + 1/16 end
+			for i=0,255 do
+				local v = PALETTE.linear(i)
+				if v>=v1 and vals[k+1] then 
+					k,v0,v1=k+1,v1,PALETTE.linear(vals[k+1]) 
+				end
+				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
+				t[i] = k-1 + f
+				if histo then
+					local DIV=4--2
+					f = round(f*DIV)/DIV
+					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
+				end
+			end
+			return t,math.abs(e)
+		end
+
+        for i,f in ipairs(arg) do
+            local TMP = CONVERTER:new(f,nil,1)
+            if TMP then
+                local stat = VIDEO:new(TMP.file,TMP.fps,80,50,80,50,
+					function(self, x,y, r,g,b)
+					H.r[r], H.g[g], H.b[b] = H.r[r]+1, H.g[g]+1, H.b[b]+1
+				end)
+                stat.super_next_image = stat.next_image
+                stat.mill = {'|', '/', '-', '\\'}
+                stat.mill[0] = stat.mill[4]
+                function stat:next_image()
+                    self:super_next_image()
+                    io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
+                                    self.mill[self.cpt % 4],
+                                    percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
+                    io.stderr:flush()
+                end
+                while stat.running do stat:next_image() end
+            end
         end
-    else
-        -- TO (transcode)
-        function VIDEO:plot(p,o,r,g,b)
-            if r>0 then self:transcode(p   ,o,r) end
-            if g>0 then self:transcode(p+40,o,g) end
-            if b>0 then self:transcode(p+80,o,b) end
-        end
+		local ef = {}; for i=0,15 do ef[i] = PALETTE.ef[1+i] end
+		local r,g,b,t,e
+		for i=1,11 do for j=i+1,12 do for k=j+1,13 do for l=k+1,14 do for m=l+1,15 do
+			t,e = map({ef[i],ef[j],ef[k],ef[l],ef[m]}, H.r)
+			if r==nil or e<=r.err then r = {err=e, base={0,i,j,k,l,m}} end
+			t,e = map({ef[i],ef[j],ef[k],ef[l],ef[m]}, H.g)
+			if g==nil or e<=g.err then g = {err=e, base={0,i,j,k,l,m}} end
+			t,e = map({ef[i],ef[j],ef[k],ef[l],ef[m]}, H.b)
+			if b==nil or e<=b.err then b = {err=e, base={0,i,j,k,l,m}} end
+		end end end end end
+		io.stderr:write(string.rep(' ',79)..'\r')
+        io.stderr:flush()
+
+		print('b', unpack(b.base))
+		print('r', unpack(r.base))
+		print('g', unpack(g.base))
+
+		return {
+			0x000,			
+			0x001*r.base[2],0x001*r.base[3],0x001*r.base[4],0x001*r.base[5],0x001*r.base[6],
+			0x010*g.base[2],0x010*g.base[3],0x010*g.base[4],0x010*g.base[5],0x010*g.base[6],
+			0x100*b.base[2],0x100*b.base[3],0x100*b.base[4],0x100*b.base[5],0x100*b.base[6]
+		}
     end
+	function VIDEO:plot(p,o,r,g,b)
+		o = o==0 and 16 or 1
+		local img = self.image
+		if r>0 then img[p] = img[p] + r*o end p=p+40
+		if g>0 then img[p] = img[p] + g*o end p=p+40
+		if b>0 then img[p] = img[p] + b*o end
+	end
 	local function pset(self, x,y, r,g,b)
 		local f,d,int = self._linear,self.dither:get(x,y),math.floor
         r,g,b = f[r],f[g],f[b]
@@ -2585,160 +1645,241 @@ elseif MODE==8 or MODE==9 then
         if not self.dither then 
 			self:init_dither()
             self._linear = {}
-            local f = function (i)
-                return PALETTE.linear(i)*5
-            end
-            if true and EXPONENTIAL then
-                f = function(i)
-                    local t = PALETTE.exp_lin(i)
-                    return t<=0 and -t or 1+t*4
-                end
-            end
-            for i=0,255 do self._linear[i]=f(i) end
+			for i=0,255 do self._linear[i] = PALETTE.linear(i)*5 end
         end
         pset(self,x,y,r,g,b)
 		self.pset = pset
     end
-elseif MODE==12 or MODE==13 then
-    if MODE%2==0 then
-        -- MO (not transcode)
-        function VIDEO:plot(p,o,v)
-            self.image[p] = self.image[p] + (o==0 and 16*v or v)
+elseif MODE==6 then
+    CONFIG.asm_mode	 = 3
+    CONFIG.px_size   = {4,1}
+    CONFIG.dither    = --compo(bayer){{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
+		-- compo(bayer,2){{1},{3},{2},{4}}
+		-- compo(bayer){{1},{3},{2},{4}}
+		-- vac(5,19) --(7,29)
+		-- vac(5,17)
+		vac(3,13)
+		-- compo(bayer,2){{1},{1},{1},{1}}
+    CONFIG.palette   = function(CONVERTER,VIDEO)
+        local reducer = ColorReducer:new()
+        for i,f in ipairs(arg) do
+            local TMP = CONVERTER:new(f,nil,3)
+            if TMP then
+                local stat = VIDEO:new(TMP.file,TMP.fps,80,50,80,50,
+					function(self, x,y, r,g,b)
+                    local col = Color:new(r,g,b):toLinear()
+                    -- for i=1,1+1000*math.exp(-(x-40)^2/100) do
+                        reducer:add(col)
+                    -- end
+                end)
+                stat.super_next_image = stat.next_image
+                stat.mill = {'|', '/', '-', '\\'}
+                stat.mill[0] = stat.mill[4]
+                function stat:next_image()
+                    self:super_next_image()
+                    io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
+                                    self.mill[self.cpt % 4],
+                                    percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
+                    io.stderr:flush()
+                end
+                while stat.running do stat:next_image() end
+            end
         end
-    else
-        -- TO (transcode)
-        function VIDEO:plot(p,o,v)
-            self:transcode(p,o,v)
-        end
+		-- reducer:boostBorderColors()
+		-- reducer:boostBorderColors()					 
+		-- reducer:boostBorderColors()			
+		-- reducer:boostBorderColors()			
+		-- for i=1,16 do reducer:boostBorderColors() end
+        io.stderr:write(string.rep(' ',79)..'\r')
+        io.stderr:flush()
+        local pal = reducer:buildPalette(16, true)
+        return pal
     end
-    function VIDEO:pset(x,y, r,g,b)
-        if not self.dither then 
-			self:init_dither()
-            self._linear = {}
-            for i=0,255 do self._linear[i]=PALETTE.linear(i) end
-        end
-        local f,d = self._linear,self.dither:get(x,y)
-		local c = (f[r]>d and 1 or 0) + (f[g]>d and 2 or 0) + (f[b]>d and 4 or 0)
-		-- if f[r]>d then c = c + 1 end
-		-- if f[g]>d then c = c + 2 end
-		-- if f[b]>d then c = c + 4 end
-		if c>0 then self:plot(math.floor(x/2) + y*40, x%2, c) end
-    end
-elseif MODE==16 or MODE==17 then
-	VIDEO.plot = MODE%2==0 
-	and -- MO (not transcode)
-        function(self,p,o,c)
-			self.image[p] = self.image[p] + c*(o==0 and 16 or 1)
-        end 
-	or
-		function(self,p,o,c)
-            self:transcode(p,o,c)
-        end
-	local function pset(self, x,y, r,g,b)
-		local l,f = self._l_R[r]+self._l_G[r]+self._l_B[b],math.floor
-		self:plot(f(x/2) + y*40, x%2, f(l) +
-			(((l%1)>=self.dither:get(x,y)) and 1 or 0))
+	for match in (package.path..';'):gmatch("(.-)?.lua;") do
+		package.path = package.path .. ';' .. match ..           "./lib/?.lua"
+		package.path = package.path .. ';' .. match ..          "../lib/?.lua"
+		package.path = package.path .. ';' .. match ..    "../tools/lib/?.lua"
+		package.path = package.path .. ';' .. match .. "../../tools/lib/?.lua"
 	end
-    function VIDEO:pset(x,y, r,g,b)
-        if not self.dither then 
-			self:init_dither()
-            self._l_R = {}
-			self._l_G = {}
-			self._l_B = {}
-            local f = PALETTE.linear
-            for i=0,255 do
-				self._l_R[i]=f(i)*15*GRAY_R
-				self._l_G[i]=f(i)*15*GRAY_G
-				self._l_B[i]=f(i)*15*GRAY_B
-			end
-        end
-		pset(self,x,y,r,g,b)
-		self.pset = pset
-    end
-elseif MODE==24 then
-	local otab = {}
-	for i=0,159 do otab[i] = 4^(3-(i%4)) end
-	VIDEO.plot = function(self,p,o,c)
-			self.image[p] = self.image[p] + c*o
-        end 
-	local function pset(self, x,y, r,g,b)
-		local l,f = self._l_R[r]+self._l_G[r]+self._l_B[b],math.floor
-		self:plot(f(x/4) + y*40, otab[x], f(l) +
-			(((l%1)>=self.dither:get(x,y)) and 1 or 0))
-	end
-    function VIDEO:pset(x,y, r,g,b)
-        if not self.dither then 
-			self:init_dither()
-            self._l_R = {}
-			self._l_G = {}
-			self._l_B = {}
-            local f = PALETTE.linear
-            for i=0,255 do
-				self._l_R[i]=f(i)*3*GRAY_R
-				self._l_G[i]=f(i)*3*GRAY_G
-				self._l_B[i]=f(i)*3*GRAY_B
-			end
-        end
-		pset(self,x,y,r,g,b)
-		self.pset = pset
-    end
-elseif MODE==25 then
-    function VIDEO:pset(x,y, r,g,b)
-		self._mask = {}
-		for i=0,320*200-1 do self._mask[i]={math.floor(i/8),2^(7-(i%8))} end
-
-		self._r = {}
-		self._g = {}
-		self._b = {}
-		for i=0,255 do
-			local lin = PALETTE.linear(i)
-			self._r[i] = lin*GRAY_R*255
-			self._g[i] = lin*GRAY_G*255
-			self._b[i] = lin*GRAY_B*255
-		end
-		
-		self._gray = {} for i=0,320*200-1 do self._gray[i] = 0 end
-		self._flush = self.filter.flush
-		self.filter.flush = function(filter) 
-			self._flush(filter)
-			
-			-- https://en.wikipedia.org/wiki/Otsu's_method
-			local histo = self._histo or {}
-			for i=0,255 do histo[i] = 0 end
-			self._histo = histo
-			for i=0,320*200-1 do local g = self._gray[i]; histo[g] = histo[g]+1 end
-			local wB,sumB,sum1,maximum,level = 0,0,0,-1,256
-			for i=0,255 do sum1 = sum1 + i*histo[i] end
+    function getpicturesize() return 80,50 end
+    function waitbreak() end
+    run = function(name) require(name:gsub('%..*','')) end
+    run("color_reduction.lua")
+elseif MODE==7 then
+	CONFIG.asm_mode	 = 3
+    CONFIG.px_size   = {4,1}
+    CONFIG.dither    = vac(3,9)
+	CONFIG.palette   = function(CONVERTER,VIDEO)
+		local H = {r={},g={},b={},w={}}
+		for i=0,255 do H.r[i]=0; H.g[i]=0; H.b[i]=0; H.w[i]=0 end		local function map(vals, histo)
+			local t={}; t[0] = 0
+			local k,v0,v1=1,0,PALETTE.linear(vals[1])
+			local e,h=0,{}
+			local avg = 0; for i=0,255 do avg = avg + histo[i]/256 end
+			for i=0,255 do h[i]=histo[i]/avg + 1/16 end
 			for i=0,255 do
-				local wF = 320*200-wB
-				if wB>0 and wF>0 then
-					local mF = (sum1-sumB)/wF
-					local v = wB * wF * ((sumB / wB) - mF) * ((sumB / wB) - mF)
-					if v > maximum then	maximum,level = v,i end
+				local v = PALETTE.linear(i)
+				if v>=v1 and vals[k+1] then 
+					k,v0,v1=k+1,v1,PALETTE.linear(vals[k+1]) 
 				end
-				wF = histo[i]
-				wB,sumB = wB + wF,sumB + i*wF
-			end		
-			for i=0,320*200-1 do 
-				if self._gray[i]>level then
-					local a,b = unpack(self._mask[i])
-					self.image[a] = self.image[a] + b
+				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
+				t[i] = k-1 + f
+				if histo then
+				 
+					local DIV=2
+					f = round(f*DIV)/DIV
+					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
 				end
-				self._gray[i] = 0
-			end			
+			end
+			return t,math.abs(e)
 		end
 
-		self.zero = 0
-		self.pset = function(self, x,y, r,g,b)
-			self._gray[x+y*320] = math.floor(0.5+self._r[r]+self._g[g]+self._b[b])
+        for i,f in ipairs(arg) do
+            local TMP = CONVERTER:new(f,nil,3)
+            if TMP then
+                local stat = VIDEO:new(TMP.file,TMP.fps,80,50,80,50,
+					function(self, x,y, r,g,b)
+					H.r[r], H.g[g], H.b[b] = H.r[r]+1, H.g[g]+1, H.b[b]+1
+					local t = math.floor(r*.30 + g*.59 + b*.11)
+					H.w[t] = H.w[t]+1
+				end)
+                stat.super_next_image = stat.next_image
+                stat.mill = {'|', '/', '-', '\\'}
+                stat.mill[0] = stat.mill[4]
+                function stat:next_image()
+                    self:super_next_image()
+                    io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
+                                    self.mill[self.cpt % 4],
+                                    percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
+                    io.stderr:flush()
+                end
+                while stat.running do stat:next_image() end
+            end
+        end
+		local ef = {}; for i=0,15 do ef[i] = PALETTE.ef[1+i] end
+		local r,g,b,w,t,e
+		for i=1,13 do for j=i+1,14 do for k=j+1,15 do
+			t,e = map({ef[i],ef[j],ef[k]}, H.r)
+			if r==nil or e<=r.err then r = {err=e, base={0,i,j,k}} end
+			t,e = map({ef[i],ef[j],ef[k]}, H.g)
+			if g==nil or e<=g.err then g = {err=e, base={0,i,j,k}} end
+			t,e = map({ef[i],ef[j],ef[k]}, H.b)
+			if b==nil or e<=b.err then b = {err=e, base={0,i,j,k}} end
+			t,e = map({ef[i],ef[j],ef[k]}, H.w)
+			if w==nil or e<=w.err then w = {err=e, base={0,i,j,k}} end
+		end end end
+		io.stderr:write(string.rep(' ',79)..'\r')
+        io.stderr:flush()
+
+		print('b', unpack(b.base))
+		print('r', unpack(r.base))
+		print('g', unpack(g.base))
+		print('w', unpack(w.base))
+
+		return {
+		-- 0x000,0x111,0x333,0x880,
+		-- 0x100,0x010,0x001,0x808,
+		-- 0x300,0x030,0x003,0x088,
+		-- 0x800,0x080,0x008,0x888
+		0x000*w.base[1],0x111*w.base[2],0x111*w.base[3],0x110*w.base[4],
+		0x100*b.base[2],0x010*g.base[2],0x001*r.base[2],0x101*w.base[4],
+		0x100*b.base[3],0x010*g.base[3],0x001*r.base[3],0x011*w.base[4],
+		0x100*b.base[4],0x010*g.base[4],0x001*r.base[4],0x111*w.base[4]
+		}
+    end
+elseif MODE==8 then
+	CONFIG.asm_mode	 = 3
+    CONFIG.px_size   = {4,1}
+	CONFIG.dither    = compo(bayer,1){{1},{3},{2},{4}}			
+	CONFIG.palette   = function(CONVERTER,VIDEO)
+		local H = {r={},g={},b={},w={}}
+		for i=0,255 do H.r[i]=0; H.g[i]=0; H.b[i]=0; H.w[i]=0 end		local function map(vals, histo)
+			local t={}; t[0] = 0
+			local k,v0,v1=1,0,PALETTE.linear(vals[1])
+			local e,h=0,{}
+			local avg = 0; for i=0,255 do avg = avg + histo[i]/256 end
+			for i=0,255 do h[i]=histo[i]/avg + 1/16 end
+			for i=0,255 do
+				local v = PALETTE.linear(i)
+				if v>=v1 and vals[k+1] then 
+					k,v0,v1=k+1,v1,PALETTE.linear(vals[k+1]) 
+				end
+				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
+				t[i] = k-1 + f
+				if histo then
+				 
+					local DIV=16
+					f = round(f*DIV)/DIV
+					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
+				end
+			end
+			return t,math.abs(e)
 		end
-		self:pset(x,y,r,g,b)
+
+        for i,f in ipairs(arg) do
+            local TMP = CONVERTER:new(f,nil,3)
+            if TMP then
+                local stat = VIDEO:new(TMP.file,TMP.fps,80,50,80,50,
+					function(self, x,y, r,g,b)
+					H.r[r], H.g[g], H.b[b] = H.r[r]+1, H.g[g]+1, H.b[b]+1
+					local t = math.floor(r*.30 + g*.59 + b*.11)
+					H.w[t] = H.w[t]+1
+				end)
+                stat.super_next_image = stat.next_image
+                stat.mill = {'|', '/', '-', '\\'}
+                stat.mill[0] = stat.mill[4]
+                function stat:next_image()
+                    self:super_next_image()
+                    io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
+                                    self.mill[self.cpt % 4],
+                                    percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
+                    io.stderr:flush()
+                end
+                while stat.running do stat:next_image() end
+            end
+        end
+		local ef = {}; for i=0,15 do ef[i] = PALETTE.ef[1+i] end
+		local r,g,b,w,t,e
+		for i=1,12 do for j=i+1,13 do for k=j+1,14 do for l=k+1,15 do
+			t,e = map({ef[i],ef[j],ef[k],ef[l]}, H.r)
+			if r==nil or e<=r.err then r = {err=e, base={0,i,j,k,l}} end
+			t,e = map({ef[i],ef[j],ef[k],ef[l]}, H.g)
+			if g==nil or e<=g.err then g = {err=e, base={0,i,j,k,l}} end
+			t,e = map({ef[i],ef[j],ef[k],ef[l]}, H.b)
+			if b==nil or e<=b.err then b = {err=e, base={0,i,j,k,l}} end
+			t,e = map({ef[i],ef[j],ef[k],ef[l]}, H.w)
+			if w==nil or e<=w.err then w = {err=e, base={0,i,j,k,l}} end
+		end end end end
+		io.stderr:write(string.rep(' ',79)..'\r')
+        io.stderr:flush()
+
+		print('b', unpack(b.base))
+		print('r', unpack(r.base))
+		print('g', unpack(g.base))
+		print('w', unpack(w.base))
+
+		return {
+			0x000,
+			
+			0x100*b.base[2],0x010*g.base[2],0x001*r.base[2],
+			0x100*b.base[3],0x010*g.base[3],0x001*r.base[3],
+			0x100*b.base[4],0x010*g.base[4],0x001*r.base[4],
+			
+							0x010*g.base[4]+0x001*r.base[5],
+			0x100*b.base[5]                +0x001*r.base[4],
+			0x100*b.base[5]+0x010*g.base[4]                ,
+			
+			0x100*b.base[3]+0x010*g.base[3]+0x001*r.base[3],
+			0x100*b.base[4]+0x010*g.base[4]+0x001*r.base[4],
+			0x100*b.base[5]+0x010*g.base[5]+0x001*r.base[5]
+		}
     end
 else
-    error('Invalid MODE: ' .. MODE)
-end	
+    error("Invalid MODE="..MODE)
+end
+
 function VIDEO:clear()
-    for p=0,#self.image do self.image[p] = self.zero end
+    for p=0,#self.image do self.image[p] = 0 end
 end
 function VIDEO:read_rgb24(raw)
 	self:clear()
@@ -2776,7 +1917,7 @@ function VIDEO:next_image()
 end
 function VIDEO:skip_image()
     local bak = self.read_rgb24
-    function self:read_rgb24(raw)
+    function self:read_rgb24(raw) 	
         self.filter:push(raw)
     end
     self:next_image()
@@ -2792,7 +1933,6 @@ function CONVERTER:new(file, out, fps)
         file      = file,
         out       = out,
         fps       = fps,
-        interlace = CONFIG.interlace
     }
 
     -- recherche la bonne taille d'image
@@ -2834,7 +1974,7 @@ function CONVERTER:new(file, out, fps)
     return o
 end
 function CONVERTER:_new_video(fps)
-    return VIDEO:new(self.file, fps or self.fps, self.w, self.h, self.W, self.H, self.interlace)
+    return VIDEO:new(self.file, fps or self.fps, self.w, self.h, self.W, self.H)
 end
 function CONVERTER:_stat()
     io.stdout:write(self.file..'\n')
@@ -2844,6 +1984,7 @@ function CONVERTER:_stat()
     local neg_fps = self.fps<0
 	self.fps = math.abs(self.fps)
     local stat = self:_new_video((neg_fps and self.fps > FPS_MAX) and 3 or self.fps)
+	stat:pset(0,0,0,0,0)
     stat.super_pset = stat.pset
     stat.histo = {}; for i=0,255 do stat.histo[i]=0 end
     function stat:pset(x,y, r,g,b)
@@ -2963,12 +2104,11 @@ function CONVERTER:_stat()
     -- print(stat.min .. '    ' .. stat.max .. '                  ')
     io.stdout:flush()
     local video_cor = {stat.min, 255/(stat.max - stat.min)}
-    if MODE==10 or MODE==11 then video_cor = {0,1} end
     self.video_cor = video_cor
 
     -- info
-    io.stdout:write(string.format('> %dx%d %s/%d (%s) %s at %d fps (%d%% zoom)\n',
-        self.w, self.h, self.interlace, MODE, self.aspect_ratio,
+    io.stdout:write(string.format('> %dx%d %d (%s) %s at %d fps (%d%% zoom)\n',
+        self.w, self.h, MODE, self.aspect_ratio,
         hms(self.duration, "%dh %dm %ds"), self.fps,
         percent(math.max(self.w/self.W,self.h/self.H))))
 	local TOT = stat.type[1]+stat.type[2]+stat.type[3]+stat.type[4]
