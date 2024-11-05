@@ -22,8 +22,8 @@
 * Le chargement et le lancement du programme sont
 * realises grace a un secteur de boot.
 
-MODE_BW     set 0	  Memoire forme: N&B
-MODE_RGB    set 1	  Memoire forme: R/G/B
+MODE_BW     set 0   Memoire forme: N&B
+MODE_RGB    set 1   Memoire forme: R/G/B
 MODE_BM59   set 2   Memoire forme, palette 4 couls
 MODE_PAL    set 3   Memoire fond, palette
 
@@ -155,7 +155,7 @@ READ_BIT MACRO
 INIT
   ORCC  #$50          desactive les interruptions 
   LDA   >$FFF2        $FFF2: $F0(MO) et $70(TO)
-  BPL  INIT_TO        TO detecte
+  BPL   INIT_TO       TO detecte
 
 *------------------------------------------------------
 * Initialisations communes MO5/MO6/PC128
@@ -167,11 +167,14 @@ INIT
 * MO6   -> 01
 * PC128 -> 01
   LDA   >$FFF0       type d'ordinateur
-  BEQ  ERROR        
+  BEQ   ERROR        
   ENDC
 
   LDU   #$1F40        fin memoire video+1 ligne
   LDX   #$A7C0        adresse selection banque video
+
+  COM   <$5F          change le mode gfx pour reset
+  COM   >$2300        force le basic a s'intialiser   
 
   IFEQ  (MODE-MODE_BW)*(MODE-MODE_BM59)
   LDB   #1            memoire forme
@@ -216,6 +219,7 @@ INIT
   INC   ,X            memoire forme
   JSR   ECRAN1        remplissage forme XXXX----
   FCB   %11110000
+  DEC   ,X            memoire fond
   LDD   #$0000        mode std/tour noir
   ENDC
 
@@ -229,7 +233,7 @@ INIT
   LDA   ,X            port A du PIA systeme
   ANDA  #$E1          raz couleur cadre (noir)
   STA   ,X            change couleur cadre
-  JMP   INIT8         suite des initialisations
+  BRA   INIT8         suite des initialisations
 
 *------------------------------------------------------
 * Erreur
@@ -269,6 +273,8 @@ INIT_TO
   LDB   #$81          patch des adresses pour TO (=CMPA)
   STB   GETC
   STB   PUTC
+
+  STB   <$5F          change le mode gfx pour reset
   
   LDB   #$E0          valeur adresse EXCMD (poids fort)
   STB   PATCH_READ    adresse execution EXCMD (pour CMD18)
@@ -280,6 +286,7 @@ INIT_TO
   STB   PATCH_ECR
   LDB   #2
   STB   PATCH_POS
+
 
 * $FFF0
 * T9000 -> 00
@@ -337,12 +344,12 @@ INIT_TO
   ANDB  3,X
   STB   3,X            
   JSR   ECRAN1        remplissage fond noir
-  FCB   %11000000
+  FCB   %00000000
   INC   3,X           memoire fond
   JSR   ECRAN1        remplissage forme XXXX----
   FCB   %11110000
   DEC   3,X           memoire forme
-  LDD   #$2008
+  LDD   #$2008        pas transpo/noir=8
   ENDC
 
   PULS  CC
@@ -354,7 +361,7 @@ INIT_TO
   LDB   3,X           port A du PIA systeme
   ANDB  #$15          couleur cadre 0 (noir) 
   STB   3,X           change couleur cadre
-  JMP   INIT8         suite des initialisations
+  BRA   INIT8         suite des initialisations
   
 *------------------------------------------------------
 * Initialisations MO6 / PC128 / TO8 / TO9+
@@ -363,98 +370,15 @@ INIT_TO
 *------------------------------------------------------
 INIT_GEN2
   STD   $1C,X         mode video + couleur cadre (noir)
+
   LDA   ,X            PIA systeme 
   ANDA  #$FB          clear mute bit 
   STA   ,X            modification PIA
-  
-  LSLB
-  STB   $1B,X
 
-PALETTE1
-  LDA   <$E7-$C0,X
-  BPL   PALETTE1
-PALETTE2
-  LDA	  <$E7-$C0,X
-  BMI	  PALETTE2
-  LDD   #250
+  JSR   PALETTE  
 
-  STB   <$5F          force reset ecran au reboot
-  STB   <$FE
-
-PALETTE3
-  SUBD  #1
-  BNE   PALETTE3
-  LDU   #PALDATA
-PALETTE4
-  PULU  D
-  STB   <$DA-$C0,X
-  STA   <$DA-$C0,X
-  CMPU  #PALDATA+32
-  BNE   PALETTE4
-
-  JMP   INIT8         suite des initialisations
-  
-*------------------------------------------------------
-* Initialise la memoire video avec la valeur suivant
-* l'addresse d'appel
-*------------------------------------------------------
-ECRAN1
-  PSHS  D,X,Y,U
-  LDX   8,S           recup adr. retour
-  LDA   ,X            recup "val"
-  LDB   ,X+           2x (plus rapide que TFR)
-  STX   8,S           mise a jour adr. retour
-  TFR   D,X           remplissage registres
-  LEAY  ,X            
-  LDA   #200          nb de lignes ecran
-ECRAN11
-  PSHU  B,X,Y         ecrit une ligne 
-  PSHU  B,X,Y         (5*8) avec "val"
-  PSHU  B,X,Y
-  PSHU  B,X,Y
-  PSHU  B,X,Y
-  PSHU  B,X,Y
-  PSHU  B,X,Y
-  PSHU  B,X,Y
-  DECA
-  BNE   ECRAN11
-  PULS  D,X,Y,U,PC
-
-*------------------------------------------------------
-* Initialise la memoire video avec les valeurs suivant
-* l'addresse d'appel
-*------------------------------------------------------
-ECRAN3
-  PSHS  D,X,Y,U
-  LDX   8,S           recuperation donnees
-  LEAU  -40,U  
-  BSR   ECRAN31       remplissage ecran
-  BSR   ECRAN31
-  BSR   ECRAN31
-  STX   8,S           restauration PC pour poursuite
-  PULS  D,X,Y,U,PC
-ECRAN31  
-  LDA   ,X            lecture "val"
-  LDB   ,X+           D="val" "val"
-  LEAU  -40,U
-  PSHS  U,X
-  TFR   D,Y           Y=D="val" "val"
-  LEAX  ,Y            X=Y=D="val" "val"
-  LDA   #66
-ECRAN32
-  PSHU  B,X,Y         ecrit une ligne 
-  PSHU  B,X,Y         (5*8) avec "val"
-  PSHU  B,X,Y
-  PSHU  B,X,Y
-  PSHU  B,X,Y
-  PSHU  B,X,Y
-  PSHU  B,X,Y
-  PSHU  B,X,Y
-  LEAU  -2*40,U       remontee de 3 lignes
-  DECA                repete 66 fois
-  BNE   ECRAN32
-  PULS  X,U,PC
-
+*  JMP   INIT8         suite des initialisations
+ 
 *------------------------------------------------------
 * Initialisations communes 
 *------------------------------------------------------
@@ -480,9 +404,9 @@ INIT8
 * Initialisation adresse du fichier .sd pour CMD18
 INIT9
   LDD   ,X            octets poids fort adresse
-  STD   CMD18+1       stockage pour commande CMD18
+  STD   >CMD18+1      stockage pour commande CMD18
   LDD   2,X           octets poids faible adresse
-  STD   CMD18+3       stockage pour commande CMD18
+  STD   >CMD18+3      stockage pour commande CMD18
 
 * Initialisation CNA en sortie
   TFR   DP,B          valeur actuelle de DP
@@ -496,17 +420,30 @@ INIT9
   ORA   #$04          set b2
   STA   <$CF          selection PB
 
-* Passage progressif du CNA a 32
-  CLRA
+* Passage progressif du CNA a 0
+  LDA  <$CD
+  ANDA #63
+  BEQ  INIT12
 INIT10
-  STA   <$CD
   LDB   #200          1ms
 INIT11
   DECB
-  BNE   INIT11
+  BNE  INIT11
+  DECA
+  BNE  INIT10
+
+* Passage progressif du CNA a 32
+*  CLRA
+INIT12
+  STA   <$CD
+  LDB   #200          1ms
+INIT13
+  DECB
+  BNE   INIT13
   INCA
   CMPA  #33
-  BNE   INIT10
+  BNE   INIT12
+* BRA   READ_VID
 
 *-------------------------------------------------------
 * Lancement de la commande CMD18 et saut de huit blocs
@@ -515,7 +452,7 @@ READ_VID
   LDU   #CMD18        adresse commande CMD18
   JSR   $A028         EXCMD = execution commande
   VAR   PATCH_READ,-2
-*  BCS   READ_VID
+* BCS   READ_VID
   
   LDA   #$7F          initialiser A pour lecture
   BSR   SAUT          lecture bloc (secteur de boot)
@@ -583,6 +520,94 @@ STOP
 
 * recommencer la lecture du fichier
   JMP   READ_VID
+
+*------------------------------------------------------
+* Initialise la memoire video avec la valeur suivant
+* l'addresse d'appel
+*------------------------------------------------------
+ECRAN1
+  PSHS  D,X,Y,U
+  LDX   8,S           recup adr. retour
+  LDA   ,X            recup "val"
+  LDB   ,X+           2x (plus rapide que TFR)
+  STX   8,S           mise a jour adr. retour
+  TFR   D,X           remplissage registres
+  LEAY  ,X            
+  LDA   #200          nb de lignes ecran
+ECRAN11
+  PSHU  B,X,Y         ecrit une ligne 
+  PSHU  B,X,Y         (5*8) avec "val"
+  PSHU  B,X,Y
+  PSHU  B,X,Y
+  PSHU  B,X,Y
+  PSHU  B,X,Y
+  PSHU  B,X,Y
+  PSHU  B,X,Y
+  DECA
+  BNE   ECRAN11
+  PULS  D,X,Y,U,PC
+
+*------------------------------------------------------
+* Initialise la memoire video avec les valeurs suivant
+* l'addresse d'appel
+*------------------------------------------------------
+ECRAN3
+  PSHS  D,X,Y,U
+  LDX   8,S           recuperation donnees
+  LEAU  -40,U  
+  BSR   ECRAN31       remplissage ecran
+  BSR   ECRAN31
+  BSR   ECRAN31
+  STX   8,S           restauration PC pour poursuite
+  PULS  D,X,Y,U,PC
+ECRAN31  
+  LDA   ,X            lecture "val"
+  LDB   ,X+           D="val" "val"
+  LEAU  -40,U
+  PSHS  U,X
+  TFR   D,Y           Y=D="val" "val"
+  LEAX  ,Y            X=Y=D="val" "val"
+  LDA   #66
+ECRAN32
+  PSHU  B,X,Y         ecrit une ligne 
+  PSHU  B,X,Y         (5*8) avec "val"
+  PSHU  B,X,Y
+  PSHU  B,X,Y
+  PSHU  B,X,Y
+  PSHU  B,X,Y
+  PSHU  B,X,Y
+  PSHU  B,X,Y
+  LEAU  -2*40,U       remontee de 3 lignes
+  DECA                repete 66 fois
+  BNE   ECRAN32
+  PULS  X,U,PC
+
+*-----------------------------------------------------
+* Mise a jour palette. B=index de la 1ere couleur
+*-----------------------------------------------------
+PALETTE
+  PSHS  X,U
+  LEAX  <$E7-$C0,X    X=$A7E7/$E7E7
+  LSLB
+  STB   -12,X         $A7DB/$E7DB
+PALETTE1
+  LDB   ,X            $A7E7/$E7E7
+  BPL   PALETTE1
+PALETTE2
+  LDB   ,X            $A7E7/$E7E7
+  BMI   PALETTE2
+  LDD   #250
+PALETTE3
+  SUBD  #1
+  BNE   PALETTE3
+  LDU   #PALDATA
+PALETTE4
+  PULU  D
+  STB   -13,X         $A7DA/$E7DA
+  STA   -13,X
+  CMPU  #PALDATA+32
+  BNE   PALETTE4
+  PULS  X,U,PC
 
 *-----------------------------------------------------
 * Trame de deplacement 8 bits + 1 octet
@@ -779,6 +804,7 @@ PALDATA
 *  FDB   $600,$606,$660,$666
     
   ECHO *************************************
+  ECHO * MODE &MODE
   ECHO * ORG=$START
   ECHO * END=$STACK
   ECHO * LEN=&(STACK-START)
