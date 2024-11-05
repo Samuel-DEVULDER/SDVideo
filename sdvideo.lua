@@ -149,6 +149,39 @@ local function bayer(t)
     end
     return d
 end
+local function double(t)
+    local m=#t
+    local n=#t[1]
+    local d={}
+    for i=1,2*m do
+        d[i] = {}
+        for j=1,2*n do
+            d[i][j] = 0
+        end
+    end
+    for i=1,m do
+        for j=1,n do
+            local z = 2*t[i][j]
+            d[m*0+i][n*0+j] = z-1
+            d[m*1+i][n*1+j] = z-1
+            d[m*1+i][n*0+j] = z
+            d[m*0+i][n*1+j] = z
+        end
+    end
+    return d
+end
+local function halve(t)
+    local m=#t
+    local n=#t[1]
+	local d={}
+    for i=1,m do
+		d[i] = {}
+        for j=1,n do
+			d[i][j] = math.ceil(t[i][j]/2)
+        end
+    end
+    return d
+end
 local function vac(n,m)
     math.randomseed(os.time())
     local function mat(w,h)
@@ -1257,7 +1290,7 @@ elseif MODE==1 then -- N&B
 		-- { 1,22,13,56,40,32, 7,57},
 		-- {34,61,37, 5,17,62,20,46}
 	-- }
-	CONFIG.dither = compo(norm, bayer, 1, transp){
+	CONFIG.dither = compo(norm, double, bayer, transp){
 		{ 7,13,11, 4},
 		{12,16,14, 8},
 		{10,15, 6, 2},
@@ -1289,7 +1322,7 @@ elseif MODE==1 then -- N&B
 elseif MODE==2 then -- RGB
 	CONFIG.asm_mode  = 1
     CONFIG.px_size   = {1,3}
-	CONFIG.dither    = compo(norm, bayer){{3,1,2}}
+	CONFIG.dither    = compo(norm,double,bayer){{3,1,2}}
 	local function pset(self, x,y, r,g,b)
 		local f,d = self._linear,self.dither:get(x,y)
         local m,p,q = self._mask[x],math.floor((x+y*960)/8),self.image
@@ -1311,7 +1344,13 @@ elseif MODE==2 then -- RGB
 elseif MODE==3 then -- BM59
 	CONFIG.asm_mode	 = 2
     CONFIG.px_size   = {2,1}
-	CONFIG.dither    = compo(norm,bayer){{1},{2}} 	
+	CONFIG.dither    = compo(norm,double,bayer){{1},{2}} 	
+		-- compo(norm,bayer){{1,5},
+         -- {2,6},
+         -- {7,3},
+         -- {8,4},
+		-- }
+		-- compo(norm,halve,bayer,2){{1},{2}}
 	CONFIG.palette   = function(CONVERTER,VIDEO)
 		local H = {w={}} for i=0,255 do H.w[i]=0 end		
 		local function map(vals, histo)
@@ -1370,8 +1409,10 @@ elseif MODE==3 then -- BM59
 		print('w', unpack(w.base))
 
 		return {
-			0x000*w.base[1],0x111*w.base[2],0x111*w.base[3],0x111*w.base[4],
-			0,0,0,0,0,0,0,0,0,0,0,0
+			0x000*w.base[1],0x111*w.base[2],0x111*w.base[3],0x111*w.base[4],			
+			3840,3855,4080,4095,
+			1911,826,931,938,
+			2611,2618,3815,123
 		}
     end
 	local otab = {}
@@ -2323,7 +2364,7 @@ function OUT:frame(buf0,buf1,buf2,audio)
 end
 function OUT:close()
 	if self.stream then
-		self:frame(3,255,255, {next_sample=compo(0)})
+		self:frame(3,255,255, {next_sample=compo(32)})
 		self.stream:write(self.buf .. string.rep(string.char(255),512-self.buf:len()))
 		self.stream:close()
 		self.stream = nil
