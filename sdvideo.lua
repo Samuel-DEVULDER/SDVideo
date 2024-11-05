@@ -945,13 +945,20 @@ end
 -- VIDEO filter aimed at mixing dropped frammes
 local FILTER = {}
 function FILTER:new(video)
-    local o = {t={},i=0,cur={},video=video}
+    local o = {t={},i=0,a=.6,cur={},video=video}
     setmetatable(o, self)
     self.__index = self
 	for i=0,320*200*3-1 do o.cur[i] = 0 end
     return o
 end
 function FILTER:push(bytecode)
+	do
+		local a,b,t,f = self.a,1-self.a,self.t[self.i],math.floor
+		if t==nil then t,self.t[self.i] = self.cur,self.cur end
+		for i=1,bytecode:len() do t[i] = f(.5 + t[i]*a + b*bytecode:byte(i)) end
+		return self
+	end
+
 	self.i = self.i + 1
     local t = self.t[self.i]
 	if t==nil then t = {}; self.t[self.i] = t end
@@ -1290,12 +1297,13 @@ elseif MODE==1 then -- N&B
 		-- { 1,22,13,56,40,32, 7,57},
 		-- {34,61,37, 5,17,62,20,46}
 	-- }
-	CONFIG.dither = compo(norm, double, bayer, transp){
+	CONFIG.dither = compo(norm,double,bayer,transp){
 		{ 7,13,11, 4},
 		{12,16,14, 8},
 		{10,15, 6, 2},
 		{ 5, 9, 3, 1} 
 	}
+	-- CONFIG.dither = compo(norm,double,vac)(9,8)
 	-- CONFIG.dither = compo(norm,bayer,3){{1}}
 	function VIDEO:pset(x,y, r,g,b)
         if not self.dither then 
@@ -1344,13 +1352,17 @@ elseif MODE==2 then -- RGB
 elseif MODE==3 then -- BM59
 	CONFIG.asm_mode	 = 2
     CONFIG.px_size   = {2,1}
-	CONFIG.dither    = compo(norm,double,bayer){{1},{2}} 	
+	CONFIG.dither    = 
+		-- compo(norm,double,bayer){{1},{2}} 	
 		-- compo(norm,bayer){{1,5},
          -- {2,6},
          -- {7,3},
          -- {8,4},
 		-- }
 		-- compo(norm,halve,bayer,2){{1},{2}}
+		-- norm(vac(8,16))
+		-- norm(vac(5,11))
+		compo(norm,vac)(7,16)
 	CONFIG.palette   = function(CONVERTER,VIDEO)
 		local H = {w={}} for i=0,255 do H.w[i]=0 end		
 		local function map(vals, histo)
@@ -1383,6 +1395,7 @@ elseif MODE==3 then -- BM59
 					local t = math.floor(r*GRAY_R + g*GRAY_G + b*GRAY_B)
 					H.w[t] = H.w[t]+1
 				end)
+				stat.filter.a = 0
                 stat.super_next_image = stat.next_image
                 stat.mill = {'|', '/', '-', '\\'}
                 stat.mill[0] = stat.mill[4]
@@ -1444,7 +1457,7 @@ elseif MODE==3 then -- BM59
 elseif MODE==4 then -- 453
 	CONFIG.asm_mode	 = 3
     CONFIG.px_size   = {4,2}
-    CONFIG.dither    = compo(norm,bayer){{1,4},{5,8},{3,2},{7,6}}
+    CONFIG.dither    = compo(norm,double){{1,4},{5,8},{3,2},{7,6}}
 	CONFIG.palette   = function(CONVERTER,VIDEO)
 		local H = {r={},g={},b={}}
 		for i=0,255 do H.r[i]=0; H.g[i]=0; H.b[i]=0 end	
@@ -1462,7 +1475,7 @@ elseif MODE==4 then -- 453
 				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
 				t[i] = k-1 + f
 				if histo then
-					local DIV=24 -- 2
+					local DIV=4 -- 2
 					f = round(f*DIV)/DIV
 					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
 				end
@@ -1477,6 +1490,7 @@ elseif MODE==4 then -- 453
 					function(self, x,y, r,g,b)
 					H.r[r], H.g[g], H.b[b] = H.r[r]+1, H.g[g]+1, H.b[b]+1
 				end)
+				stat.filter.a = 0
                 stat.super_next_image = stat.next_image
                 stat.mill = {'|', '/', '-', '\\'}
                 stat.mill[0] = stat.mill[4]
@@ -1578,7 +1592,7 @@ elseif MODE==4 then -- 453
 elseif MODE==5 then -- RGB6
     CONFIG.asm_mode	 = 3
     CONFIG.px_size   = {4,3}
-	CONFIG.dither    = compo(norm,bayer){{1}}
+	CONFIG.dither    = compo(norm,double,bayer){{1}}
 	CONFIG.palette   = function(CONVERTER,VIDEO)
 		local H = {r={},g={},b={}}
 		for i=0,255 do H.r[i]=0; H.g[i]=0; H.b[i]=0 end	
@@ -1596,7 +1610,7 @@ elseif MODE==5 then -- RGB6
 				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
 				t[i] = k-1 + f
 				if histo then
-					local DIV=4--2
+					local DIV=8--2
 					f = round(f*DIV)/DIV
 					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
 				end
@@ -1611,6 +1625,7 @@ elseif MODE==5 then -- RGB6
 					function(self, x,y, r,g,b)
 					H.r[r], H.g[g], H.b[b] = H.r[r]+1, H.g[g]+1, H.b[b]+1
 				end)
+				stat.filter.a = 0
                 stat.super_next_image = stat.next_image
                 stat.mill = {'|', '/', '-', '\\'}
                 stat.mill[0] = stat.mill[4]
@@ -1713,6 +1728,7 @@ elseif MODE==6 then
                         reducer:add(col)
                     -- end
                 end)
+				stat.filter.a = 0
                 stat.super_next_image = stat.next_image
                 stat.mill = {'|', '/', '-', '\\'}
                 stat.mill[0] = stat.mill[4]
@@ -1766,8 +1782,7 @@ elseif MODE==7 then
 				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
 				t[i] = k-1 + f
 				if histo then
-				 
-					local DIV=2
+					local DIV=4
 					f = round(f*DIV)/DIV
 					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
 				end
@@ -1784,6 +1799,7 @@ elseif MODE==7 then
 					local t = math.floor(r*.30 + g*.59 + b*.11)
 					H.w[t] = H.w[t]+1
 				end)
+				stat.filter.a = 0
                 stat.super_next_image = stat.next_image
                 stat.mill = {'|', '/', '-', '\\'}
                 stat.mill[0] = stat.mill[4]
@@ -1866,6 +1882,7 @@ elseif MODE==8 then
 					local t = math.floor(r*.30 + g*.59 + b*.11)
 					H.w[t] = H.w[t]+1
 				end)
+				stat.filter.a = 0
                 stat.super_next_image = stat.next_image
                 stat.mill = {'|', '/', '-', '\\'}
                 stat.mill[0] = stat.mill[4]
@@ -2092,7 +2109,7 @@ function CONVERTER:_stat()
     io.stderr:flush()
 
 	-- nb de trames vidéos par image
-	local avg_trames = (stat.trames/stat.cpt) * 1.15 -- 15% safety margin
+	local avg_trames = (stat.trames/stat.cpt) * 1.25 -- 25% 15 -- 15% safety margin
 	-- nombre de trames théoriques max par image
 	local max_trames = 1000000/(self.fps*CYCLES)
 	-- rapport entre les deux
