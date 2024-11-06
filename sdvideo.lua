@@ -1996,6 +1996,7 @@ function VIDEO:progressbar(frac)
 	for x=t+1,self.screen_width-1 do self:pset(x,y, 0,0,0) end
 end
 function VIDEO:progress(secs)
+	do return end
 	if self.duration then self:progressbar(secs/self.duration) end
 end
 function VIDEO:next_image()
