@@ -945,7 +945,7 @@ end
 -- VIDEO filter aimed at mixing dropped frammes
 local FILTER = {}
 function FILTER:new(video)
-    local o = {t={},i=0,a=.6,cur={},video=video}
+    local o = {t={},i=0,a=.6*0+.7,cur={},video=video}
     setmetatable(o, self)
     self.__index = self
 	for i=0,320*200*3-1 do o.cur[i] = 0 end
@@ -1107,10 +1107,11 @@ end
 -- ===========================================================================-- PALETTE support
 -- flux video
 local VIDEO = {}
-function VIDEO:new(file, fps, w, h, screen_width, screen_height, pset)
+function VIDEO:new(file, fps, w, h, screen_width, screen_height, pset, duration)
     local o = {
         file = file,
         cpt = 1, -- compteur image
+		duration = duration,
         width = w,
         height = h,
         screen_width = screen_width or w,
@@ -1188,7 +1189,11 @@ function VIDEO:pset(x,y, r,g,b)
 	end
 	local o,p,v = (x%2),math.floor(x/2) + y*40,t:byte(self.dither:get(x,y))
 	if o==0 then v=v*16 end
-	self.image[p] = self.image[p] + v
+	local t = self.image[p]
+	if self.overwrite then
+		t = o==0 and t%16 or t-(t%16)
+	end
+	self.image[p] = t + v
 end
 
 if MODE==0 then -- Otsu
@@ -1239,7 +1244,17 @@ if MODE==0 then -- Otsu
 		end
 
 		self.pset = function(self, x,y, r,g,b)
-			self._gray[x+y*320] = math.floor(0.5+self._r[r]+self._g[g]+self._b[b])
+			if self.overwrite then
+				local i,f,_mask = self.image,unpack(self._mask[x+320*y])
+				if (i[f]/_mask) % 2 >= 1 then
+					i[f] = i[f] - _mask
+				end
+				if self._r[r]+self._g[g]+self._b[b]>127 then
+					i[f] = i[f] + _mask
+				end
+			else
+				self._gray[x+y*320] = math.floor(0.5+self._r[r]+self._g[g]+self._b[b])
+			end
 		end
 		self:pset(x,y,r,g,b)
     end
@@ -1303,7 +1318,7 @@ elseif MODE==1 then -- N&B
 		{10,15, 6, 2},
 		{ 5, 9, 3, 1} 
 	}
-	-- CONFIG.dither = compo(norm,double,vac)(9,8)
+	CONFIG.dither = compo(norm,double,vac)(8,8)
 	-- CONFIG.dither = compo(norm,bayer,3){{1}}
 	function VIDEO:pset(x,y, r,g,b)
         if not self.dither then 
@@ -1319,6 +1334,12 @@ elseif MODE==1 then -- N&B
 			end
 			self.pset = function(self, x,y, r,g,b)
 				x = x+320*y
+				if self.overwrite then
+					local i,f = self.image,math.floor(x/8)
+					if (i[f]/_mask[x]) % 2 >= 1 then
+						i[f] = i[f] - _mask[x]
+					end
+				end
 				if _r[r] + _g[g] + _b[b] >= _dith[x] then
 					local i,f = self.image,math.floor(x/8)
 					i[f] = i[f] + _mask[x]
@@ -1334,6 +1355,13 @@ elseif MODE==2 then -- RGB
 	local function pset(self, x,y, r,g,b)
 		local f,d = self._linear,self.dither:get(x,y)
         local m,p,q = self._mask[x],math.floor((x+y*960)/8),self.image
+
+		if self.overwrite then
+			if (q[p   ]/m) % 2 >= 1 then q[p   ] = q[p   ]-m end
+			if (q[p+40]/m) % 2 >= 1 then q[p+40] = q[p+40]-m end
+			if (q[p+80]/m) % 2 >= 1 then q[p+40] = q[p+80]-m end
+		end
+
         if f[r]>=d then q[p]    = q[p]    + m end
         if f[g]>=d then q[p+40] = q[p+40] + m end
         if f[b]>=d then q[p+80] = q[p+80] + m end
@@ -1362,7 +1390,7 @@ elseif MODE==3 then -- BM59
 		-- compo(norm,halve,bayer,2){{1},{2}}
 		-- norm(vac(8,16))
 		-- norm(vac(5,11))
-		compo(norm,vac)(7,16)
+		compo(norm,vac)(8,16)
 	CONFIG.palette   = function(CONVERTER,VIDEO)
 		local H = {w={}} for i=0,255 do H.w[i]=0 end		
 		local function map(vals, histo)
@@ -1394,7 +1422,7 @@ elseif MODE==3 then -- BM59
 					function(self, x,y, r,g,b)
 					local t = math.floor(r*GRAY_R + g*GRAY_G + b*GRAY_B)
 					H.w[t] = H.w[t]+1
-				end)
+				end, TMP.duration)
 				stat.filter.a = 0
                 stat.super_next_image = stat.next_image
                 stat.mill = {'|', '/', '-', '\\'}
@@ -1431,8 +1459,12 @@ elseif MODE==3 then -- BM59
 	local otab = {}
 	for i=0,159 do otab[i] = 4^(3-(i%4)) end
 	VIDEO.plot = function(self,p,o,c)
-			self.image[p] = self.image[p] + c*o
-        end 
+		local q = self.image
+		if self.overwrite then
+			q[p] = q[p] - ((q[p]/c)%4)*c
+		end
+		q[p] = q[p] + c*o
+    end 
 	local function pset(self, x,y, r,g,b)
 		local l,f = self._l_R[r]+self._l_G[r]+self._l_B[b],math.floor
 		self:plot(f(x/4) + y*40, otab[x], f(l) +
@@ -1489,7 +1521,7 @@ elseif MODE==4 then -- 453
                 local stat = VIDEO:new(TMP.file,TMP.fps,80,50,80,50,
 					function(self, x,y, r,g,b)
 					H.r[r], H.g[g], H.b[b] = H.r[r]+1, H.g[g]+1, H.b[b]+1
-				end)
+				end, TMP.duration)
 				stat.filter.a = 0
                 stat.super_next_image = stat.next_image
                 stat.mill = {'|', '/', '-', '\\'}
@@ -1592,7 +1624,7 @@ elseif MODE==4 then -- 453
 elseif MODE==5 then -- RGB6
     CONFIG.asm_mode	 = 3
     CONFIG.px_size   = {4,3}
-	CONFIG.dither    = compo(norm,double,bayer){{1}}
+	CONFIG.dither    = compo(norm,bayer,2){{1}}
 	CONFIG.palette   = function(CONVERTER,VIDEO)
 		local H = {r={},g={},b={}}
 		for i=0,255 do H.r[i]=0; H.g[i]=0; H.b[i]=0 end	
@@ -1624,7 +1656,7 @@ elseif MODE==5 then -- RGB6
                 local stat = VIDEO:new(TMP.file,TMP.fps,80,50,80,50,
 					function(self, x,y, r,g,b)
 					H.r[r], H.g[g], H.b[b] = H.r[r]+1, H.g[g]+1, H.b[b]+1
-				end)
+				end, TMP.duration)
 				stat.filter.a = 0
                 stat.super_next_image = stat.next_image
                 stat.mill = {'|', '/', '-', '\\'}
@@ -1714,7 +1746,7 @@ elseif MODE==6 then
 		-- compo(bayer){{1},{3},{2},{4}}
 		-- vac(5,19) --(7,29)
 		-- vac(5,17)
-		vac(3,13)
+		vac(3,12)
 		-- compo(bayer,2){{1},{1},{1},{1}}
     CONFIG.palette   = function(CONVERTER,VIDEO)
         local reducer = ColorReducer:new()
@@ -1727,7 +1759,7 @@ elseif MODE==6 then
                     -- for i=1,1+1000*math.exp(-(x-40)^2/100) do
                         reducer:add(col)
                     -- end
-                end)
+                end, TMP.duration)
 				stat.filter.a = 0
                 stat.super_next_image = stat.next_image
                 stat.mill = {'|', '/', '-', '\\'}
@@ -1765,7 +1797,7 @@ elseif MODE==6 then
 elseif MODE==7 then
 	CONFIG.asm_mode	 = 3
     CONFIG.px_size   = {4,1}
-    CONFIG.dither    = vac(3,9)
+    CONFIG.dither    = vac(3,8)
 	CONFIG.palette   = function(CONVERTER,VIDEO)
 		local H = {r={},g={},b={},w={}}
 		for i=0,255 do H.r[i]=0; H.g[i]=0; H.b[i]=0; H.w[i]=0 end		local function map(vals, histo)
@@ -1798,7 +1830,7 @@ elseif MODE==7 then
 					H.r[r], H.g[g], H.b[b] = H.r[r]+1, H.g[g]+1, H.b[b]+1
 					local t = math.floor(r*.30 + g*.59 + b*.11)
 					H.w[t] = H.w[t]+1
-				end)
+				end, TMP.duration)
 				stat.filter.a = 0
                 stat.super_next_image = stat.next_image
                 stat.mill = {'|', '/', '-', '\\'}
@@ -1881,7 +1913,7 @@ elseif MODE==8 then
 					H.r[r], H.g[g], H.b[b] = H.r[r]+1, H.g[g]+1, H.b[b]+1
 					local t = math.floor(r*.30 + g*.59 + b*.11)
 					H.w[t] = H.w[t]+1
-				end)
+				end,TMP.duration)
 				stat.filter.a = 0
                 stat.super_next_image = stat.next_image
                 stat.mill = {'|', '/', '-', '\\'}
@@ -1941,6 +1973,7 @@ function VIDEO:clear()
 end
 function VIDEO:read_rgb24(raw)
 	self:clear()
+	self.overwrite = false
 	local i,w,b,p = math.floor,self.width,FILTER.byte,self.pset
 	local ox = i((self.screen_width - w)/2)
 	local oy = i((self.screen_height - self.height)/2)
@@ -1954,6 +1987,16 @@ function VIDEO:read_rgb24(raw)
 		)
 	end
 	self.filter:flush()
+	self.overwrite = true
+end
+function VIDEO:progressbar(frac)
+	local y=self.screen_height-1
+	local t=round((self.screen_width-1)*math.max(math.min(1,frac),0))
+	for x=0,t do self:pset(x,y, 255,255,255) end
+	for x=t+1,self.screen_width-1 do self:pset(x,y, 0,0,0) end
+end
+function VIDEO:progress(secs)
+	if self.duration then self:progressbar(secs/self.duration) end
 end
 function VIDEO:next_image()
     if not self.running then return end
@@ -1967,6 +2010,7 @@ function VIDEO:next_image()
 	-- print(self.cpt, len) io.stdout:flush()
 	if len==0 then
 		self:read_rgb24(buf)
+		self:progress(self.cpt/self.fps)
 	else
 		self.running = false
 		self.input:close()
@@ -2032,10 +2076,13 @@ function CONVERTER:new(file, out, fps)
     return o
 end
 function CONVERTER:_new_video(fps)
-    return VIDEO:new(self.file, fps or self.fps, self.w, self.h, self.W, self.H)
+    return VIDEO:new(self.file, fps or self.fps, self.w, self.h, self.W, self.H, nil, self.duration)
+end
+function CONVERTER:vidname()
+	return basename(self.file)
 end
 function CONVERTER:_stat()
-    io.stdout:write(self.file..'\n')
+    io.stdout:write(self:vidname()..'\n')
     io.stdout:flush()
 
     -- auto determination des parametres
@@ -2109,7 +2156,7 @@ function CONVERTER:_stat()
     io.stderr:flush()
 
 	-- nb de trames vidéos par image
-	local avg_trames = (stat.trames/stat.cpt) * 1.25 -- 25% 15 -- 15% safety margin
+	local avg_trames = (stat.trames/stat.cpt) * 1.10 -- 25% 15 -- 15% safety margin
 	-- nombre de trames théoriques max par image
 	local max_trames = 1000000/(self.fps*CYCLES)
 	-- rapport entre les deux
@@ -2256,6 +2303,7 @@ function CONVERTER:process()
     video:next_image()
     while audio.running and video.running do
         update_info()
+		video:progress(tstamp, tstamp/self.duration)
 		local k,b0,b1,b2
         for _,i in indices(prev,curr) do
             while prev[i] ~= curr[i] do
@@ -2474,11 +2522,18 @@ end
 PALETTE:init(CONFIG.palette(CONVERTER,VIDEO))
 local out = OUT:new(MODE..'_'..file..'.sd')
 local first = true
-for _,f in ipairs(arg) do
+for i,f in ipairs(arg) do
     local conv = CONVERTER:new(f,out,FPS)
-    if conv then 
+    if conv then
 		if not first then io.stdout:write('\n') else first=nil end
+		if #arg>1 then 
+			conv.super_vidname = conv.vidname
+			conv.vidname = function(self) 
+				return i..'/'..#arg..' '..self:super_vidname()
+			end 
+		end
 		conv:process() 
 	end
+	i=i+1
 end
 out:close()
