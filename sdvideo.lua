@@ -945,7 +945,7 @@ end
 -- VIDEO filter aimed at mixing dropped frammes
 local FILTER = {}
 function FILTER:new(video)
-    local o = {t={},i=0,a=.6*0+.7,cur={},video=video}
+    local o = {t={},i=0,a=.6*0+.4,cur={},video=video}
     setmetatable(o, self)
     self.__index = self
 	for i=0,320*200*3-1 do o.cur[i] = 0 end
@@ -1189,7 +1189,7 @@ function VIDEO:pset(x,y, r,g,b)
 	end
 	local o,p,v = (x%2),math.floor(x/2) + y*40,t:byte(self.dither:get(x,y))
 	if o==0 then v=v*16 end
-	local t = self.image[p]
+	t = self.image[p]
 	if self.overwrite then
 		t = o==0 and t%16 or t-(t%16)
 	end
@@ -1359,7 +1359,7 @@ elseif MODE==2 then -- RGB
 		if self.overwrite then
 			if (q[p   ]/m) % 2 >= 1 then q[p   ] = q[p   ]-m end
 			if (q[p+40]/m) % 2 >= 1 then q[p+40] = q[p+40]-m end
-			if (q[p+80]/m) % 2 >= 1 then q[p+40] = q[p+80]-m end
+			if (q[p+80]/m) % 2 >= 1 then q[p+80] = q[p+80]-m end
 		end
 
         if f[r]>=d then q[p]    = q[p]    + m end
@@ -1461,7 +1461,7 @@ elseif MODE==3 then -- BM59
 	VIDEO.plot = function(self,p,o,c)
 		local q = self.image
 		if self.overwrite then
-			q[p] = q[p] - ((q[p]/c)%4)*c
+			q[p] = q[p] - ((q[p]/o)%4)*o
 		end
 		q[p] = q[p] + c*o
     end 
@@ -1995,10 +1995,6 @@ function VIDEO:progressbar(frac)
 	for x=0,t do self:pset(x,y, 255,255,255) end
 	for x=t+1,self.screen_width-1 do self:pset(x,y, 0,0,0) end
 end
-function VIDEO:progress(secs)
-	do return end
-	if self.duration then self:progressbar(secs/self.duration) end
-end
 function VIDEO:next_image()
     if not self.running then return end
 	self.cpt = self.cpt + 1
@@ -2011,7 +2007,6 @@ function VIDEO:next_image()
 	-- print(self.cpt, len) io.stdout:flush()
 	if len==0 then
 		self:read_rgb24(buf)
-		self:progress(self.cpt/self.fps)
 	else
 		self.running = false
 		self.input:close()
@@ -2226,6 +2221,10 @@ function CONVERTER:_stat()
                                     percent(stat.type[4]/TOT)))
     io.stdout:flush()
 end
+function CONVERTER:marktime(video, secs)
+	-- do return end
+	if self.duration then video:progressbar(secs/self.duration) end
+end
 function CONVERTER:process()
     -- collect stats
     self:_stat()
@@ -2304,7 +2303,7 @@ function CONVERTER:process()
     video:next_image()
     while audio.running and video.running do
         update_info()
-		video:progress(tstamp, tstamp/self.duration)
+		self:marktime(video, video.cpt/self.fps)
 		local k,b0,b1,b2
         for _,i in indices(prev,curr) do
             while prev[i] ~= curr[i] do
