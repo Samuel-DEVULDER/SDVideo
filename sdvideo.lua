@@ -88,8 +88,33 @@ local function locate(file,...)
 end
 
 -- ===========================================================================
+
+local MODE_OTSU     = 0
+local MODE_DITH     = 1
+local MODE_BM59     = 2
+local MODE_RGB2     = 3
+local MODE_RGB4     = 4
+local MODE_RGB5     = 5
+local MODE_RGB6     = 6
+local MODE_C345     = 7
+local MODE_CR16     = 8
+
+local MODE_TXT      = {
+	[MODE_OTSU]="OTSU",
+	[MODE_DITH]="DITH",
+	[MODE_BM59]="BM59",
+	[MODE_RGB2]="RGB2",
+	[MODE_RGB4]="RGB4",
+	[MODE_RGB5]="RGB5",
+	[MODE_RGB6]="RGB6",
+	[MODE_C345]="C345",
+	[MODE_CR16]="CR16",
+	nil
+}
+
+-- ===========================================================================
 -- utiliser un fps<0 si la taille 100% doit etre conservee
-local MODE          = env('MODE',1)
+local MODE          = env('MODE',MODE_DITH)
 local FPS           = env('FPS',16)
 local FFMPEG        = locate('ffmpeg', 'tools')
 local YT_DL         = locate('yt-dlp', 'tools')
@@ -109,6 +134,12 @@ local CONFIG        = nil
 local GRAY_R		= 0.2126
 local GRAY_G		= 0.7152
 local GRAY_B		= 0.0722
+
+if type(MODE)=='string' then
+	for k,v in ipairs(MODE_TXT) do
+		if v==MODE then MODE=k end
+	end
+end
 
 -- ===========================================================================
 
@@ -907,7 +938,7 @@ function AUDIO:new(file)
 		size = size,
 		mute = '',
 		buf = '', -- buffer
-		vol = 1.6,
+		vol = 1.7, -- 1.6,
 		running = true
 	}
 	for i=1,size do o.mute = o.mute .. string.char(0) end
@@ -945,17 +976,21 @@ end
 -- VIDEO filter aimed at mixing dropped frammes
 local FILTER = {}
 function FILTER:new(video)
-    local o = {t={},i=0,a=.6*0+.4,cur={},video=video}
+    local o = {t={},i=0,a=.6*0+.45,cur={},video=video}
     setmetatable(o, self)
     self.__index = self
 	for i=0,320*200*3-1 do o.cur[i] = 0 end
+	o.t[0] = o.cur
     return o
 end
 function FILTER:push(bytecode)
-	do
+	if false then
+		local u = self.t[self.i]
+		self.i = self.i + 1
 		local a,b,t,f = self.a,1-self.a,self.t[self.i],math.floor
-		if t==nil then t,self.t[self.i] = self.cur,self.cur end
-		for i=1,bytecode:len() do t[i] = f(.5 + t[i]*a + b*bytecode:byte(i)) end
+		if t==nil then t = {}; self.t[self.i] = t end
+		-- if t==nil then t,self.t[self.i] = self.cur,self.cur end
+		for i=1,bytecode:len() do t[i] = f(.5 + u[i]*a + b*bytecode:byte(i)) end
 		return self
 	end
 
@@ -971,9 +1006,14 @@ function FILTER:flush()
 end
 function FILTER:byte(offset)
     local m,t = self.i, self.t
-	if true then return t[m][offset] end -- aucun traitement
+	if false then return t[m][offset] end -- aucun traitement
 	if m==1 then
 	    return t[1][offset]
+	elseif true then -- return media
+		local q = self._q if q==nil then q={} self._q = q end
+		for i=1,m do q[i] = t[i][offset] end
+		table.sort(q)
+		return q[math.ceil((1+m)/2)]
 	elseif true then
 		if m==2 then return round(math.sqrt(t[1][offset]*t[2][offset])) end
 		local v=1
@@ -1150,7 +1190,9 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, pset, duration)
 			local m = 2 -- math.ceil(#t / THR);
 			local n = cpt % m
 			for i=#t,0,-1 do t[i]=nil end
-			for i=0,7999 do if prev[i]~=curr[i] and (i2l[i]%m)==n then table.insert(t,i) end end
+			for i=0,7999 do if prev[i]~=curr[i] then
+				if (i2l[i]%m)==n then table.insert(t,i) else curr[i]=prev[i] end 
+			end end
 		end
 		
 		return ipairs(t)
@@ -1196,7 +1238,7 @@ function VIDEO:pset(x,y, r,g,b)
 	self.image[p] = t + v
 end
 
-if MODE==0 then -- Otsu
+if MODE==MODE_OTSU then -- Otsu
     CONFIG.asm_mode  = 0
     function VIDEO:pset(x,y, r,g,b)
 		self._mask = {}
@@ -1258,7 +1300,7 @@ if MODE==0 then -- Otsu
 		end
 		self:pset(x,y,r,g,b)
     end
-elseif MODE==1 then -- N&B
+elseif MODE==MODE_DITH then -- N&B
 	CONFIG.asm_mode  = 0
     CONFIG.dither    = 
 	-- compo(norm,vac)(8,8)
@@ -1312,13 +1354,13 @@ elseif MODE==1 then -- N&B
 		-- { 1,22,13,56,40,32, 7,57},
 		-- {34,61,37, 5,17,62,20,46}
 	-- }
-	CONFIG.dither = compo(norm,double,bayer,transp){
+	CONFIG.dither = compo(norm,double,transp){
 		{ 7,13,11, 4},
 		{12,16,14, 8},
 		{10,15, 6, 2},
 		{ 5, 9, 3, 1} 
 	}
-	CONFIG.dither = compo(norm,double,vac)(8,8)
+	-- CONFIG.dither = compo(norm,double,vac)(8,8)
 	-- CONFIG.dither = compo(norm,bayer,3){{1}}
 	function VIDEO:pset(x,y, r,g,b)
         if not self.dither then 
@@ -1348,7 +1390,7 @@ elseif MODE==1 then -- N&B
 		end
 		self:pset(x,y,r,g,b)
     end
-elseif MODE==2 then -- RGB
+elseif MODE==MODE_RGB2 then -- RGB
 	CONFIG.asm_mode  = 1
     CONFIG.px_size   = {1,3}
 	CONFIG.dither    = compo(norm,double,bayer){{3,1,2}}
@@ -1377,7 +1419,7 @@ elseif MODE==2 then -- RGB
 		pset(self, x,y, r,g,b)
 		self.pset = pset
     end
-elseif MODE==3 then -- BM59
+elseif MODE==MODE_BM59 then -- BM59
 	CONFIG.asm_mode	 = 2
     CONFIG.px_size   = {2,1}
 	CONFIG.dither    = 
@@ -1486,7 +1528,7 @@ elseif MODE==3 then -- BM59
 		pset(self,x,y,r,g,b)
 		self.pset = pset
     end
-elseif MODE==4 then -- 453
+elseif MODE==MODE_C345 then
 	CONFIG.asm_mode	 = 3
     CONFIG.px_size   = {4,2}
     CONFIG.dither    = compo(norm,double){{1,4},{5,8},{3,2},{7,6}}
@@ -1621,7 +1663,7 @@ elseif MODE==4 then -- 453
 		pset(self, x,y, r,g,b)
 		self.pset = pset
     end
-elseif MODE==5 then -- RGB6
+elseif MODE==MODE_RGB6 then -- RGB6
     CONFIG.asm_mode	 = 3
     CONFIG.px_size   = {4,3}
 	CONFIG.dither    = compo(norm,bayer,2){{1}}
@@ -1738,7 +1780,7 @@ elseif MODE==5 then -- RGB6
         pset(self,x,y,r,g,b)
 		self.pset = pset
     end
-elseif MODE==6 then
+elseif MODE==MODE_CR16 then -- color reduction
     CONFIG.asm_mode	 = 3
     CONFIG.px_size   = {4,1}
     CONFIG.dither    = --compo(bayer){{1,4},{9,12},{5,8},{13,16},{3,2},{11,10},{7,6},{15,14}}
@@ -1794,7 +1836,7 @@ elseif MODE==6 then
     function waitbreak() end
     run = function(name) require(name:gsub('%..*','')) end
     run("color_reduction.lua")
-elseif MODE==7 then
+elseif MODE==MODE_RGB4 then -- 
 	CONFIG.asm_mode	 = 3
     CONFIG.px_size   = {4,1}
     CONFIG.dither    = vac(3,8)
@@ -1863,7 +1905,7 @@ elseif MODE==7 then
 		print('b', unpack(b.base))
 		print('r', unpack(r.base))
 		print('g', unpack(g.base))
-		print('w', unpack(w.base))
+		print('l', unpack(w.base))
 
 		return {
 		-- 0x000,0x111,0x333,0x880,
@@ -1876,7 +1918,7 @@ elseif MODE==7 then
 		0x100*b.base[4],0x010*g.base[4],0x001*r.base[4],0x111*w.base[4]
 		}
     end
-elseif MODE==8 then
+elseif MODE==MODE_RGB5 then
 	CONFIG.asm_mode	 = 3
     CONFIG.px_size   = {4,1}
 	CONFIG.dither    = compo(bayer,1){{1},{3},{2},{4}}			
@@ -1896,8 +1938,7 @@ elseif MODE==8 then
 				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
 				t[i] = k-1 + f
 				if histo then
-				 
-					local DIV=16
+					local DIV=8
 					f = round(f*DIV)/DIV
 					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
 				end
@@ -1946,7 +1987,7 @@ elseif MODE==8 then
 		print('b', unpack(b.base))
 		print('r', unpack(r.base))
 		print('g', unpack(g.base))
-		print('w', unpack(w.base))
+		print('l', unpack(w.base))
 
 		return {
 			0x000,
@@ -2208,8 +2249,8 @@ function CONVERTER:_stat()
     self.video_cor = video_cor
 
     -- info
-    io.stdout:write(string.format('> %dx%d %d (%s) %s at %d fps (%d%% zoom)\n',
-        self.w, self.h, MODE, self.aspect_ratio,
+    io.stdout:write(string.format('> %dx%d [%s] (%s) %s at %d fps (%d%% zoom)\n',
+        self.w, self.h, MODE_TXT[MODE], self.aspect_ratio,
         hms(self.duration, "%dh %dm %ds"), self.fps,
         percent(math.max(self.w/self.W,self.h/self.H))))
 	local TOT = stat.type[1]+stat.type[2]+stat.type[3]+stat.type[4]
@@ -2516,11 +2557,11 @@ if #arg>1 then -- infer name
     file = subs:longest():gsub("%W+$", "")
     if file:len()<=4 then file = basename(first) end
     file = file.."#"..num
-    io.stderr:write("\n===> "..file.." <===\n")
+    io.stderr:write("\n===> "..file..'_'..MODE_TXT[MODE].." <===\n")
     io.stderr:flush()
 end
 PALETTE:init(CONFIG.palette(CONVERTER,VIDEO))
-local out = OUT:new(MODE..'_'..file..'.sd')
+local out = OUT:new(file..'_'..MODE_TXT[MODE]..'.sd')
 local first = true
 for i,f in ipairs(arg) do
     local conv = CONVERTER:new(f,out,FPS)
