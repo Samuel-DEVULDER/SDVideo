@@ -976,7 +976,7 @@ end
 -- VIDEO filter aimed at mixing dropped frammes
 local FILTER = {}
 function FILTER:new(video)
-    local o = {t={},i=0,a=.6*0+.45,cur={},video=video}
+    local o = {t={},i=0,a=.6*0+.45*0,cur={},video=video}
     setmetatable(o, self)
     self.__index = self
 	for i=0,320*200*3-1 do o.cur[i] = 0 end
@@ -984,24 +984,21 @@ function FILTER:new(video)
     return o
 end
 function FILTER:push(bytecode)
-	if false then
-		local u = self.t[self.i]
-		self.i = self.i + 1
-		local a,b,t,f = self.a,1-self.a,self.t[self.i],math.floor
-		if t==nil then t = {}; self.t[self.i] = t end
-		-- if t==nil then t,self.t[self.i] = self.cur,self.cur end
-		for i=1,bytecode:len() do t[i] = f(.5 + u[i]*a + b*bytecode:byte(i)) end
-		return self
-	end
-
 	self.i = self.i + 1
-    local t = self.t[self.i]
+	local t = self.t[self.i]
 	if t==nil then t = {}; self.t[self.i] = t end
-    for i=1,bytecode:len() do t[i] = bytecode:byte(i) end
+	if self.a>0 then
+		local u = self.t[self.i-1]
+		local a,b,f = self.a,1-self.a,math.floor
+		for i=1,bytecode:len() do t[i] = f(.5 + u[i]*a + b*bytecode:byte(i)) end
+	else
+		for i=1,bytecode:len() do t[i] = bytecode:byte(i) end
+	end
     return self
 end
 function FILTER:flush()
 	self.rnd = nil -- math.random()
+	self.t[0] = self.t[self.i]
 	self.i = 0
 end
 function FILTER:byte(offset)
@@ -1009,11 +1006,26 @@ function FILTER:byte(offset)
 	if false then return t[m][offset] end -- aucun traitement
 	if m==1 then
 	    return t[1][offset]
+	elseif m==2 then
+	    return round((t[1][offset]+t[2][offset])/2)
+	elseif m==3 then
+		local a,b,c = t[1][offset],t[2][offset],t[3][offset]
+		-- abc acb bac bca cab cba
+		local bc = math.min(b,c)
+		return a<=bc and bc
+		    or b==bc and (a<=c and a or c)
+			or           (a<=b and a or b)
 	elseif true then -- return media
 		local q = self._q if q==nil then q={} self._q = q end
 		for i=1,m do q[i] = t[i][offset] end
 		table.sort(q)
-		return q[math.ceil((1+m)/2)]
+		local t = math.ceil(m/2)
+		if 2*t==m then
+			-- if not q[t-1] or not q[t] then print(m..'  '..t..'   ') end
+			return math.floor(.5*(1 + q[t] + q[t+1]))
+		else
+			return q[t]
+		end
 	elseif true then
 		if m==2 then return round(math.sqrt(t[1][offset]*t[2][offset])) end
 		local v=1
@@ -1788,9 +1800,11 @@ elseif MODE==MODE_CR16 then -- color reduction
 		-- compo(bayer){{1},{3},{2},{4}}
 		-- vac(5,19) --(7,29)
 		-- vac(5,17)
-		vac(3,12)
+		vac(3,12) -- ok
 		-- compo(bayer,2){{1},{1},{1},{1}}
-    CONFIG.palette   = function(CONVERTER,VIDEO)
+			-- {{1,5},{3,6},{2,7},{4,8},{5,1},{6,3},{7,2},{8,4}}
+			-- compo(bayer){{1},{1},{3},{4}}
+	CONFIG.palette   = function(CONVERTER,VIDEO)
         local reducer = ColorReducer:new()
         for i,f in ipairs(arg) do
             local TMP = CONVERTER:new(f,nil,3)
@@ -2345,6 +2359,10 @@ function CONVERTER:process()
     while audio.running and video.running do
         update_info()
 		self:marktime(video, video.cpt/self.fps)
+		
+		-- pos, cycles = self:_compress(pos, prev, curr, indices, frame, audio)
+		-- current_cycle = current_cycle +  cycles
+		
 		local k,b0,b1,b2
         for _,i in indices(prev,curr) do
             while prev[i] ~= curr[i] do
@@ -2521,6 +2539,7 @@ end
 arg = replace_yt(arg)
 if #arg==0 then os.exit(0) end
 local file = basename(arg[1])
+local tag = '['..MODE_TXT[MODE]..'] '
 if #arg>1 then -- infer name
     local function substrings(s)
         local MIN=4
@@ -2557,11 +2576,11 @@ if #arg>1 then -- infer name
     file = subs:longest():gsub("%W+$", "")
     if file:len()<=4 then file = basename(first) end
     file = file.."#"..num
-    io.stderr:write("\n===> "..file..'_'..MODE_TXT[MODE].." <===\n")
+    io.stderr:write("\n===> "..tag..file.."] <===\n")
     io.stderr:flush()
 end
 PALETTE:init(CONFIG.palette(CONVERTER,VIDEO))
-local out = OUT:new(file..'_'..MODE_TXT[MODE]..'.sd')
+local out = OUT:new(tag..file..'.sd')
 local first = true
 for i,f in ipairs(arg) do
     local conv = CONVERTER:new(f,out,FPS)
