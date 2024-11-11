@@ -161,62 +161,33 @@ function AUDIO:new(file)
 	end
 	
 	local hz = round(size*1000000/CYCLES)
-	local I='I=-16' -- volume final -24=superbas, -16=fable
-	local LRA='LRA=11'
-	local tp='tp=-2'
-	local loudnorm = '-af loudnorm='..I..':'..LRA..' '
-	loudnorm = '-filter:a dynaudnorm=r=0.6:s=8:m=30 '
-	if false then
-		io.stderr:write('> analyzing audio...')
-		io.stderr:flush()
-		local measured={}
-		local IN,line = assert(io.popen(FFMPEG..' -i "'..file ..'" -ar '..hz..' -af loudnorm=print_format=json -ac 1 -vn -f null x 2>&1', 'r'))
-		for line in IN:lines() do
-			-- print(line)
-			local k,v = line:match('"([^"]+)" : "([^"]+)"')
-			if k then
-				measured[k] = v
-				-- print(k,v)
-			-- elseif line:match('speed=') then -- debug
-				-- io.stderr:write(line)
-				-- io.stderr:flush()
-			end
-		end
-		IN:close()	
-		io.stderr:write('\r                                 \r')
-		io.stderr:flush()
-		loudnorm = '-af loudnorm=linear=true:'..I..':'..LRA..':'..tp.. 
-		':measured_I=' .. measured['input_i'] ..
-		':measured_LRA=' .. measured['input_lra'] ..
-		':measured_tp=' .. measured['input_tp'] ..
-		':measured_thresh=' .. measured['input_thresh'] ..
-		':offset=' .. measured['target_offset'].. 
-		' '
-		-- print(loudnorm)
-	end
+	local norm = '-filter:a dynaudnorm=r=0.6:s=8:m=30 '
 	
 	local o = {
 		hz = hz,
 		stream = assert(io.popen(FFMPEG..' -i "'..file ..'" -v 0 ' ..
-		-- 'dynaudnorm=f=8000:c:b:s=10:m=4 ' ..
-		-- 'dynaudnorm=p=0.71:m=100:s=10:g=15 ' ..
-		-- 'dynaudnorm=p=0.71:m=6:s=10:g=15 ' ..
-		-- 'dynaudnorm=p=0.71:s=12:g=15:m=12:f=8000 ' ..
-		loudnorm ..
-		'-f u8 -ac 1 -ar '..hz..' -acodec pcm_u8 pipe:', POPEN_READBIN)),
+		norm ..
+		'-ac 1 -ar '..hz..' -f s8 -c:a pcm_s8 pipe:', POPEN_READBIN)),
 		size = size,
 		mute = '',
 		buf = '', -- buffer
-		vol = 1.6,
+		vol = 1.4,
 		running = true
 	}
-	for i=1,size do o.mute = o.mute .. string.char(128) end
+	for i=1,size do o.mute = o.mute .. string.char(0) end
 	setmetatable(o, self)
 	self.__index = self
 	return o
 end
 function AUDIO:close()
 	self.stream:close()
+end
+function AUDIO:compressor(v)
+	local t,m,s = 28,32,v>=0 and 1 or -1
+	self.comp_ratio = self.comp_ratio or (m-t)/(m*self.vol-t)
+	v = math.abs(v * self.vol)
+	if v>t then v = t + (v-t)*self.comp_ratio end
+	return v*s
 end
 function AUDIO:next_sample()
 	local buf,siz = self.buf,self.size
@@ -228,8 +199,8 @@ function AUDIO:next_sample()
 		buf = buf .. t
 	end
 	local v = 0
-	for i=1,siz do v = v + buf:byte(i) end
-	self.buf,v = buf:sub(siz+1),self.vol*(v/(siz*4)-32) + 31.5 + math.random()
+	for i=1,siz do v = v + ((buf:byte(i)+128)%256)-128 end
+	self.buf,v = buf:sub(siz+1),self:compressor(v/(siz*4)) + 31.5 + math.random()
 	if v<0 then v=0 elseif v>63 then v=63 end
 	return math.floor(v)
 end
