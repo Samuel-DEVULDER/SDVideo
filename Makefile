@@ -126,12 +126,12 @@ $(DISTRO)/tools/%.lua: %.lua
 tst: tst_conv_sd tst_sdvideo
 
 tst_conv_sd: $(FFMPEG) $(ALL)
-	@test -f $(TMP) && $(RM) $(TMP)
+	@if test -f $(TMP); then $(RM) $(TMP); fi
 	nice -19 \
 	$(LUA) conv_sd.lua https://www.youtube.com/watch?v=uOyaCOViAPA
-	
+
 tst_sdvideo: $(ALL)
-	@test -f $(TMP) && $(RM) $(TMP)
+	@if test -f $(TMP); then $(RM) $(TMP); fi
 	for i in 0 1 2 3 4 5 6 7 8; do \
 		echo; \
 		echo "MODE=$$i"; \
