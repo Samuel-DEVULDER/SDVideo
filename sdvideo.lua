@@ -925,9 +925,6 @@ function AUDIO:new(file)
 	end
 	
 	local hz = round(size*1000000/CYCLES)
-	local I='I=-8' -- volume final -24=superbas, -16=fable
-	local LRA='LRA=11'
-	local tp='tp=-1'
 	local norm = '-filter:a dynaudnorm=r=0.6:s=8:m=30 '
 	
 	local o = {
@@ -938,7 +935,7 @@ function AUDIO:new(file)
 		size = size,
 		mute = '',
 		buf = '', -- buffer
-		vol = 1.7, -- 1.6,
+		vol = 1.4, -- 1.6,
 		running = true
 	}
 	for i=1,size do o.mute = o.mute .. string.char(0) end
@@ -950,7 +947,7 @@ function AUDIO:close()
 	self.stream:close()
 end
 function AUDIO:compressor(v)
-	local t,m,s = 24,32,v>=0 and 1 or -1
+	local t,m,s = 28,32,v>=0 and 1 or -1
 	self.comp_ratio = self.comp_ratio or (m-t)/(m*self.vol-t)
 	v = math.abs(v * self.vol)
 	if v>t then v = t + (v-t)*self.comp_ratio end
@@ -976,7 +973,7 @@ end
 -- VIDEO filter aimed at mixing dropped frammes
 local FILTER = {}
 function FILTER:new(video)
-    local o = {t={},i=0,a=.6*0+.45*0,cur={},video=video}
+    local o = {t={},i=0,a=.6*0+.45*0+.8*0,cur={},video=video}
     setmetatable(o, self)
     self.__index = self
 	for i=0,320*200*3-1 do o.cur[i] = 0 end
@@ -987,7 +984,7 @@ function FILTER:push(bytecode)
 	self.i = self.i + 1
 	local t = self.t[self.i]
 	if t==nil then t = {}; self.t[self.i] = t end
-	if self.a>0 then
+	if self.a>=.001 then
 		local u = self.t[self.i-1]
 		local a,b,f = self.a,1-self.a,math.floor
 		for i=1,bytecode:len() do t[i] = f(.5 + u[i]*a + b*bytecode:byte(i)) end
@@ -1192,9 +1189,7 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, pset, duration)
 	end
 	o.indices = function(prev,curr)
 		cpt = cpt+1
-		local MIN_FPS = fps
-					
-		local THR = 1+math.floor(1.0*2000000/CYCLES/MIN_FPS)
+		local THR = 1+math.floor(1.0*2000000/(CYCLES*fps)) -- nombre d'octets consécutifs par image
 		local t = {}
 		for i=0,7999 do if prev[i]~=curr[i] then table.insert(t,i) end end
 		
@@ -1405,7 +1400,11 @@ elseif MODE==MODE_DITH then -- N&B
 elseif MODE==MODE_RGB2 then -- RGB
 	CONFIG.asm_mode  = 1
     CONFIG.px_size   = {1,3}
-	CONFIG.dither    = compo(norm,double,bayer){{3,1,2}}
+	-- CONFIG.dither    = compo(norm,double,bayer){{3,1,2}}
+	-- CONFIG.dither    = compo(norm,double,vac)(16,5)
+
+	-- 12 = 3*4
+	CONFIG.dither    = compo(norm,vac)(16,5)
 	local function pset(self, x,y, r,g,b)
 		local f,d = self._linear,self.dither:get(x,y)
         local m,p,q = self._mask[x],math.floor((x+y*960)/8),self.image
@@ -1624,6 +1623,10 @@ elseif MODE==MODE_C345 then
     end
     function VIDEO:plot(p,o,r,g,b)
 		local p1,p2,img = p,p+40,self.image
+		if self.overwrite then local
+			t = img[p1]; img[p1] = o==0 and t%16 or t-(t%16)
+			t = img[p2]; img[p2] = o==0 and t%16 or t-(t%16)
+		end
 		if ZIGZAG and o==1 then p1,p2=p2,p1 end
 		o = o==0 and 16 or 1
 		local t = b+r*3
@@ -1678,7 +1681,7 @@ elseif MODE==MODE_C345 then
 elseif MODE==MODE_RGB6 then -- RGB6
     CONFIG.asm_mode	 = 3
     CONFIG.px_size   = {4,3}
-	CONFIG.dither    = compo(norm,bayer,2){{1}}
+	CONFIG.dither    = compo(norm,bayer){{1}}
 	CONFIG.palette   = function(CONVERTER,VIDEO)
 		local H = {r={},g={},b={}}
 		for i=0,255 do H.r[i]=0; H.g[i]=0; H.b[i]=0 end	
@@ -1696,7 +1699,7 @@ elseif MODE==MODE_RGB6 then -- RGB6
 				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
 				t[i] = k-1 + f
 				if histo then
-					local DIV=8--2
+					local DIV=4--2
 					f = round(f*DIV)/DIV
 					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
 				end
@@ -1752,6 +1755,12 @@ elseif MODE==MODE_RGB6 then -- RGB6
 	function VIDEO:plot(p,o,r,g,b)
 		o = o==0 and 16 or 1
 		local img = self.image
+		if self.overwrite then
+			local t
+			t = img[p   ]; img[p   ] = o==0 and t%16 or t-(t%16)
+			t = img[p+40]; img[p+40] = o==0 and t%16 or t-(t%16)
+			t = img[p+80]; img[p+80] = o==0 and t%16 or t-(t%16)
+		end
 		if r>0 then img[p] = img[p] + r*o end p=p+40
 		if g>0 then img[p] = img[p] + g*o end p=p+40
 		if b>0 then img[p] = img[p] + b*o end
@@ -1800,10 +1809,10 @@ elseif MODE==MODE_CR16 then -- color reduction
 		-- compo(bayer){{1},{3},{2},{4}}
 		-- vac(5,19) --(7,29)
 		-- vac(5,17)
-		vac(3,12) -- ok
+		-- vac(3,12) -- ok
 		-- compo(bayer,2){{1},{1},{1},{1}}
-			-- {{1,5},{3,6},{2,7},{4,8},{5,1},{6,3},{7,2},{8,4}}
-			-- compo(bayer){{1},{1},{3},{4}}
+			double{{1,5},{3,6},{2,7},{4,8},{5,1},{6,3},{7,2},{8,4}}
+			compo(bayer){{1},{2},{3},{4}}
 	CONFIG.palette   = function(CONVERTER,VIDEO)
         local reducer = ColorReducer:new()
         for i,f in ipairs(arg) do
@@ -2044,8 +2053,7 @@ function VIDEO:read_rgb24(raw)
 	self.filter:flush()
 	self.overwrite = true
 end
-function VIDEO:progressbar(frac)
-	local y=self.screen_height-1
+function VIDEO:progressbar(y, frac)
 	local t=round((self.screen_width-1)*math.max(math.min(1,frac),0))
 	for x=0,t do self:pset(x,y, 255,255,255) end
 	for x=t+1,self.screen_width-1 do self:pset(x,y, 0,0,0) end
@@ -2132,6 +2140,42 @@ end
 function CONVERTER:vidname()
 	return basename(self.file)
 end
+function CONVERTER:_compress(pos, prev, curr, indices_fcn, out_fcn)
+	local k,b0,b1,b2
+	for _,i in indices_fcn(prev,curr) do
+		while prev[i] ~= curr[i] do
+			k = i - pos
+			if k<0 then 
+				b0,b1,b2,pos = 3,math.floor(i/256),i%256,i
+			elseif k<=1 then
+				if k==0 and curr[pos+1]==prev[pos+1] then
+					b0,b1,b2  = 2,curr[pos],curr[pos+2]
+					prev[pos] = curr[pos]; pos = pos+2
+					prev[pos] = curr[pos]; pos = pos+1
+				else
+					b0,b1,b2  = 0,curr[pos],curr[pos+1]
+					prev[pos] = curr[pos]; pos = pos+1
+					prev[pos] = curr[pos]; pos = pos+1
+				end
+			elseif k<=257 then -- deplacement 8 bit
+				b0,b1,b2,prev[i],pos = 1,k-2,curr[i],curr[i],i+1
+			else -- deplacement arbitraire
+				b0,b1,b2,pos = 3,math.floor(i/256),i%256,i
+			end
+			-- print(zz, b0, b1, b2, '-->', pos)
+			out_fcn(b0,b1,b2)
+		end
+	end
+	return pos
+end
+local all_indexes = function()
+	local i = -1
+	return function() if i==8000 then return nil end i=i+1 return i,i end 
+end
+-- Fait un encodage "à vide" et regarde le nombre de trames moyen par image
+-- et compare à la limite théorique.
+-- Réduit le zoom si on dépasse ou augmente le fps si on a de la marge.
+-- Trouve les niveaux min/max et mets en place une correction video si besoin
 function CONVERTER:_stat()
     io.stdout:write(self:vidname()..'\n')
     io.stdout:flush()
@@ -2157,46 +2201,14 @@ function CONVERTER:_stat()
         io.stderr:write(string.format('> analyzing video...%s %d%%\r', self.mill[self.cpt % 4], percent(self.cpt/(self.fps*self.duration))))
         io.stderr:flush()
     end
+	stat._compress = self._compress
     stat.trames = 0
-    stat.prev_img = {}
-    for i=0,7999 do stat.prev_img[i]=-1 end
-    stat.type = {0,0,0,0}
+    stat.type = {}; for i=0,3 do stat.type[i]=0 end
+    stat.prev_img = {}; for i=0,7999 do stat.prev_img[i]=-1 end
     function stat:count_trames()
-        local pos,prev,curr,c = 8000,stat.prev_img,stat.image,stat.trames
-
-        -- local chg = 0
-        -- for _,i in ipairs(indices) do
-            -- if prev[i] ~= curr[i] then chg = chg+1 end
-        -- end
-		
-        for _,i in self.indices(prev,curr) do
-            while prev[i] ~= curr[i] do
-				local k,t = i-pos
-				if k<0 then 
-					-- print(4,i,k)
-					t,pos = 4,i
-				elseif k<=1 then
-					if k==0 and curr[i+1]==prev[i+1] then
-						-- print(3,i,k)
-						t,prev[i],prev[i+2],pos = 
-						3,curr[i],curr[i+2],i+3
-					else
-						-- print(1,i,k)
-						t,prev[pos],prev[pos+1],pos = 
-						1,curr[pos],curr[pos+1],pos+2
-					end
-				elseif k<=257 then
-					-- print(2,i,k)
-					t,prev[i],pos = 
-					2,curr[i],i+1
-				else
-					-- print(4,i,k)
-					t,pos = 4,i
-				end
-				stat.type[t],c=stat.type[t]+1,c+(c % 171 == 169 and 2 or 1)
-            end
-        end
-		stat.trames = c
+		self:_compress(8000, stat.prev_img, stat.image, all_indexes, function(b0,b1,b2)
+			stat.type[b0],stat.trames = stat.type[b0]+1,stat.trames + (stat.trames % 171 == 169 and 2 or 1)
+		end)
     end
 
     while stat.running do
@@ -2207,7 +2219,7 @@ function CONVERTER:_stat()
     io.stderr:flush()
 
 	-- nb de trames vidéos par image
-	local avg_trames = (stat.trames/stat.cpt) * 1.10 -- 25% 15 -- 15% safety margin
+	local avg_trames = (stat.trames/stat.cpt) -- * 1.15 -- 15% safety margin
 	-- nombre de trames théoriques max par image
 	local max_trames = 1000000/(self.fps*CYCLES)
 	-- rapport entre les deux
@@ -2267,18 +2279,22 @@ function CONVERTER:_stat()
         self.w, self.h, MODE_TXT[MODE], self.aspect_ratio,
         hms(self.duration, "%dh %dm %ds"), self.fps,
         percent(math.max(self.w/self.W,self.h/self.H))))
-	local TOT = stat.type[1]+stat.type[2]+stat.type[3]+stat.type[4]
+	local TOT = 0 for i=0,3 do TOT = TOT+stat.type[i] end
     io.stdout:write(string.format('> %d frames: %d%% %d%% %d%% %d%%\n',
                                     TOT,
+                                    percent(stat.type[0]/TOT),
                                     percent(stat.type[1]/TOT),
                                     percent(stat.type[2]/TOT),
-                                    percent(stat.type[3]/TOT),
-                                    percent(stat.type[4]/TOT)))
+                                    percent(stat.type[3]/TOT)))
     io.stdout:flush()
+	
+	-- self.avg_chg = (2*(stat.type[0]+stat.type[2])+1*stat.type[1])/(stat.type[0]+stat.type[1]+stat.type[2])
+	-- print('average bytes changed per frames = ', self.avg_chg)
 end
 function CONVERTER:marktime(video, secs)
 	-- do return end
-	if self.duration then video:progressbar(secs/self.duration) end
+	if self.duration then video:progressbar(video.screen_height-1, secs/self.duration) end
+	video:progressbar(video.screen_height-2, video.filter.a)
 end
 function CONVERTER:process()
     -- collect stats
@@ -2310,17 +2326,15 @@ function CONVERTER:process()
     local completed_imgs = 0
     local pos            = 8000
 
-    -- init previous image
-    local curr,prev = video.image,{}
-
 	-- user feedback
 	local last_etc=1e38
     local function info()
         local d = os.time() - start
-		local t = "> %d%% %s (%3.1fx) e=%5.3f"
+		local t = "> %d%% %s (%3.1fx) e=%5.3f f=%.3f"
 		t = t:format(
 			percent(tstamp/self.duration), hms(tstamp),
-			round(100*tstamp/(d==0 and 100000 or d))/100, completed_imgs/video.cpt)
+			round(100*tstamp/(d==0 and 100000 or d))/100, completed_imgs/video.cpt,
+			video.filter.a)
 		local etc = d*(self.duration-tstamp)/tstamp
 		if d>10 then if etc>last_etc then etc = last_etc else last_etc = etc end end
 		local etr = 5 -- etc>=90 and 10 or 5
@@ -2330,8 +2344,8 @@ function CONVERTER:process()
 		return t
 	end
 	
-	local info_sec = 1
-	
+	-- info utilisateur
+	local info_sec = 1	
 	local function update_info()
 		if video.cpt>=info_sec then
 			info_sec = info_sec + video.fps
@@ -2341,58 +2355,29 @@ function CONVERTER:process()
 		end
 	end 
 	
-	-- progressive
-	local indices = function()
-		local i=-1
-		return function()
-			i=i+1
-			if i==8000 then return nil else return i,i end
-		end
-	end
+	-- la 1ere image doit se faire de 1 en 1
+    local curr,prev = video.image,{}
+	local indices = all_indexes
 	
+	local filter_a = .95
+
     -- conversion
-    video:skip_image()
-    video:skip_image()
-    video:skip_image()
-    current_cycle = current_cycle + cycles_per_img
     video:next_image()
     while audio.running and video.running do
         update_info()
 		self:marktime(video, video.cpt/self.fps)
-		
-		-- pos, cycles = self:_compress(pos, prev, curr, indices, frame, audio)
-		-- current_cycle = current_cycle +  cycles
-		
-		local k,b0,b1,b2
-        for _,i in indices(prev,curr) do
-            while prev[i] ~= curr[i] do
-				k = i - pos
-				if k<0 then 
-					b0,b1,b2,pos = 3,math.floor(i/256),i%256,i
-				elseif k<=1 then
-					if k==0 and curr[pos+1]==prev[pos+1] then
-						b0,b1,b2  = 2,curr[pos],curr[pos+2]
-						prev[pos] = curr[pos]; pos = pos+2
-						prev[pos] = curr[pos]; pos = pos+1
-					else
-						b0,b1,b2  = 0,curr[pos],curr[pos+1]
-						prev[pos] = curr[pos]; pos = pos+1
-						prev[pos] = curr[pos]; pos = pos+1
-					end
-				elseif k<=257 then -- deplacement 8 bit
-					b0,b1,b2,prev[i],pos = 1,k-2,curr[i],curr[i],i+1
-				else -- deplacement arbitraire
-					b0,b1,b2,pos = 3,math.floor(i/256),i%256,i
-				end
-				-- print(zz, b0, b1, b2, '-->', pos)
-				current_cycle = current_cycle + self.out:frame(b0,b1,b2,audio)
-            end
-        end
-		
-		indices = video.indices
-        completed_imgs = completed_imgs + 1
+		pos = self:_compress(pos, prev, video.image, indices, function(b0,b1,b2)
+			current_cycle = current_cycle + self.out:frame(b0,b1,b2,audio)
+		end)
         video.filter:flush()
+        completed_imgs = completed_imgs + 1
 
+		if current_cycle >= 1.5*cycles_per_img then
+			video.filter.a = video.filter.a*filter_a + (1-filter_a)*.9
+		elseif current_cycle <= cycles_per_img/1.5 then
+			video.filter.a = video.filter.a*filter_a
+		end
+		
         -- skip image if drift is too big
         -- if current_cycle>cycles_per_img then print(current_cycle/cycles_per_img) end
         while current_cycle>=2*cycles_per_img do
@@ -2409,9 +2394,14 @@ function CONVERTER:process()
             pos = 0
         end
 
+		-- on ne garde que l'offset par rapport au nb de cycles par image souhaité
+		current_cycle = current_cycle - cycles_per_img
+
         -- next image
         video:next_image()
-        current_cycle = current_cycle - cycles_per_img
+        
+		-- maintenant utilise les indices "dynamiques"
+		indices = video.indices
     end
 
     audio:close()
