@@ -1244,6 +1244,706 @@ function VIDEO:pset(x,y, r,g,b)
 	end
 	self.image[p] = t + v
 end
+VIDEO.font = {
+    [' ']={
+        "....",
+        "....",
+        "....",
+        "....",
+        "....",
+        "...."
+    },['!']={
+        ".X..",
+        ".X..",
+        ".X..",
+        "....",
+        ".X..",
+        "...."
+    },['"']={
+        "X.X.",
+        "X.X.",
+        "....",
+        "....",
+        "....",
+        "...."
+    },['#']={
+        "X.X.",
+        "XXX.",
+        "X.X.",
+        "XXX.",
+        "X.X.",
+        "...."
+    },['$']={
+        ".XX.",
+        "XXX.",
+        ".X..",
+        ".XX.",
+        "XX..",
+        "...."
+    },['%']={
+        "X...",
+        "..X.",
+        ".X..",
+        "X...",
+        "..X.",
+        "...."
+    },['&']={
+        ".X..",
+        "XX..",
+        ".XX.",
+        "X.X.",
+        ".XX.",
+        "...."
+    },["'"]={
+        "..X.",
+        ".X..",
+        "....",
+        "....",
+        "....",
+        "...."
+    },["("]={
+        "..X.",
+        ".X..",
+        ".X..",
+        ".X..",
+        "..X.",
+        "...."
+    },[")"]={
+        ".X..",
+        "..X.",
+        "..X.",
+        "..X.",
+        ".X..",
+        "...."
+    },['*']={
+        "X.X.",
+        ".X..",
+        "XXX.",
+        ".X..",
+        "X.X.",
+        "...."
+    },['+']={
+        "....",
+        ".X..",
+        "XXX.",
+        ".X..",
+        "....",
+        "...."
+    },[',']={
+        "....",
+        "....",
+        "....",
+        ".X..",
+        "X...",
+        "...."
+    },['-']={
+        "....",
+        "....",
+        "XXX.",
+        "....",
+        "....",
+        "...."
+    },['.']={
+        "....",
+        "....",
+        "....",
+        "....",
+        ".X..",
+        "...."
+    },['/']={
+        "..X.",
+        "..X.",
+        ".X..",
+        "X...",
+        "X...",
+        "...."
+    },['0']={
+        ".XX.",
+        "X.X.",
+        "X.X.",
+        "X.X.",
+        "XX..",
+        "...."
+    },['1']={
+        ".X..",
+        "XX..",
+        ".X..",
+        ".X..",
+        "XXX.",
+        "...."
+    },['2']={
+        "XX..",
+        "..X.",
+        ".X..",
+        "X...",
+        "XXX.",
+        "...."
+    },['3']={
+        "XX..",
+        "..X.",
+        "XX..",
+        "..X.",
+        "XX..",
+        "...."
+    },['4']={
+        "..X.",
+        "X.X.",
+        "XXX.",
+        "..X.",
+        "..X.",
+        "...."
+    },['5']={
+        "XXX.",
+        "X...",
+        "XX..",
+        "..X.",
+        "XX..",
+        "...."
+    },['6']={
+        ".XX.",
+        "X...",
+        "XX..",
+        "X.X.",
+        ".X..",
+        "...."
+    },['7']={
+        "XXX.",
+        "..X.",
+        ".X..",
+        ".X..",
+        "X...",
+        "...."
+    },['8']={
+        ".X..",
+        "X.X.",
+        ".X..",
+        "X.X.",
+        ".X..",
+        "...."
+    },['9']={
+        ".X..",
+        "X.X.",
+        ".XX.",
+        "..X.",
+        "XX..",
+        "...."
+    },[':']={
+        "....",
+        ".X..",
+        "....",
+        ".X..",
+        "....",
+        "...."
+    },[';']={
+        "....",
+        ".X..",
+        "....",
+        ".X..",
+        ".X..",
+        "X..."
+    },['<']={
+        "..X.",
+        ".X..",
+        "X...",
+        ".X..",
+        "..X.",
+        "...."
+    },['=']={
+        "....",
+        "XXX.",
+        "....",
+        "XXX.",
+        "....",
+        "...."
+    },['>']={
+        "X...",
+        ".X..",
+        "..X.",
+        ".X..",
+        "X...",
+        "...."
+    },['?']={
+        "XX..",
+        "..X.",
+        ".X..",
+        "....",
+        ".X..",
+        "...."
+    },['@']={
+        ".X..",
+        "X.X.",
+        "XXX.",
+        "X...",
+        ".XX.",
+        "...."
+    },['A']={
+        ".X..",
+        "X.X.",
+        "XXX.",
+        "X.X.",
+        "X.X.",
+        "...."
+    },['B']={
+        "XX..",
+        "X.X.",
+        "XX..",
+        "X.X.",
+        "XX..",
+        "...."
+    },['C']={
+        ".XX.",
+        "X...",
+        "X...",
+        "X...",
+        ".XX.",
+        "...."
+    },['D']={
+        "XX..",
+        "X.X.",
+        "X.X.",
+        "X.X.",
+        "XX..",
+        "...."
+    },['E']={
+        "XXX.",
+        "X...",
+        "XX..",
+        "X...",
+        "XXX.",
+        "...."
+    },['F']={
+        "XXX.",
+        "X...",
+        "XX..",
+        "X...",
+        "X...",
+        "...."
+    },['G']={
+        ".XX.",
+        "X...",
+        "X.X.",
+        "X.X.",
+        ".XX.",
+        "...."
+    },['H']={
+        "X.X.",
+        "X.X.",
+        "XXX.",
+        "X.X.",
+        "X.X.",
+        "...."
+    },['I']={
+        "XXX.",
+        ".X..",
+        ".X..",
+        ".X..",
+        "XXX.",
+        "...."
+    },['J']={
+        "..X.",
+        "..X.",
+        "..X.",
+        "X.X.",
+        ".X..",
+        "...."
+    },['K']={
+        "X.X.",
+        "X.X.",
+        "XX..",
+        "X.X.",
+        "X.X.",
+        "...."
+    },['L']={
+        "X...",
+        "X...",
+        "X...",
+        "X...",
+        "XXX.",
+        "...."
+    },['M']={
+        "X.X.",
+        "XXX.",
+        "X.X.",
+        "X.X.",
+        "X.X.",
+        "...."
+    },['N']={
+        "XX..",
+        "X.X.",
+        "X.X.",
+        "X.X.",
+        "X.X.",
+        "...."
+    },['O']={
+        ".X..",
+        "X.X.",
+        "X.X.",
+        "X.X.",
+        ".X..",
+        "...."
+    },['P']={
+        "XX..",
+        "X.X.",
+        "XX..",
+        "X...",
+        "X...",
+        "...."
+    },['Q']={
+        ".X..",
+        "X.X.",
+        "X.X.",
+        "XXX.",
+        ".XX.",
+        "...."
+    },['R']={
+        "XX..",
+        "X.X.",
+        "XX..",
+        "X.X.",
+        "X.X.",
+        "...."
+    },['S']={
+        ".XX.",
+        "X...",
+        ".X..",
+        "..X.",
+        "XX..",
+        "...."
+    },['T']={
+        "XXX.",
+        ".X..",
+        ".X..",
+        ".X..",
+        ".X..",
+        "...."
+    },['U']={
+        "X.X.",
+        "X.X.",
+        "X.X.",
+        "X.X",
+        "XXX.",
+        "...."
+    },['V']={
+        "X.X.",
+        "X.X.",
+        "X.X.",
+        ".X..",
+        ".X..",
+        "...."
+    },['W']={
+        "X.X.",
+        "X.X.",
+        "XXX.",
+        "XXX.",
+        "X.X.",
+        "...."
+    },['X']={
+        "X.X.",
+        "X.X.",
+        ".X..",
+        "X.X.",
+        "X.X.",
+        "...."
+    },['Y']={
+        "X.X.",
+        "X.X.",
+        "XXX.",
+        ".X..",
+        ".X..",
+        "...."
+    },['Z']={
+        "XXX.",
+        "..X.",
+        ".X..",
+        "X...",
+        "XXX.",
+        "...."
+    },['[']={
+        "XXX.",
+        "X...",
+        "X...",
+        "X...",
+        "XXX.",
+        "...."
+    },['\\']={
+        "X...",
+        "X...",
+        ".X..",
+        "..X.",
+        "..X.",
+        "...."
+    },[']']={
+        "XXX.",
+        "..X.",
+        "..X.",
+        "..X.",
+        "XXX.",
+        "...."
+    },['^']={
+        ".X..",
+        "X.X.",
+        "....",
+        "....",
+        "....",
+        "...."
+    },['_']={
+        "....",
+        "....",
+        "....",
+        "....",
+        "....",
+        "XXX."
+    },['`']={
+        ".X..",
+        "..X.",
+        "....",
+        "....",
+        "....",
+        "...."
+    },['a']={
+        "....",
+        ".XX.",
+        "X.X.",
+        "X.X.",
+        ".XX.",
+        "...."
+    },['b']={
+        "X...",
+        "XX..",
+        "X.X.",
+        "X.X.",
+        "XX..",
+        "...."
+    },['c']={
+        "....",
+        ".XX.",
+        "X...",
+        "X...",
+        ".XX.",
+        "...."
+    },['d']={
+        "..X.",
+        ".XX.",
+        "X.X.",
+        "X.X.",
+        ".XX.",
+        "...."
+    },['e']={
+        "....",
+        ".X..",
+        "X.X.",
+        "XX..",
+        ".XX.",
+        "...."
+    },['f']={
+        ".XX.",
+        "X...",
+        "XX..",
+        "X...",
+        "X...",
+        "...."
+    },['g']={
+        "....",
+        ".XX.",
+        "X.X.",
+        ".XX.",
+        "..X.",
+        "XX.."
+    },['h']={
+        "X...",
+        "XX..",
+        "X.X.",
+        "X.X.",
+        "X.X.",
+        "...."
+    },['i']={
+        ".X..",
+        "....",
+        ".X..",
+        ".X..",
+        "..X.",
+        "...."
+    },['j']={
+        ".X..",
+        "....",
+        ".X..",
+        ".X..",
+        ".X..",
+        "X..."
+    },['k']={
+        "X...",
+        "X.X.",
+        "XX..",
+        "X.X.",
+        "X.X.",
+        "...."
+    },['l']={
+        ".X..",
+        ".X..",
+        ".X..",
+        ".X..",
+        "..X.",
+        "...."
+    },['m']={
+        "....",
+        "XX..",
+        "XXX.",
+        "XXX.",
+        "X.X.",
+        "...."
+    },['n']={
+        "....",
+        "XX..",
+        "X.X.",
+        "X.X.",
+        "X.X.",
+        "...."
+    },['o']={
+        "....",
+        ".X..",
+        "X.X.",
+        "X.X.",
+        ".X..",
+        "...."
+    },['p']={
+        "....",
+        "XX..",
+        "X.X.",
+        "X.X.",
+        "XX..",
+        "X..."
+    },['q']={
+        "....",
+        ".XX.",
+        "X.X.",
+        "X.X.",
+        ".XX.",
+        "..X."
+    },['r']={
+        "....",
+        "XX..",
+        "X.X.",
+        "X...",
+        "X...",
+        "...."
+    },['s']={
+        "....",
+        ".XX.",
+        "X...",
+        "..X.",
+        "XX..",
+        "...."
+    },['t']={
+        ".X..",
+        "XXX.",
+        ".X..",
+        ".X..",
+        "..X.",
+        "...."
+    },['u']={
+        "....",
+        "X.X.",
+        "X.X.",
+        "X.X",
+        ".XX.",
+        "...."
+    },['v']={
+        "....",
+        "X.X.",
+        "X.X.",
+        "XXX.",
+        ".X..",
+        "...."
+    },['w']={
+        "....",
+        "X.X.",
+        "X.X.",
+        "XXX.",
+        ".XX.",
+        "...."
+    },['x']={
+        "....",
+        "X.X.",
+        ".X..",
+        ".X..",
+        "X.X.",
+        "...."
+    },['y']={
+        "....",
+        "X.X.",
+        "X.X.",
+        ".XX.",
+        "..X.",
+        "XX.."
+    },['z']={
+        "....",
+        "XXX.",
+        "..X.",
+        "X...",
+        "XXX.",
+        "...."
+    },['{']={
+        ".XX.",
+        ".X..",
+        "XX..",
+        ".X..",
+        ".XX.",
+        "...."
+    },['|']={
+        ".X..",
+        ".X..",
+        ".X..",
+        ".X..",
+        ".X..",
+        "...."
+    },['}']={
+        "XX..",
+        ".X..",
+        ".XX.",
+        ".X..",
+        "XX..",
+        "...."
+    },['~']={
+        "....",
+        ".X.X",
+        "X.X.",
+        "....",
+        "....",
+        "...."
+    }
+}
+function VIDEO:putc(x,y,chr)
+    local f = VIDEO.font[chr]
+    if f==nil then f = VIDEO.font['?'] end
+    if f==nil then f = VIDEO.font[' '] end
+    if f==nil then return x,y end
+	x,y = math.floor(x),math.floor(y)
+	if x<=-4 or x>=self.screen_width 
+	or y<=-6 or y>=self.screen_height then return x+4,y end
+
+	local ZZ=ZIGZAG; ZIGZAG=false	
+    for j,l in ipairs(f) do
+        for i=1,l:len() do
+            local c = l:sub(i,i)=='.' and 0 or 255
+			local a,b = x+i-1,y+j-1
+			if a>=0 and a<self.screen_width and
+               b>=0 and b<self.screen_height then
+				self:pset(x+i-1,y+j-1,c,c,c)
+			end
+        end
+    end
+    ZIGZAG=ZZ
+    return x+4,y
+end
+function VIDEO:puts(x,y,str)
+    for i=1,str:len() do
+        x,y = self:putc(x,y,str:sub(i,i))
+    end
+    return x,y
+end
+function VIDEO:putf(x,y,...)
+    return self:puts(x,y,string.format(...))
+end
 
 if MODE==MODE_OTSU then -- Otsu
     CONFIG.asm_mode  = 0
@@ -1309,7 +2009,7 @@ if MODE==MODE_OTSU then -- Otsu
     end
 elseif MODE==MODE_DITH then -- N&B
 	CONFIG.asm_mode  = 0
-    CONFIG.dither    = 
+    -- CONFIG.dither    = 
 	-- compo(norm,vac)(8,8)
 	-- compo(norm,vac)(16,16)
 	-- compo(norm,bayer,4){{1}}
@@ -1325,7 +2025,7 @@ elseif MODE==MODE_DITH then -- N&B
 	-- compo(norm,vac)(13,13)
 	-- compo(norm,vac)(7,7)
 	-- compo(norm,vac)(16,8)
-	compo(norm,vac)(8,7)
+	-- compo(norm,vac)(8,7)
 	-- compo(norm,bayer,3){{1}}
 	-- CONFIG.dither = compo(norm,bayer,3){{1}}
 	-- CONFIG.dither = compo(norm,bayer){
@@ -1339,7 +2039,7 @@ elseif MODE==MODE_DITH then -- N&B
 		-- { 3, 6,14,11},
 		-- { 1, 2, 8, 4}
 	-- }
-	CONFIG.dither = compo(norm,bayer,2){{1,2},{3,4}}
+	-- CONFIG.dither = compo(norm,bayer,2){{1,2},{3,4}}
 	-- CONFIG.dither = compo(norm){{1}}
 	-- CONFIG.dither = compo(norm){
 		-- { 7,21,33,43,36,19, 9, 4},
@@ -1368,7 +2068,7 @@ elseif MODE==MODE_DITH then -- N&B
 		{ 5, 9, 3, 1} 
 	}
 	-- CONFIG.dither = compo(norm,double,vac)(8,8)
-	-- CONFIG.dither = compo(norm,bayer,3){{1}}
+	-- CONFIG.dither = compo(norm,bayer,2){{1}}
 	function VIDEO:pset(x,y, r,g,b)
         if not self.dither then 
 			self:init_dither()
@@ -1753,7 +2453,6 @@ elseif MODE==MODE_RGB6 then -- RGB6
 		}
     end
 	function VIDEO:plot(p,o,r,g,b)
-		o = o==0 and 16 or 1
 		local img = self.image
 		if self.overwrite then
 			local t
@@ -1761,6 +2460,7 @@ elseif MODE==MODE_RGB6 then -- RGB6
 			t = img[p+40]; img[p+40] = o==0 and t%16 or t-(t%16)
 			t = img[p+80]; img[p+80] = o==0 and t%16 or t-(t%16)
 		end
+		o = o==0 and 16 or 1
 		if r>0 then img[p] = img[p] + r*o end p=p+40
 		if g>0 then img[p] = img[p] + g*o end p=p+40
 		if b>0 then img[p] = img[p] + b*o end
@@ -2040,7 +2740,8 @@ function VIDEO:read_rgb24(raw)
 	self.overwrite = false
 	local i,w,b,p = math.floor,self.width,FILTER.byte,self.pset
 	local ox = i((self.screen_width - w)/2)
-	local oy = i((self.screen_height - self.height)/2)
+	local oy = i((self.screen_height - self.height - 8)/2)
+	if oy<0 then oy=0 else oy=oy+6 end
 	local pr = self.filter:push(raw)
 	for o=0,w*self.height-1 do
 		local x,y,o = ox+(o % w), i(o/w)+oy,o*3
@@ -2345,13 +3046,32 @@ function CONVERTER:process()
 	end
 	
 	-- info utilisateur
-	local info_sec = 1	
+	local hchars = math.ceil(video.screen_width/4)
+	local title_x, title_str = 0, string.format(
+				'%s    mode=%s duration=%s size=%dx%d fps=%d    ', 
+				self:vidname(self.file),  MODE_TXT[MODE], hms(video.duration),
+				video.width, video.height, video.fps)
+	while title_str:len()<=hchars do title_str = title_str..' ' end
+	local info_sec, time_str = 1,''
 	local function update_info()
 		if video.cpt>=info_sec then
 			info_sec = info_sec + video.fps
 			tstamp = tstamp + 1
 			io.stdout:write(info() .. '\r')
 			io.stdout:flush()
+			time_str = self.duration<3600 and 
+				string.format('%d:%02d', math.floor(tstamp/60), tstamp%60) or
+				hms(tstamp)
+		end
+
+		-- affichage info écran
+		self:marktime(video, video.cpt/self.fps)
+		video:puts(0,video.screen_height-5, time_str)
+		video:puts(title_x, 0, title_str)
+		title_x = title_x - .5/CONFIG.px_size[1]
+		if title_x <= -4 then
+			title_x = title_x + 4
+			title_str = title_str:sub(2) .. title_str:sub(1,1)
 		end
 	end 
 	
@@ -2359,13 +3079,13 @@ function CONVERTER:process()
     local curr,prev = video.image,{}
 	local indices = all_indexes
 	
-	local filter_a = .95
+	local filter_a = .925 -- .95
 
     -- conversion
     video:next_image()
     while audio.running and video.running do
         update_info()
-		self:marktime(video, video.cpt/self.fps)
+
 		pos = self:_compress(pos, prev, video.image, indices, function(b0,b1,b2)
 			current_cycle = current_cycle + self.out:frame(b0,b1,b2,audio)
 		end)
@@ -2566,7 +3286,7 @@ if #arg>1 then -- infer name
     file = subs:longest():gsub("%W+$", "")
     if file:len()<=4 then file = basename(first) end
     file = file.."#"..num
-    io.stderr:write("\n===> "..tag..file.."] <===\n")
+    io.stderr:write("\n===> "..tag..file.." <===\n")
     io.stderr:flush()
 end
 PALETTE:init(CONFIG.palette(CONVERTER,VIDEO))
