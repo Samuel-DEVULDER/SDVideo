@@ -153,6 +153,12 @@ local function hms(secs, fmt)
     return string.format(fmt or "%d:%02d:%02d",
             math.floor(secs/3600), math.floor(secs/60)%60, math.floor(secs)%60)
 end
+local function _ms(secs, fmt)
+    -- return a formated version of secs seconds (fmt is optional)
+    secs = round(secs)
+    return string.format(fmt or "%d:%02d",
+            math.floor(secs/60), math.floor(secs)%60)
+end
 function basename(file)
     return file:gsub('^/cygdrive/(%w)/','%1:/'):gsub('.*[/\\]',''):gsub('%.[%a%d]+','')
 end
@@ -1918,8 +1924,9 @@ function VIDEO:putc(x,y,chr)
     if f==nil then f = VIDEO.font[' '] end
     if f==nil then return x,y end
 	x,y = math.floor(x),math.floor(y)
-	if x<=-4 or x>=self.screen_width 
-	or y<=-6 or y>=self.screen_height then return x+4,y end
+	local w = f[1]:len()
+	if x<=-w or x>=self.screen_width 
+	or y<=-6 or y>=self.screen_height then return x+w,y end
 
 	local ZZ=ZIGZAG; ZIGZAG=false	
     for j,l in ipairs(f) do
@@ -1933,7 +1940,7 @@ function VIDEO:putc(x,y,chr)
         end
     end
     ZIGZAG=ZZ
-    return x+4,y
+    return x+w,y
 end
 function VIDEO:puts(x,y,str)
     for i=1,str:len() do
@@ -1998,7 +2005,7 @@ if MODE==MODE_OTSU then -- Otsu
 				if (i[f]/_mask) % 2 >= 1 then
 					i[f] = i[f] - _mask
 				end
-				if self._r[r]+self._g[g]+self._b[b]>127 then
+				if self._r[r]+self._g[g]+self._b[b]>50 then
 					i[f] = i[f] + _mask
 				end
 			else
@@ -2130,6 +2137,12 @@ elseif MODE==MODE_RGB2 then -- RGB
 		pset(self, x,y, r,g,b)
 		self.pset = pset
     end
+
+	for _,f in pairs(VIDEO.font) do
+		for i,s in ipairs(f) do
+			f[i] = s:gsub('(.)', '%1%1')
+		end
+	end
 elseif MODE==MODE_BM59 then -- BM59
 	CONFIG.asm_mode	 = 2
     CONFIG.px_size   = {2,1}
@@ -2740,7 +2753,7 @@ function VIDEO:read_rgb24(raw)
 	self.overwrite = false
 	local i,w,b,p = math.floor,self.width,FILTER.byte,self.pset
 	local ox = i((self.screen_width - w)/2)
-	local oy = i((self.screen_height - self.height - 8)/2)
+	local oy = i((self.screen_height - 6 - 7 - self.height)/2)
 	if oy<0 then oy=0 else oy=oy+6 end
 	local pr = self.filter:push(raw)
 	for o=0,w*self.height-1 do
@@ -2754,10 +2767,10 @@ function VIDEO:read_rgb24(raw)
 	self.filter:flush()
 	self.overwrite = true
 end
-function VIDEO:progressbar(y, frac)
-	local t=round((self.screen_width-1)*math.max(math.min(1,frac),0))
-	for x=0,t do self:pset(x,y, 255,255,255) end
-	for x=t+1,self.screen_width-1 do self:pset(x,y, 0,0,0) end
+function VIDEO:progressbar(y, frac, r,g,b)
+	local t=round(self.screen_width*math.max(math.min(1,frac),0))
+	for x=0,t-1 do self:pset(x,y,r,g,b) end
+	for x=t,self.screen_width-1 do self:pset(x,y, 0,0,0) end
 end
 function VIDEO:next_image()
     if not self.running then return end
@@ -2976,10 +2989,11 @@ function CONVERTER:_stat()
     self.video_cor = video_cor
 
     -- info
-    io.stdout:write(string.format('> %dx%d [%s] (%s) %s at %d fps (%d%% zoom)\n',
+	local stat_str = string.format('%dx%d [%s] (%s) %s at %d fps (%d%% zoom)',
         self.w, self.h, MODE_TXT[MODE], self.aspect_ratio,
-        hms(self.duration, "%dh %dm %ds"), self.fps,
-        percent(math.max(self.w/self.W,self.h/self.H))))
+        self.duration>=3600 and hms(self.duration, "%dh %dm %ds") or _ms(self.duration, "%dm %ds"), 
+		self.fps, percent(math.max(self.w/self.W,self.h/self.H)))
+    io.stdout:write('> '..stat_str..'\n')
 	local TOT = 0 for i=0,3 do TOT = TOT+stat.type[i] end
     io.stdout:write(string.format('> %d frames: %d%% %d%% %d%% %d%%\n',
                                     TOT,
@@ -2991,15 +3005,11 @@ function CONVERTER:_stat()
 	
 	-- self.avg_chg = (2*(stat.type[0]+stat.type[2])+1*stat.type[1])/(stat.type[0]+stat.type[1]+stat.type[2])
 	-- print('average bytes changed per frames = ', self.avg_chg)
-end
-function CONVERTER:marktime(video, secs)
-	-- do return end
-	if self.duration then video:progressbar(video.screen_height-1, secs/self.duration) end
-	video:progressbar(video.screen_height-2, video.filter.a)
+	return stat_str
 end
 function CONVERTER:process()
     -- collect stats
-    self:_stat()
+    local stat_str = self:_stat()
 
     -- flux audio/video
     local audio  = AUDIO:new(self.file)
@@ -3046,40 +3056,46 @@ function CONVERTER:process()
 	end
 	
 	-- info utilisateur
-	local hchars = math.ceil(video.screen_width/4)
-	local title_x, title_str = 0, string.format(
-				'%s    mode=%s duration=%s size=%dx%d fps=%d    ', 
-				self:vidname(self.file),  MODE_TXT[MODE], hms(video.duration),
-				video.width, video.height, video.fps)
-	while title_str:len()<=hchars do title_str = title_str..' ' end
+	local hchars = math.ceil(video.screen_width/VIDEO.font['X'][1]:len())
+	local title_x, title_str = 0, self:vidname(self.file)
 	local info_sec, time_str = 1,''
+
+	if 8+stat_str:len()>=hchars then 
+		title_str, stat_str = title_str .. ' ' .. stat_str, ''
+	end
+	if title_str:len()>hchars then title_str = title_str..'    ' end
+
 	local function update_info()
 		if video.cpt>=info_sec then
 			info_sec = info_sec + video.fps
 			tstamp = tstamp + 1
 			io.stdout:write(info() .. '\r')
 			io.stdout:flush()
-			time_str = self.duration<3600 and 
-				string.format('%d:%02d', math.floor(tstamp/60), tstamp%60) or
-				hms(tstamp)
+			time_str = (self.duration<3600 and _ms(tstamp) or hms(tstamp))
 		end
 
 		-- affichage info écran
-		self:marktime(video, video.cpt/self.fps)
-		video:puts(0,video.screen_height-5, time_str)
-		video:puts(title_x, 0, title_str)
-		title_x = title_x - .5/CONFIG.px_size[1]
-		if title_x <= -4 then
-			title_x = title_x + 4
-			title_str = title_str:sub(2) .. title_str:sub(1,1)
+		if stat_str~='' then 
+			video:puts(video.screen_width-4*stat_str:len(),video.screen_height-7, stat_str) 
 		end
+		video:puts(0,video.screen_height-7, time_str)
+		video:puts(title_x, 0, title_str)
+		if title_str:len()>hchars then
+			title_x = title_x - .25 --/CONFIG.px_size[1]
+			if title_x <= -4 then
+				title_x = title_x + 4
+				title_str = title_str:sub(2) .. title_str:sub(1,1)
+			end
+		end
+		video:progressbar(video.screen_height-1, tstamp/self.duration,255,0,0)
+		video:progressbar(6, video.filter.a,255,255,0)
 	end 
 	
 	-- la 1ere image doit se faire de 1 en 1
     local curr,prev = video.image,{}
 	local indices = all_indexes
 	
-	local filter_a = .925 -- .95
+	local filter_a = .9 -- .85 -- .925 -- .95
 
     -- conversion
     video:next_image()
@@ -3093,7 +3109,7 @@ function CONVERTER:process()
         completed_imgs = completed_imgs + 1
 
 		if current_cycle >= 1.5*cycles_per_img then
-			video.filter.a = video.filter.a*filter_a + (1-filter_a)*.9
+			video.filter.a = video.filter.a*filter_a + (1-filter_a)*.975
 		elseif current_cycle <= cycles_per_img/1.5 then
 			video.filter.a = video.filter.a*filter_a
 		end
@@ -3274,7 +3290,7 @@ if #arg>1 then -- infer name
         end
         return subs
     end
-    local subs,num,first = substrings(file),0
+    local subs,num,first = substrings(file),0,nil
     for i,f in ipairs(arg) do
         local TMP = CONVERTER:new(f,nil,3)
         if TMP then
@@ -3284,7 +3300,7 @@ if #arg>1 then -- infer name
         end
     end
     file = subs:longest():gsub("%W+$", "")
-    if file:len()<=4 then file = basename(first) end
+    if file:len()<=4 then file = basename(first or 'Medley') end
     file = file.."#"..num
     io.stderr:write("\n===> "..tag..file.." <===\n")
     io.stderr:flush()

@@ -567,7 +567,7 @@ ECRAN31
   PSHS  U,X
   TFR   D,Y           Y=D="val" "val"
   LEAX  ,Y            X=Y=D="val" "val"
-  LDA   #66
+  LDA   #66+1         extra yellow line for progress bar
 ECRAN32
   PSHU  B,X,Y         ecrit une ligne 
   PSHU  B,X,Y         (5*8) avec "val"
@@ -727,6 +727,20 @@ FIN_BLOC
   CMPB  #$FE          $FF pas trouve?              (2)
   BEQ   FIN_SPECIAL   cas particulier              (3)
 * 53
+
+* TO8/9 : b0 E7C8 => kpress
+* TO7 : clr E7C9 ; lda $E7C8; cmpa #$FF -> carry=ktst
+* TO7/70 
+*   LDD #$6FF   (3)
+*LOOP
+*   STA  <$E7C9 (4)
+*   ANDB <$E7C8 (4)
+*   DECA        (2)
+*   BPL  LOOP   (3) 13*6+3+2 = 83
+*   CMPB #255   (2) 
+*   RTS
+* MO5 A7C0 STA, LDA, BMI
+*  6E 40 
 
 * On doit attendre 109 cycles pour se caler
 * sur le dernier echantillon audio. On pourrait en
