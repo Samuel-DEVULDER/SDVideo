@@ -3056,7 +3056,8 @@ function CONVERTER:process()
 	end
 	
 	-- info utilisateur
-	local hchars = math.ceil(video.screen_width/VIDEO.font['X'][1]:len())
+	local wchars = VIDEO.font['X'][1]:len()
+	local hchars = math.ceil(video.screen_width/wchars)
 	local title_x, title_str = 0, self:vidname(self.file)
 	local info_sec, time_str = 1,''
 
@@ -3076,14 +3077,14 @@ function CONVERTER:process()
 
 		-- affichage info écran
 		if stat_str~='' then 
-			video:puts(video.screen_width-4*stat_str:len(),video.screen_height-7, stat_str) 
+			video:puts(video.screen_width-wchars*stat_str:len(),video.screen_height-7, stat_str) 
 		end
 		video:puts(0,video.screen_height-7, time_str)
 		video:puts(title_x, 0, title_str)
 		if title_str:len()>hchars then
 			title_x = title_x - .25 --/CONFIG.px_size[1]
-			if title_x <= -4 then
-				title_x = title_x + 4
+			if title_x <= -wchars then
+				title_x = title_x + wchars
 				title_str = title_str:sub(2) .. title_str:sub(1,1)
 			end
 		end
