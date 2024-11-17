@@ -36,6 +36,18 @@
 --
 -- Travail débuté en Oct 2018.
 
+
+-- ===========================================================================
+
+local MODE_TXT = {}
+for i,v in pairs{"OTSU", "DITH", "BM59", 
+			     "RGB2", "C345", "RGB6",
+				 "RGB4", "RGB5", "CR16",
+				 nil} do
+	local n = i-1
+	_G['MODE_' .. v], MODE_TXT[n] = n, v
+end
+
 -- ===========================================================================
 -- helper functions
 if not unpack then unpack = table.unpack end
@@ -58,7 +70,11 @@ local function isdir(file)
 	return exists(file..'/')
 end
 local function env(var, default)
-	return loadstring('return ' .. (os.getenv(var) or default))();
+	local val  = os.getenv(var)
+	local code = 'return ' .. (val or 'false') .. 
+       ' or ' .. ' MODE_' .. (val or '')  .. 
+       ' or ' .. (val or default)
+	return loadstring(code)();
 end
 local function locate(file,...)
 	-- look locally
@@ -86,31 +102,6 @@ local function locate(file,...)
 	end
 	error('Cannot locate "' .. file .. '"')
 end
-
--- ===========================================================================
-
-local MODE_OTSU     = 0
-local MODE_DITH     = 1
-local MODE_BM59     = 2
-local MODE_RGB2     = 3
-local MODE_RGB4     = 4
-local MODE_RGB5     = 5
-local MODE_RGB6     = 6
-local MODE_C345     = 7
-local MODE_CR16     = 8
-
-local MODE_TXT      = {
-	[MODE_OTSU]="OTSU",
-	[MODE_DITH]="DITH",
-	[MODE_BM59]="BM59",
-	[MODE_RGB2]="RGB2",
-	[MODE_RGB4]="RGB4",
-	[MODE_RGB5]="RGB5",
-	[MODE_RGB6]="RGB6",
-	[MODE_C345]="C345",
-	[MODE_CR16]="CR16",
-	nil
-}
 
 -- ===========================================================================
 -- utiliser un fps<0 si la taille 100% doit etre conservee
@@ -224,11 +215,8 @@ local function vac(n,m)
     local function mat(w,h)
         local t={}
         for i=1,h do
-            local r={}
-            for j=1,w do
-                table.insert(r,0)
-            end
-            table.insert(t,r)
+            t[i] = {}
+            for j=1,w do t[i][j] = 0 end
         end
         t.mt={}
         setmetatable(t, t.mt)
@@ -334,18 +322,31 @@ local function vac(n,m)
         return min_x, min_y, max_x, max_y
     end
     local function makeuniform(n,m)
-        local t = mat(n,m)
-        for i=0,math.min(m,n)-1 do -- math.floor(m*n/10) do
-            t[math.random(m)][math.random(n)] = 1
-        end
-        for i=1,m*n*100 do
-            local a1,b1,x1,y1 = getminmax(t,1)
-            t[y1][x1] = 0
-            local x2,y2,a2,b2 = getminmax(t,0)
-            t[y2][x2] = 1
-            -- print(t)
-            if x1==x2 and y1==y2 then break end
-        end
+        local t
+		repeat
+			t = mat(n,m)
+			for i=0,math.min(m,n)-1 do -- math.floor(m*n/10) do
+				t[math.random(m)][math.random(n)] = 1
+			end
+			for i=1,m*n*100 do
+				local a1,b1,x1,y1 = getminmax(t,1)
+				t[y1][x1] = 0
+				local x2,y2,a2,b2 = getminmax(t,0)
+				t[y2][x2] = 1
+				-- print(t)
+				if x1==x2 and y1==y2 then break end
+			end
+			for i=1,m do
+				local c=0
+				for j=1,n do if t[i][j]>0 then c=c+1 end end
+				if c>1 then t = nil; break; end
+			end
+			if t then for j=1,n do
+				local c=0
+				for i=1,m do if t[i][j]>0 then c=c+1 end end
+				if c>1 then t = nil; break; end
+			end end
+		until t
         return t
     end
 
@@ -972,6 +973,11 @@ function AUDIO:next_sample()
 	for i=1,siz do v = v + ((buf:byte(i)+128)%256)-128 end
 	self.buf,v = buf:sub(siz+1),self:compressor(v/(siz*4)) + 31.5 + math.random()
 	if v<0 then v=0 elseif v>63 then v=63 end
+	if false then 
+		v = (self.last==0 and v>40 and 63 or 0) or (self.last==63 and v<23 and 0 or 63)
+		self.last = self.last or 0
+		self.last = v
+	end
 	return math.floor(v)
 end
 
@@ -979,7 +985,7 @@ end
 -- VIDEO filter aimed at mixing dropped frammes
 local FILTER = {}
 function FILTER:new(video)
-    local o = {t={},i=0,a=.6*0+.45*0+.8*0,cur={},video=video}
+    local o = {t={},i=0,a=0,cur={},video=video}
     setmetatable(o, self)
     self.__index = self
 	for i=0,320*200*3-1 do o.cur[i] = 0 end
@@ -1199,12 +1205,22 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, pset, duration)
 		local t = {}
 		for i=0,7999 do if prev[i]~=curr[i] then table.insert(t,i) end end
 		
-		if t[math.ceil(1.95*THR)] and CONFIG.px_size[2]==1 then
+		local filter_t, filter_s, filter_a = 0, 1.4, MODE==MODE_OTSU and 0 or .85
+		if t[math.ceil(filter_s*THR)] then
+			filter_t = .95
+		elseif t[math.ceil(THR/filter_s)] then 
+			filter_t = o.filter.a
+		end
+		o.filter.a = o.filter.a*filter_a + (1-filter_a)*filter_t
+		
+		if t[math.ceil(1.95*THR)] and CONFIG.px_size[2]<=3 then
 			local m = 2 -- math.ceil(#t / THR);
 			local n = cpt % m
 			for i=#t,0,-1 do t[i]=nil end
-			for i=0,7999 do if prev[i]~=curr[i] then
-				if (i2l[i]%m)==n then table.insert(t,i) else curr[i]=prev[i] end 
+			for i=0,7999 do if prev[i]~=curr[i] then	
+				local line = i2l[i]
+				if  line<6  -- do not interlace title lines
+				or (line%m)==n then table.insert(t,i) else curr[i] = prev[i] end 
 			end end
 		end
 		
@@ -2111,7 +2127,8 @@ elseif MODE==MODE_RGB2 then -- RGB
 	-- CONFIG.dither    = compo(norm,double,vac)(16,5)
 
 	-- 12 = 3*4
-	CONFIG.dither    = compo(norm,vac)(16,5)
+	CONFIG.dither    = compo(norm,vac)(16,5) -- très belle qualité gfx
+	
 	local function pset(self, x,y, r,g,b)
 		local f,d = self._linear,self.dither:get(x,y)
         local m,p,q = self._mask[x],math.floor((x+y*960)/8),self.image
@@ -2189,7 +2206,6 @@ elseif MODE==MODE_BM59 then -- BM59
 					local t = math.floor(r*GRAY_R + g*GRAY_G + b*GRAY_B)
 					H.w[t] = H.w[t]+1
 				end, TMP.duration)
-				stat.filter.a = 0
                 stat.super_next_image = stat.next_image
                 stat.mill = {'|', '/', '-', '\\'}
                 stat.mill[0] = stat.mill[4]
@@ -2288,7 +2304,6 @@ elseif MODE==MODE_C345 then
 					function(self, x,y, r,g,b)
 					H.r[r], H.g[g], H.b[b] = H.r[r]+1, H.g[g]+1, H.b[b]+1
 				end, TMP.duration)
-				stat.filter.a = 0
                 stat.super_next_image = stat.next_image
                 stat.mill = {'|', '/', '-', '\\'}
                 stat.mill[0] = stat.mill[4]
@@ -2427,7 +2442,6 @@ elseif MODE==MODE_RGB6 then -- RGB6
 					function(self, x,y, r,g,b)
 					H.r[r], H.g[g], H.b[b] = H.r[r]+1, H.g[g]+1, H.b[b]+1
 				end, TMP.duration)
-				stat.filter.a = 0
                 stat.super_next_image = stat.next_image
                 stat.mill = {'|', '/', '-', '\\'}
                 stat.mill[0] = stat.mill[4]
@@ -2538,7 +2552,6 @@ elseif MODE==MODE_CR16 then -- color reduction
                         reducer:add(col)
                     -- end
                 end, TMP.duration)
-				stat.filter.a = 0
                 stat.super_next_image = stat.next_image
                 stat.mill = {'|', '/', '-', '\\'}
                 stat.mill[0] = stat.mill[4]
@@ -2609,7 +2622,6 @@ elseif MODE==MODE_RGB4 then --
 					local t = math.floor(r*.30 + g*.59 + b*.11)
 					H.w[t] = H.w[t]+1
 				end, TMP.duration)
-				stat.filter.a = 0
                 stat.super_next_image = stat.next_image
                 stat.mill = {'|', '/', '-', '\\'}
                 stat.mill[0] = stat.mill[4]
@@ -2641,7 +2653,7 @@ elseif MODE==MODE_RGB4 then --
 		print('b', unpack(b.base))
 		print('r', unpack(r.base))
 		print('g', unpack(g.base))
-		print('l', unpack(w.base))
+		print('w', unpack(w.base))
 
 		return {
 		-- 0x000,0x111,0x333,0x880,
@@ -2691,7 +2703,6 @@ elseif MODE==MODE_RGB5 then
 					local t = math.floor(r*.30 + g*.59 + b*.11)
 					H.w[t] = H.w[t]+1
 				end,TMP.duration)
-				stat.filter.a = 0
                 stat.super_next_image = stat.next_image
                 stat.mill = {'|', '/', '-', '\\'}
                 stat.mill[0] = stat.mill[4]
@@ -2723,7 +2734,7 @@ elseif MODE==MODE_RGB5 then
 		print('b', unpack(b.base))
 		print('r', unpack(r.base))
 		print('g', unpack(g.base))
-		print('l', unpack(w.base))
+		print('w', unpack(w.base))
 
 		return {
 			0x000,
@@ -2742,7 +2753,7 @@ elseif MODE==MODE_RGB5 then
 		}
     end
 else
-    error("Invalid MODE="..MODE)
+    error("Invalid MODE="..(MODE and MODE or "<empty>"))
 end
 
 function VIDEO:clear()
@@ -2753,8 +2764,8 @@ function VIDEO:read_rgb24(raw)
 	self.overwrite = false
 	local i,w,b,p = math.floor,self.width,FILTER.byte,self.pset
 	local ox = i((self.screen_width - w)/2)
-	local oy = i((self.screen_height - 6 - 7 - self.height)/2)
-	if oy<0 then oy=0 else oy=oy+6 end
+	local oy = i((self.screen_height - 7 - 7 - self.height)/2)
+	if oy<0 then oy=0 else oy=oy+7 end
 	local pr = self.filter:push(raw)
 	for o=0,w*self.height-1 do
 		local x,y,o = ox+(o % w), i(o/w)+oy,o*3
@@ -2852,7 +2863,7 @@ function CONVERTER:_new_video(fps)
     return VIDEO:new(self.file, fps or self.fps, self.w, self.h, self.W, self.H, nil, self.duration)
 end
 function CONVERTER:vidname()
-	return basename(self.file)
+	return basename(self.file):gsub('%-%-(...........)$','') -- cut YT link '  (https://youtu.be//%1)')
 end
 function CONVERTER:_compress(pos, prev, curr, indices_fcn, out_fcn)
 	local k,b0,b1,b2
@@ -3058,14 +3069,19 @@ function CONVERTER:process()
 	-- info utilisateur
 	local wchars = VIDEO.font['X'][1]:len()
 	local hchars = math.ceil(video.screen_width/wchars)
-	local title_x, title_str = 0, self:vidname(self.file)
+	local title_x, title_str = 0, self:vidname(self.file):gsub('_',' ')
 	local info_sec, time_str = 1,''
 
 	if 8+stat_str:len()>=hchars then 
-		title_str, stat_str = title_str .. ' ' .. stat_str, ''
+		for i=1,hchars-1 do title_str = title_str..' ' end
+		title_str, stat_str = title_str..' '.. stat_str..' ', ''
+		for i=1,hchars do title_str = title_str..' ' end
+	elseif title_str:len()>hchars then 
+		for i=1,hchars do title_str = title_str..' ' end
 	end
-	if title_str:len()>hchars then title_str = title_str..'    ' end
+	if title_str:len()>hchars then title_x = 1 end
 
+	video.framefill_ratio = 0
 	local function update_info()
 		if video.cpt>=info_sec then
 			info_sec = info_sec + video.fps
@@ -3079,27 +3095,39 @@ function CONVERTER:process()
 		if stat_str~='' then 
 			video:puts(video.screen_width-wchars*stat_str:len(),video.screen_height-7, stat_str) 
 		end
-		video:puts(0,video.screen_height-7, time_str)
+		video:puts(0,video.screen_height-7, time_str
+					..' b='..percent(video.filter.a)..'%'
+					..' f='..math.floor(100*video.framefill_ratio)..'%'
+					,nil)
 		video:puts(title_x, 0, title_str)
 		if title_str:len()>hchars then
-			title_x = title_x - .25 --/CONFIG.px_size[1]
+			title_x = title_x - .5 --/CONFIG.px_size[1]
 			if title_x <= -wchars then
 				title_x = title_x + wchars
 				title_str = title_str:sub(2) .. title_str:sub(1,1)
 			end
 		end
-		video:progressbar(video.screen_height-1, tstamp/self.duration,255,0,0)
-		video:progressbar(6, video.filter.a,255,255,0)
+		local col = MODE==MODE_DITH and {255,255,255}
+               	 or MODE==MODE_BM59 and {180,180,180} 
+				 or                     {255,0,0}
+		video:progressbar(video.screen_height-1, tstamp/self.duration,unpack(col))
+		-- 0..1.1   => green 
+		-- 1.1..2.1 => yellow
+		-- 2.1..3+	   => red
+		-- local x = video.framefill_ratio
+		-- video:progressbar(6, x/3, x>1.1 and 255 or 0,x<=2.1 and 255 or 0,0)
 	end 
 	
 	-- la 1ere image doit se faire de 1 en 1
     local curr,prev = video.image,{}
 	local indices = all_indexes
 	
-	local filter_a = .9 -- .85 -- .925 -- .95
+	local filter_a,filter_b = .87,.95 -- .925 -- .95
+	if MODE==MODE_OTSU then filter_a = 0 end
 
     -- conversion
-    video:next_image()
+	video.filter.a = .95
+    video:next_image() 
     while audio.running and video.running do
         update_info()
 
@@ -3109,11 +3137,14 @@ function CONVERTER:process()
         video.filter:flush()
         completed_imgs = completed_imgs + 1
 
-		if current_cycle >= 1.5*cycles_per_img then
-			video.filter.a = video.filter.a*filter_a + (1-filter_a)*.975
-		elseif current_cycle <= cycles_per_img/1.5 then
-			video.filter.a = video.filter.a*filter_a
-		end
+		local filter_a,filter_b = .87,.95 -- .925 -- .95
+		-- if MODE==MODE_OTSU then filter_a = 0 end
+		video.framefill_ratio = video.framefill_ratio*filter_b + (1-filter_b)*current_cycle/cycles_per_img
+		-- if current_cycle >= 1.5*cycles_per_img then
+			-- video.filter.a = video.filter.a*filter_a + (1-filter_a)*.85
+		-- elseif current_cycle <= cycles_per_img/1.5 then
+			-- video.filter.a = video.filter.a*filter_a
+		-- end
 		
         -- skip image if drift is too big
         -- if current_cycle>cycles_per_img then print(current_cycle/cycles_per_img) end
