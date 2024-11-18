@@ -2077,7 +2077,7 @@ elseif MODE==MODE_DITH then -- N&B
 		{10,15, 6, 2},
 		{ 5, 9, 3, 1} 
 	}
-	CONFIG.dither = compo(norm,halve,vac)(16,16)
+	-- CONFIG.dither = compo(norm,halve,vac)(16,16)	
 	-- CONFIG.dither = compo(norm,bayer,2){{1}}
 	function VIDEO:pset(x,y, r,g,b)
         if not self.dither then 
