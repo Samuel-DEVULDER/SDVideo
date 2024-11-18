@@ -1012,7 +1012,7 @@ function FILTER:flush()
 end
 function FILTER:byte(offset)
     local m,t = self.i, self.t
-	if false then return t[m][offset] end -- aucun traitement
+	if true then return t[m][offset] end -- aucun traitement
 	if m==1 then
 	    return t[1][offset]
 	elseif m==2 then
@@ -1193,43 +1193,30 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, pset, duration)
     setmetatable(o, self)
     self.__index = self
 
-    local indices = {}
 	local cpt,full,i2l = 0,0,{}
-	-- for i=0,7999 do i2l[i] = math.floor(i/40/CONFIG.px_size[2]) end
 	for i=0,199 do
 		for j=0,39 do i2l[i*40+j] = math.floor(i/math.min(#CONFIG.dither,CONFIG.px_size[2])) end
 	end
-	o.indices = function(prev,curr)
+	o.progressiv = function(prev,curr)
+		if not o._progressive then
+			o._progressive = {}
+			for i=0,7999 do table.insert(o._progressive,i) end
+		end
+		return ipairs(o._progressive)
+	end
+	o.interlaced = function(prev,curr)
 		cpt = cpt+1
-		local THR = 1+math.floor(1.0*2000000/(CYCLES*fps)) -- nombre d'octets consécutifs par image
-		local t = {}
-		for i=0,7999 do if prev[i]~=curr[i] then table.insert(t,i) end end
-		
-		local filter_t, filter_s, filter_a = 0, 1.4, MODE==MODE_OTSU and 0 or .85
-		if t[math.ceil(filter_s*THR)] then
-			filter_t = .95
-		elseif t[math.ceil(THR/filter_s)] then 
-			filter_t = o.filter.a
+		local m, t = 2, {}
+		local n = cpt % m
+		for i=0,7999 do 
+			local line = i2l[i]
+			if  line<6  -- do not interlace title zone
+			or (line%m)==n then table.insert(t,i) else curr[i] = prev[i] end 
 		end
-		o.filter.a = o.filter.a*filter_a + (1-filter_a)*filter_t
-		
-		if t[math.ceil(1.95*THR)] and CONFIG.px_size[2]<=3 then
-			local m = 2 -- math.ceil(#t / THR);
-			local n = cpt % m
-			for i=#t,0,-1 do t[i]=nil end
-			for i=0,7999 do if prev[i]~=curr[i] then	
-				local line = i2l[i]
-				if  line<6  -- do not interlace title lines
-				or (line%m)==n then table.insert(t,i) else curr[i] = prev[i] end 
-			end end
-		end
-		
 		return ipairs(t)
 	end
 
-	if not o.indices then o.indices = function(prev,curr) return ipairs(indices) end end
-
-    for i=0,7999+3 do o.image[i]=0 end
+    for i=0,7999+83 do o.image[i]=0 end
 
     o.filter = FILTER:new(o)
 	o:pset(0,0,0,0,0)
@@ -2090,7 +2077,7 @@ elseif MODE==MODE_DITH then -- N&B
 		{10,15, 6, 2},
 		{ 5, 9, 3, 1} 
 	}
-	-- CONFIG.dither = compo(norm,double,vac)(8,8)
+	CONFIG.dither = compo(norm,halve,vac)(16,16)
 	-- CONFIG.dither = compo(norm,bayer,2){{1}}
 	function VIDEO:pset(x,y, r,g,b)
         if not self.dither then 
@@ -2123,8 +2110,8 @@ elseif MODE==MODE_DITH then -- N&B
 elseif MODE==MODE_RGB2 then -- RGB
 	CONFIG.asm_mode  = 1
     CONFIG.px_size   = {1,3}
-	-- CONFIG.dither    = compo(norm,double,bayer){{3,1,2}}
-	-- CONFIG.dither    = compo(norm,double,vac)(16,5)
+	-- CONFIG.dither    = compo(norm,double,bayer){{3,1,2}} -- 24
+	-- CONFIG.dither    = compo(norm,halve,halve,vac)(16,5) -- 20
 
 	-- 12 = 3*4
 	CONFIG.dither    = compo(norm,vac)(16,5) -- très belle qualité gfx
@@ -2173,7 +2160,15 @@ elseif MODE==MODE_BM59 then -- BM59
 		-- compo(norm,halve,bayer,2){{1},{2}}
 		-- norm(vac(8,16))
 		-- norm(vac(5,11))
-		compo(norm,vac)(8,16)
+		compo(norm,vac)(8,16) -- ok
+		
+	-- compo(norm,double){
+		-- {7,4},
+		-- {8,6},
+		-- {5,2},
+		-- {3,1}
+	-- }
+
 	CONFIG.palette   = function(CONVERTER,VIDEO)
 		local H = {w={}} for i=0,255 do H.w[i]=0 end		
 		local function map(vals, histo)
@@ -2764,11 +2759,12 @@ function VIDEO:read_rgb24(raw)
 	self.overwrite = false
 	local i,w,b,p = math.floor,self.width,FILTER.byte,self.pset
 	local ox = i((self.screen_width - w)/2)
-	local oy = i((self.screen_height - 7 - 7 - self.height)/2)
-	if oy<0 then oy=0 else oy=oy+7 end
+	local oy = i((self.screen_height - 6 - 7 - self.height)/2)+6
+	if oy<0 then oy=0 end
 	local pr = self.filter:push(raw)
 	for o=0,w*self.height-1 do
 		local x,y,o = ox+(o % w), i(o/w)+oy,o*3
+		-- print(y, oy, w, o)
 		p(self, x, y,
 			b(pr,o+1), -- r
 			b(pr,o+2), -- g
@@ -2864,6 +2860,9 @@ function CONVERTER:_new_video(fps)
 end
 function CONVERTER:vidname()
 	return basename(self.file):gsub('%-%-(...........)$','') -- cut YT link '  (https://youtu.be//%1)')
+							  :gsub('%s*1440p60',''):gsub('%s*1080p',''):gsub('%s*2160p60','')
+							  :gsub('%s*%d+%s*[fF][pP][sS]','')
+							  :gsub('%[%]','')
 end
 function CONVERTER:_compress(pos, prev, curr, indices_fcn, out_fcn)
 	local k,b0,b1,b2
@@ -2888,14 +2887,11 @@ function CONVERTER:_compress(pos, prev, curr, indices_fcn, out_fcn)
 				b0,b1,b2,pos = 3,math.floor(i/256),i%256,i
 			end
 			-- print(zz, b0, b1, b2, '-->', pos)
+			-- if b2==nil then print() print(i, b0, b1, b2, curr[i+1]) end
 			out_fcn(b0,b1,b2)
 		end
 	end
 	return pos
-end
-local all_indexes = function()
-	local i = -1
-	return function() if i==8000 then return nil end i=i+1 return i,i end 
 end
 -- Fait un encodage "à vide" et regarde le nombre de trames moyen par image
 -- et compare à la limite théorique.
@@ -2931,8 +2927,8 @@ function CONVERTER:_stat()
     stat.type = {}; for i=0,3 do stat.type[i]=0 end
     stat.prev_img = {}; for i=0,7999 do stat.prev_img[i]=-1 end
     function stat:count_trames()
-		self:_compress(8000, stat.prev_img, stat.image, all_indexes, function(b0,b1,b2)
-			stat.type[b0],stat.trames = stat.type[b0]+1,stat.trames + (stat.trames % 171 == 169 and 2 or 1)
+		self:_compress(8000, stat.prev_img, stat.image, stat.progressiv, function(b0,b1,b2)
+			stat.type[b0],stat.trames = stat.type[b0]+1,stat.trames + (stat.trames % 171 == 169 and 4 or 1)
 		end)
     end
 
@@ -3096,21 +3092,21 @@ function CONVERTER:process()
 			video:puts(video.screen_width-wchars*stat_str:len(),video.screen_height-7, stat_str) 
 		end
 		video:puts(0,video.screen_height-7, time_str
-					..' b='..percent(video.filter.a)..'%'
-					..' f='..math.floor(100*video.framefill_ratio)..'%'
+					-- ..' b='..percent(video.filter.a)..'%'
+					-- ..' f='..math.floor(100*video.framefill_ratio)..'%'
 					,nil)
 		video:puts(title_x, 0, title_str)
 		if title_str:len()>hchars then
-			title_x = title_x - .5 --/CONFIG.px_size[1]
+			title_x = title_x - 30/(CONFIG.px_size[1]*self.fps)
 			if title_x <= -wchars then
 				title_x = title_x + wchars
 				title_str = title_str:sub(2) .. title_str:sub(1,1)
 			end
 		end
 		local col = MODE==MODE_DITH and {255,255,255}
-               	 or MODE==MODE_BM59 and {180,180,180} 
+               	 or MODE==MODE_BM59 and {156,156,156} 
 				 or                     {255,0,0}
-		video:progressbar(video.screen_height-1, tstamp/self.duration,unpack(col))
+		video:progressbar(math.ceil(200/CONFIG.px_size[2])-1, tstamp/self.duration,unpack(col))
 		-- 0..1.1   => green 
 		-- 1.1..2.1 => yellow
 		-- 2.1..3+	   => red
@@ -3119,32 +3115,54 @@ function CONVERTER:process()
 	end 
 	
 	-- la 1ere image doit se faire de 1 en 1
-    local curr,prev = video.image,{}
-	local indices = all_indexes
+    local curr,prev,first = video.image,{},true
 	
-	local filter_a,filter_b = .87,.95 -- .925 -- .95
-	if MODE==MODE_OTSU then filter_a = 0 end
+	local filter_s,filter_a,filter_b = 1.4,.87,.95 -- .925 -- .95
+	if MODE==MODE_OTSU then filter_a = 0 end -- no filtering for otsu
 
     -- conversion
-	video.filter.a = .95
-    video:next_image() 
+	video.filter.a = .95 -- progressive start
+    video:next_image() 	for i,v in pairs(curr) do prev[i] = 255-v end
     while audio.running and video.running do
-        update_info()
-
+		-- virtual compression
+		local cycles = 0
+		if MODE~=MODE_OTSU then
+			local prev2, frame_cnt = {},0
+			for i=0,7999 do prev2[i] = prev[i] end cycles = 0
+			self:_compress(pos, prev2, video.image, video.progressiv, function(b0,b1,b2) 
+				if frame_cnt == 169 then 
+					frame_cnt, cycles = 0, cycles + CYCLES*4
+				else
+					frame_cnt, cycles = frame_cnt+1, cycles + CYCLES
+				end
+			end)
+			
+			-- adapt filtering
+			if cycles >= filter_s*cycles_per_img then
+				local t = cycles
+				repeat
+					video.filter.a = video.filter.a*filter_a + (1-filter_a)*.85
+					t = t - cycles_per_img
+				until t<cycles_per_img
+			else
+				video.filter.a = video.filter.a*filter_a
+			end
+			-- video.filter.a = video.filter.a*filter_a
+		end
+		
+		-- real_compression
+		-- print((cycles + current_cycle >= 2*cycles_per_img) and 'interlaced' or 'progressive')
+		local indices = not first and CONFIG.px_size[2]<=1 and (cycles + current_cycle >= 2*cycles_per_img) 
+		      and video.interlaced 
+			  or  video.progressiv
+		cycles, first = 0, false
 		pos = self:_compress(pos, prev, video.image, indices, function(b0,b1,b2)
-			current_cycle = current_cycle + self.out:frame(b0,b1,b2,audio)
+			cycles = cycles + self.out:frame(b0,b1,b2,audio)
 		end)
         video.filter:flush()
-        completed_imgs = completed_imgs + 1
 
-		local filter_a,filter_b = .87,.95 -- .925 -- .95
-		-- if MODE==MODE_OTSU then filter_a = 0 end
-		video.framefill_ratio = video.framefill_ratio*filter_b + (1-filter_b)*current_cycle/cycles_per_img
-		-- if current_cycle >= 1.5*cycles_per_img then
-			-- video.filter.a = video.filter.a*filter_a + (1-filter_a)*.85
-		-- elseif current_cycle <= cycles_per_img/1.5 then
-			-- video.filter.a = video.filter.a*filter_a
-		-- end
+        completed_imgs, current_cycle = completed_imgs + 1, current_cycle + cycles
+		video.framefill_ratio = video.framefill_ratio*filter_b + (1-filter_b)*cycles/cycles_per_img
 		
         -- skip image if drift is too big
         -- if current_cycle>cycles_per_img then print(current_cycle/cycles_per_img) end
@@ -3167,9 +3185,7 @@ function CONVERTER:process()
 
         -- next image
         video:next_image()
-        
-		-- maintenant utilise les indices "dynamiques"
-		indices = video.indices
+        update_info()		
     end
 
     audio:close()
