@@ -1186,6 +1186,18 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, pset, duration)
         input = assert(io.popen(FFMPEG..
 			' -i "'..file..'" -v 0 -r '..fps..
 			' -s '..w..'x'..h..
+			-- ' -vf "hqdn3d=luma_spatial=12: chroma_spatial=1: luma_tmp=1: chroma_tmp=1"' ..
+			' -vf "tmedian"'..
+			-- ' -vf "hqdn3d"' ..
+			-- ' -vf "atadenoise"' ..
+			-- ' -vf "bm3d"'..
+			-- ' -vf "chromanr"'..
+			-- ' -vf "dctdnoiz"'..
+			-- ' -vf "nlmeans"'..
+			-- ' -vf "owdenoise"'..
+			-- ' -vf "removegrain"'..
+			-- ' -vf "tmix"'..
+			-- ' -vf "vaguedenoiser"'..
 			' -an -f rawvideo -pix_fmt rgb24 pipe:', 
 			POPEN_READBIN)),
 		pset = pset
@@ -2093,14 +2105,11 @@ elseif MODE==MODE_DITH then -- N&B
 			end
 			self.pset = function(self, x,y, r,g,b)
 				x = x+320*y
-				if self.overwrite then
-					local i,f = self.image,math.floor(x/8)
-					if (i[f]/_mask[x]) % 2 >= 1 then
-						i[f] = i[f] - _mask[x]
-					end
+				local i,f = self.image,math.floor(x/8)
+				if self.overwrite and (i[f]/_mask[x]) % 2 >= 1 then
+					i[f] = i[f] - _mask[x]
 				end
 				if _r[r] + _g[g] + _b[b] >= _dith[x] then
-					local i,f = self.image,math.floor(x/8)
 					i[f] = i[f] + _mask[x]
 				end
 			end
@@ -2560,8 +2569,8 @@ elseif MODE==MODE_CR16 then -- color reduction
                 while stat.running do stat:next_image() end
             end
         end
-		-- reducer:boostBorderColors()
-		-- reducer:boostBorderColors()					 
+		reducer:boostBorderColors()
+		reducer:boostBorderColors()					 
 		-- reducer:boostBorderColors()			
 		-- reducer:boostBorderColors()			
 		-- for i=1,16 do reducer:boostBorderColors() end
@@ -2754,6 +2763,125 @@ end
 function VIDEO:clear()
     for p=0,#self.image do self.image[p] = 0 end
 end
+
+function VIDEO:clean2d(raw)
+	local w,h,z,px,t,lz = self.width,self.height,string.char(0,0,0),
+			self.clean2d_px,self.clean2d_t,self.clean2d_lz
+	if px==nil then
+		px, lz = {}, z
+		for x=1,w do px[x], lz = {0,0,0}, lz..z end
+		t = {0,0,0,0,0,0,0,0,0}
+		self.clean2d_px, self.clean2d_t, self.clean2d_lz = px, t, lz
+	end
+	raw = raw..lz
+	local y3,w3,ret = 1,3*w,''
+	local l1,l2,l3 = lz,lz,raw:sub(y3,y3+w3)..z
+	local a,b,c,d,e,f,g,i,j
+	local sort,byte = table.sort,string.byte
+	for y=1,h do
+		l1,l2,l3,y3 = l2,l3,raw:sub(y3,y3+w3)..z,y3+w3
+		for r=1,3 do
+			a,b,c,d,e,f,g,i,j,r =
+				0,0,byte(l1,r),0,0,byte(l2,r),0,0,byte(l3,r),r+3
+			for x=1,w do
+				a,b,c,d,e,f,g,i,j,r =
+					b,c,byte(l1,r),d,e,byte(l2,r),i,j,byte(l3,r),r+3
+				local q = {a,b,c,d,e,f,g,i,j}
+				sort(q)
+				px[x][r] = q[5]
+			end
+		end
+		for x=1,w do ret = ret..string.char(unpack(px[x])) end
+	end
+	return ret
+end
+
+function VIDEO:clean2d(raw)
+	local w,h,z,px,t,lz = self.width,self.height,string.char(0,0,0),
+			self.clean2d_px,self.clean2d_t,self.clean2d_lz
+	if px==nil then
+		px, lz = {}, z
+		for x=1,w do px[x], lz = {0,0,0}, lz..z end
+		t = {0,0,0,0,0,0,0,0,0}
+		self.clean2d_px, self.clean2d_t, self.clean2d_lz = px, t, lz
+	end
+	raw = raw..lz
+	local y3,w3,ret = 1,3*w,''
+	local l = {lz,lz,raw:sub(y3,y3+w3)..z} y3=y3+w3
+	local sort,byte,cmp = table.sort,string.byte,function(a,b) return  a[1]<b[1] end
+	for y=1,h do
+		l[1],l[2],l[3],y3 = l[2],l[3],raw:sub(y3,y3+w3)..z,y3+w3
+		for r=1,3 do
+			local q = {
+				{0,0,1}, {0,1,1}, {byte(l[1],r),2,1},
+				{0,0,2}, {0,1,2}, {byte(l[2],r),2,2},
+				{0,0,3}, {0,1,3}, {byte(l[3],r),2,3}
+			}
+			for x=1,w do
+				for i=1,9 do
+					local qq = q[i]
+					if qq[2]==0 then
+						qq[1],qq[2] = byte(l[qq[3]],r+3*x),2
+					else
+						qq[2] = qq[2] - 1
+					end
+				end
+				sort(q, cmp)
+				px[x][r] = q[5][1]
+			end
+		end
+		for x=1,w do ret = ret..string.char(unpack(px[x])) end
+	end
+	return ret
+end
+
+function VIDEO:clean1d(raw)
+	local w,h,px = self.width,self.height,self.clean1d_px
+	if px==nil then
+		px = {}
+		for y=0,h+1 do px[y] = {} for x=1,w do px[y][x] = {0,0,0} end end
+		self.clean1d_px = px
+	end
+	
+	local cache = self.clean1d_cache
+	if not cache then cache = {} self.clean1d_cache=cache end
+	local char,floor = string.char, math.floor
+	local function median3(a,b,c)
+		local k = char(floor(a/8),floor(b/8),floor(c/8))
+		local r = cache[k]
+		if r==nil then
+			r = (a<=b and a<=c and (b<c and b or c))
+			 or (b<=a and b<=c and (a<c and a or c))
+			 or                    (a<b and a or b)
+			cache[k] = r
+		end
+		return r
+	end
+	
+	local ret,a,b,c=''
+	for x=1,w do raw = raw..string.char(0,0,0) end
+	for x=1,w do
+		for r=1,3 do
+			a,b,c = 0,0,raw:byte(r+3*x-3)
+			for y=1,h do
+				a,b,c = b,c,raw:byte(r+3*(x+y*w)-3)
+				px[y][x][r] = median3(a,b,c)
+			end
+		end
+	end
+	
+	for y=1,h do
+		a,b,c = px[y-1],px[y],px[y+1]
+		for x=1,w do
+			for r=1,3 do
+				ret = ret..string.char(median3(a[x][r],b[x][r],c[x][r]))
+			end
+		end
+	end
+
+	return ret
+end
+
 function VIDEO:read_rgb24(raw)
 	self:clear()
 	self.overwrite = false
@@ -2761,6 +2889,10 @@ function VIDEO:read_rgb24(raw)
 	local ox = i((self.screen_width - w)/2)
 	local oy = i((self.screen_height - 6 - 7 - self.height)/2)+6
 	if oy<0 then oy=0 end
+	
+	-- raw = self:clean2d(raw)
+	-- raw = self:clean1d(raw)
+	
 	local pr = self.filter:push(raw)
 	for o=0,w*self.height-1 do
 		local x,y,o = ox+(o % w), i(o/w)+oy,o*3
@@ -2862,6 +2994,7 @@ function CONVERTER:vidname()
 	return basename(self.file):gsub('%-%-(...........)$','') -- cut YT link '  (https://youtu.be//%1)')
 							  :gsub('%s*1440p60',''):gsub('%s*1080p',''):gsub('%s*2160p60','')
 							  :gsub('%s*%d+%s*[fF][pP][sS]','')
+							  :gsub('%s*%[HD%]','')
 							  :gsub('%[%]','')
 end
 function CONVERTER:_compress(pos, prev, curr, indices_fcn, out_fcn)
@@ -3091,7 +3224,7 @@ function CONVERTER:process()
 		if stat_str~='' then 
 			video:puts(video.screen_width-wchars*stat_str:len(),video.screen_height-7, stat_str) 
 		end
-		video:puts(0,video.screen_height-7, time_str
+		video:puts(0,math.ceil(200/CONFIG.px_size[2])-7, time_str
 					-- ..' b='..percent(video.filter.a)..'%'
 					-- ..' f='..math.floor(100*video.framefill_ratio)..'%'
 					,nil)
@@ -3104,7 +3237,7 @@ function CONVERTER:process()
 			end
 		end
 		local col = MODE==MODE_DITH and {255,255,255}
-               	 or MODE==MODE_BM59 and {156,156,156} 
+               	 or MODE==MODE_BM59 and {155,155,155} 
 				 or                     {255,0,0}
 		video:progressbar(math.ceil(200/CONFIG.px_size[2])-1, tstamp/self.duration,unpack(col))
 		-- 0..1.1   => green 
@@ -3116,14 +3249,19 @@ function CONVERTER:process()
 	
 	-- la 1ere image doit se faire de 1 en 1
     local curr,prev,first = video.image,{},true
+	if self._prev then
+		for i=0,#curr do prev[i] = self._prev[i] end
+	else
+		for i=0,#curr do prev[i] = 0 end
+	end
 	
-	local filter_s,filter_a,filter_b = 1.4,.87,.95 -- .925 -- .95
-	if MODE==MODE_OTSU then filter_a = 0 end -- no filtering for otsu
-
+	local filter_s,filter_a,filter_b = 1.5,.87,.95 -- .925 -- .95
+	
     -- conversion
 	video.filter.a = .95 -- progressive start
-    video:next_image() 	for i,v in pairs(curr) do prev[i] = 255-v end
+    video:next_image() 	
     while audio.running and video.running do
+		update_info()
 		-- virtual compression
 		local cycles = 0
 		if MODE~=MODE_OTSU then
@@ -3147,12 +3285,15 @@ function CONVERTER:process()
 			else
 				video.filter.a = video.filter.a*filter_a
 			end
-			-- video.filter.a = video.filter.a*filter_a
+		else
+			video.filter.a = video.filter.a*filter_a
 		end
 		
 		-- real_compression
 		-- print((cycles + current_cycle >= 2*cycles_per_img) and 'interlaced' or 'progressive')
-		local indices = not first and CONFIG.px_size[2]<=1 and (cycles + current_cycle >= 2*cycles_per_img) 
+		local indices = not first 
+			  and (CONFIG.px_size[2]<=1 or video.filter.a>=.71)
+			  and (cycles + current_cycle >= 2*cycles_per_img) 
 		      and video.interlaced 
 			  or  video.progressiv
 		cycles, first = 0, false
@@ -3184,16 +3325,16 @@ function CONVERTER:process()
 		current_cycle = current_cycle - cycles_per_img
 
         -- next image
-        video:next_image()
-        update_info()		
+        video:next_image() 		
     end
-
-    audio:close()
-    video:close()
-	
-	tstamp = self.duration
+	tstamp = self.duration -- update_info()
     io.stdout:write(info() .. '\n')
     io.stdout:flush()
+
+	self._prev = video.image
+	
+    audio:close()
+    video:close()
 end
 
 local OUT = {}
@@ -3339,12 +3480,14 @@ if #arg>1 then -- infer name
         return subs
     end
     local subs,num,first = substrings(file),0,nil
-    for i,f in ipairs(arg) do
+	local _arg = arg; arg = {}
+    for i,f in ipairs(_arg) do
         local TMP = CONVERTER:new(f,nil,3)
         if TMP then
 			first = first or f
             subs:intersect(substrings(basename(f)))
 			num = num + 1
+			arg[num] = f
         end
     end
     file = subs:longest():gsub("%W+$", "")
@@ -3355,7 +3498,7 @@ if #arg>1 then -- infer name
 end
 PALETTE:init(CONFIG.palette(CONVERTER,VIDEO))
 local out = OUT:new(tag..file..'.sd')
-local first = true
+local first, last_img = true
 for i,f in ipairs(arg) do
     local conv = CONVERTER:new(f,out,FPS)
     if conv then
@@ -3366,7 +3509,9 @@ for i,f in ipairs(arg) do
 				return i..'/'..#arg..' '..self:super_vidname()
 			end 
 		end
+		conv._prev = last_img
 		conv:process() 
+		last_img = conv._prev
 	end
 	i=i+1
 end

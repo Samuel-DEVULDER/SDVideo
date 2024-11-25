@@ -201,7 +201,7 @@ INIT
   FCB   %00000000
   DEC   ,X            memoire fond
   JSR   ECRAN1        remplissage fond
-  FCB   %01110000     blanc sur noir
+  FCB   %00010000     rouge sur noir
   JSR   ECRAN3        remplissage fond 
   FCB   %01000000
   FCB   %00100000
@@ -330,7 +330,7 @@ INIT_TO
   FCB   %00000000
   DEC   3,X           memoire fond
   JSR   ECRAN1
-  FCB   %11111000
+  FCB   %11001000
   JSR   ECRAN3        remplissage fond 
   FCB   %11100000
   FCB   %11010000
@@ -485,6 +485,8 @@ PREP_STACK
   
   LDX   #$0000        adresse ecran
   VAR   PATCH_ECR,-2
+  STX   DEB_ECRAN
+  
   JMP   DEB_BLOC      1 bloc = 170 * 3 + 2
     
 *------------------------------------------------------
@@ -517,6 +519,13 @@ STOP
   JSR   $A028         EXCMD = execution commande CMD12
   VAR   PATCH_FIN,-2
 *  BCS   STOP
+
+* nettoyage ecran
+  LDU  #0
+  VAR  DEB_ECRAN,-2
+  LEAU 8000,U
+  BSR  ECRAN1
+  FCB  0
 
 * recommencer la lecture du fichier
   JMP   READ_VID
@@ -567,7 +576,7 @@ ECRAN31
   PSHS  U,X
   TFR   D,Y           Y=D="val" "val"
   LEAX  ,Y            X=Y=D="val" "val"
-  LDA   #66+1         extra yellow line for progress bar
+  LDA   #66           extra yellow line for progress bar
 ECRAN32
   PSHU  B,X,Y         ecrit une ligne 
   PSHU  B,X,Y         (5*8) avec "val"
