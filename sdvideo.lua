@@ -40,7 +40,9 @@
 -- ===========================================================================
 
 local MODE_TXT = {}
-for i,v in pairs{"OTSU", "DITH", "BM59", 
+for i,v in pairs{
+				 "EDGE",
+				 "OTSU", "DITH", "BM59", 
 			     "RGB2", "C345", "RGB6",
 				 "RGB4", "RGB5", "CR16",
 				 nil} do
@@ -418,13 +420,14 @@ end
 -- ===========================================================================
 -- init global data
 CONFIG = {
-	asm_mode    = 0,
-    px_size     = {1,1},
-    dither      = {{1}},
-    palette     = compo{0x000,0x00F,0x0F0,0x0FF,
-                        0xF00,0xF0F,0xFF0,0xFFF,
-                        0x666,0x338,0x383,0x388,
-                        0x833,0x838,0x883,0x069}
+	asm_mode     = 0,
+	ffmpeg_extra = '',
+    px_size      = {1,1},
+    dither       = {{1}},
+    palette      = compo{0x000,0x00F,0x0F0,0x0FF,
+                         0xF00,0xF0F,0xFF0,0xFFF,
+                         0x666,0x338,0x383,0x388,
+                         0x833,0x838,0x883,0x069}
 }
 
 local PALETTE = {ef={}}
@@ -1198,6 +1201,7 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, pset, duration)
 			-- ' -vf "removegrain"'..
 			-- ' -vf "tmix"'..
 			-- ' -vf "vaguedenoiser"'..
+			CONFIG.ffmpeg_extra ..
 			' -an -f rawvideo -pix_fmt rgb24 pipe:', 
 			POPEN_READBIN)),
 		pset = pset
@@ -1222,7 +1226,7 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, pset, duration)
 		local n = cpt % m
 		for i=0,7999 do 
 			local line = i2l[i]
-			if  line<6  -- do not interlace title zone
+			if  line<=6  -- do not interlace title zone
 			or (line%m)==n then table.insert(t,i) else curr[i] = prev[i] end 
 		end
 		return ipairs(t)
@@ -1967,65 +1971,70 @@ function VIDEO:putf(x,y,...)
     return self:puts(x,y,string.format(...))
 end
 
+function VIDEO:otsu(gray)
+	-- https://en.wikipedia.org/wiki/Otsu's_method
+	local histo = self._histo
+	if histo==nil then histo = {}; self._histo = histo end
+	for i=0,255   do histo[i] = 0 end
+	for i=0,63999 do local g = gray[i]; histo[g] = histo[g]+1 end
+	local wB,sumB,sum1,maximum,level = 0,0,0,-1,256
+	for i=0,255 do sum1 = sum1 + i*histo[i] end
+	for i=0,255 do
+		local wF = 64000-wB
+		if wB>0 and wF>0 then
+			local mF = (sum1-sumB)/wF
+			local v = wB * wF * ((sumB / wB) - mF) * ((sumB / wB) - mF)
+			if v > maximum then	maximum,level = v,i end
+		end
+		wF = histo[i]
+		wB,sumB = wB + wF,sumB + i*wF
+	end		
+	for i=0,63999 do 
+		if gray[i]>level then
+			local a,b = unpack(self._mask[i])
+			self.image[a] = self.image[a] + b
+		end
+		gray[i] = 0
+	end			
+end
+
+function VIDEO:setup_gray()
+	self._mask = {}
+	for i=0,320*200-1 do self._mask[i]={math.floor(i/8),2^(7-(i%8))} end
+
+	self._r,self._g,self._b = {},{},{}
+	for i=0,255 do
+		local lin = PALETTE.linear(i)
+		self._r[i] = lin*GRAY_R*255
+		self._g[i] = lin*GRAY_G*255
+		self._b[i] = lin*GRAY_B*255
+	end
+	
+	self._gray = {} for i=0,63999 do self._gray[i] = 0 end
+	
+	self.pset = function(self, x,y, r,g,b)
+		if self.overwrite then
+			local i,f,_mask = self.image,unpack(self._mask[x+320*y])
+			if (i[f]/_mask) % 2 >= 1 then
+				i[f] = i[f] - _mask
+			end
+			if self._r[r]+self._g[g]+self._b[b]>50 then
+				i[f] = i[f] + _mask
+			end
+		else
+			self._gray[x+y*320] = round(self._r[r]+self._g[g]+self._b[b])
+		end
+	end
+end
+
 if MODE==MODE_OTSU then -- Otsu
     CONFIG.asm_mode  = 0
     function VIDEO:pset(x,y, r,g,b)
-		self._mask = {}
-		for i=0,320*200-1 do self._mask[i]={math.floor(i/8),2^(7-(i%8))} end
-
-		self._r = {}
-		self._g = {}
-		self._b = {}
-		for i=0,255 do
-			local lin = PALETTE.linear(i)
-			self._r[i] = lin*GRAY_R*255
-			self._g[i] = lin*GRAY_G*255
-			self._b[i] = lin*GRAY_B*255
-		end
-		
-		self._gray = {} for i=0,320*200-1 do self._gray[i] = 0 end
+		self:setup_gray()
 		self._flush = self.filter.flush
 		self.filter.flush = function(filter) 
 			self._flush(filter)
-			
-			-- https://en.wikipedia.org/wiki/Otsu's_method
-			local histo = self._histo
-			if histo==nil then histo = {}; self._histo = histo end
-			for i=0,255 do histo[i] = 0 end
-			for i=0,320*200-1 do local g = self._gray[i]; histo[g] = histo[g]+1 end
-			local wB,sumB,sum1,maximum,level = 0,0,0,-1,256
-			for i=0,255 do sum1 = sum1 + i*histo[i] end
-			for i=0,255 do
-				local wF = 320*200-wB
-				if wB>0 and wF>0 then
-					local mF = (sum1-sumB)/wF
-					local v = wB * wF * ((sumB / wB) - mF) * ((sumB / wB) - mF)
-					if v > maximum then	maximum,level = v,i end
-				end
-				wF = histo[i]
-				wB,sumB = wB + wF,sumB + i*wF
-			end		
-			for i=0,320*200-1 do 
-				if self._gray[i]>level then
-					local a,b = unpack(self._mask[i])
-					self.image[a] = self.image[a] + b
-				end
-				self._gray[i] = 0
-			end			
-		end
-
-		self.pset = function(self, x,y, r,g,b)
-			if self.overwrite then
-				local i,f,_mask = self.image,unpack(self._mask[x+320*y])
-				if (i[f]/_mask) % 2 >= 1 then
-					i[f] = i[f] - _mask
-				end
-				if self._r[r]+self._g[g]+self._b[b]>50 then
-					i[f] = i[f] + _mask
-				end
-			else
-				self._gray[x+y*320] = math.floor(0.5+self._r[r]+self._g[g]+self._b[b])
-			end
+			self:otsu(self._gray)
 		end
 		self:pset(x,y,r,g,b)
     end
@@ -2089,7 +2098,7 @@ elseif MODE==MODE_DITH then -- N&B
 		{10,15, 6, 2},
 		{ 5, 9, 3, 1} 
 	}
-	-- CONFIG.dither = compo(norm,halve,vac)(16,16)	
+	-- CONFIG.dither = compo(norm,double,vac)(8,8)	
 	-- CONFIG.dither = compo(norm,bayer,2){{1}}
 	function VIDEO:pset(x,y, r,g,b)
         if not self.dither then 
@@ -2756,130 +2765,48 @@ elseif MODE==MODE_RGB5 then
 			0x100*b.base[5]+0x010*g.base[5]+0x001*r.base[5]
 		}
     end
+elseif MODE==MODE_EDGE then
+    CONFIG.asm_mode     = 0
+	CONFIG.ffmpeg_extra = ' -vf "gblur=sigma=2"'
+    function VIDEO:pset(x,y, r,g,b)
+		self:setup_gray()
+		for i=1,644 do self._gray[-i], self._gray[63999+i] = 0,0 end
+		self._gray2 = {}
+		for i=1,644 do self._gray2[-i], self._gray2[63999+i] = 0,0 end
+		self._flush = self.filter.flush
+		self.filter.flush = function(filter) 
+			self._flush(filter)
+			
+			local gray,img,sqrt = self._gray2,self._gray,math.sqrt
+			
+			-- sobel operator
+			local mx,max = 10,math.max
+			for p=0,63999 do mx=max(mx,img[p]) end
+			-- local mx,max = sqrt(2*(4*255)^2),math.max
+			for p=0,63999 do
+				local a,b,c, d,e,f,	g,h,i = 
+					img[p-321], img[p-320], img[p-319],
+					img[p-1],img[p],img[p+1],
+					img[p+319],img[p+320],img[p+321]
+				local x = (a-c+g-i)+2*(d-f)
+				local y = (a+c-g-i)+2*(b-h)		
+				local t = sqrt(x*x+y*y)
+				gray[p],mx = t,max(mx,t)
+			end
+			for p=0,63999 do gray[p] = round(gray[p]*255/mx) end
+			-- for x=0,319 do gray[x], gray[63999-x]=0,0 end
+			-- for x=0,63999,320 do gray[x], gray[x+319]=0,0 end
+			self:otsu(gray)
+		end
+		self:pset(x,y,r,g,b)
+    end
+
 else
     error("Invalid MODE="..(MODE and MODE or "<empty>"))
 end
 
 function VIDEO:clear()
     for p=0,#self.image do self.image[p] = 0 end
-end
-
-function VIDEO:clean2d(raw)
-	local w,h,z,px,t,lz = self.width,self.height,string.char(0,0,0),
-			self.clean2d_px,self.clean2d_t,self.clean2d_lz
-	if px==nil then
-		px, lz = {}, z
-		for x=1,w do px[x], lz = {0,0,0}, lz..z end
-		t = {0,0,0,0,0,0,0,0,0}
-		self.clean2d_px, self.clean2d_t, self.clean2d_lz = px, t, lz
-	end
-	raw = raw..lz
-	local y3,w3,ret = 1,3*w,''
-	local l1,l2,l3 = lz,lz,raw:sub(y3,y3+w3)..z
-	local a,b,c,d,e,f,g,i,j
-	local sort,byte = table.sort,string.byte
-	for y=1,h do
-		l1,l2,l3,y3 = l2,l3,raw:sub(y3,y3+w3)..z,y3+w3
-		for r=1,3 do
-			a,b,c,d,e,f,g,i,j,r =
-				0,0,byte(l1,r),0,0,byte(l2,r),0,0,byte(l3,r),r+3
-			for x=1,w do
-				a,b,c,d,e,f,g,i,j,r =
-					b,c,byte(l1,r),d,e,byte(l2,r),i,j,byte(l3,r),r+3
-				local q = {a,b,c,d,e,f,g,i,j}
-				sort(q)
-				px[x][r] = q[5]
-			end
-		end
-		for x=1,w do ret = ret..string.char(unpack(px[x])) end
-	end
-	return ret
-end
-
-function VIDEO:clean2d(raw)
-	local w,h,z,px,t,lz = self.width,self.height,string.char(0,0,0),
-			self.clean2d_px,self.clean2d_t,self.clean2d_lz
-	if px==nil then
-		px, lz = {}, z
-		for x=1,w do px[x], lz = {0,0,0}, lz..z end
-		t = {0,0,0,0,0,0,0,0,0}
-		self.clean2d_px, self.clean2d_t, self.clean2d_lz = px, t, lz
-	end
-	raw = raw..lz
-	local y3,w3,ret = 1,3*w,''
-	local l = {lz,lz,raw:sub(y3,y3+w3)..z} y3=y3+w3
-	local sort,byte,cmp = table.sort,string.byte,function(a,b) return  a[1]<b[1] end
-	for y=1,h do
-		l[1],l[2],l[3],y3 = l[2],l[3],raw:sub(y3,y3+w3)..z,y3+w3
-		for r=1,3 do
-			local q = {
-				{0,0,1}, {0,1,1}, {byte(l[1],r),2,1},
-				{0,0,2}, {0,1,2}, {byte(l[2],r),2,2},
-				{0,0,3}, {0,1,3}, {byte(l[3],r),2,3}
-			}
-			for x=1,w do
-				for i=1,9 do
-					local qq = q[i]
-					if qq[2]==0 then
-						qq[1],qq[2] = byte(l[qq[3]],r+3*x),2
-					else
-						qq[2] = qq[2] - 1
-					end
-				end
-				sort(q, cmp)
-				px[x][r] = q[5][1]
-			end
-		end
-		for x=1,w do ret = ret..string.char(unpack(px[x])) end
-	end
-	return ret
-end
-
-function VIDEO:clean1d(raw)
-	local w,h,px = self.width,self.height,self.clean1d_px
-	if px==nil then
-		px = {}
-		for y=0,h+1 do px[y] = {} for x=1,w do px[y][x] = {0,0,0} end end
-		self.clean1d_px = px
-	end
-	
-	local cache = self.clean1d_cache
-	if not cache then cache = {} self.clean1d_cache=cache end
-	local char,floor = string.char, math.floor
-	local function median3(a,b,c)
-		local k = char(floor(a/8),floor(b/8),floor(c/8))
-		local r = cache[k]
-		if r==nil then
-			r = (a<=b and a<=c and (b<c and b or c))
-			 or (b<=a and b<=c and (a<c and a or c))
-			 or                    (a<b and a or b)
-			cache[k] = r
-		end
-		return r
-	end
-	
-	local ret,a,b,c=''
-	for x=1,w do raw = raw..string.char(0,0,0) end
-	for x=1,w do
-		for r=1,3 do
-			a,b,c = 0,0,raw:byte(r+3*x-3)
-			for y=1,h do
-				a,b,c = b,c,raw:byte(r+3*(x+y*w)-3)
-				px[y][x][r] = median3(a,b,c)
-			end
-		end
-	end
-	
-	for y=1,h do
-		a,b,c = px[y-1],px[y],px[y+1]
-		for x=1,w do
-			for r=1,3 do
-				ret = ret..string.char(median3(a[x][r],b[x][r],c[x][r]))
-			end
-		end
-	end
-
-	return ret
 end
 
 function VIDEO:read_rgb24(raw)
@@ -2889,9 +2816,6 @@ function VIDEO:read_rgb24(raw)
 	local ox = i((self.screen_width - w)/2)
 	local oy = i((self.screen_height - 6 - 7 - self.height)/2)+6
 	if oy<0 then oy=0 end
-	
-	-- raw = self:clean2d(raw)
-	-- raw = self:clean1d(raw)
 	
 	local pr = self.filter:push(raw)
 	for o=0,w*self.height-1 do
@@ -3210,7 +3134,7 @@ function CONVERTER:process()
 	end
 	if title_str:len()>hchars then title_x = 1 end
 
-	video.framefill_ratio = 0
+	-- video.framefill_ratio = 0
 	local function update_info()
 		if video.cpt>=info_sec then
 			info_sec = info_sec + video.fps
@@ -3248,10 +3172,9 @@ function CONVERTER:process()
 	end 
 	
 	-- la 1ere image doit se faire de 1 en 1
-    local curr,prev,first = video.image,{},true
-	if self._prev then
-		for i=0,#curr do prev[i] = self._prev[i] end
-	else
+    local curr,prev,first = video.image,self._prev,true
+	if not prev then
+		prev = {} 
 		for i=0,#curr do prev[i] = 0 end
 	end
 	
@@ -3264,7 +3187,7 @@ function CONVERTER:process()
 		update_info()
 		-- virtual compression
 		local cycles = 0
-		if MODE~=MODE_OTSU then
+		if MODE>MODE_OTSU then
 			local prev2, frame_cnt = {},0
 			for i=0,7999 do prev2[i] = prev[i] end cycles = 0
 			self:_compress(pos, prev2, video.image, video.progressiv, function(b0,b1,b2) 
@@ -3292,7 +3215,7 @@ function CONVERTER:process()
 		-- real_compression
 		-- print((cycles + current_cycle >= 2*cycles_per_img) and 'interlaced' or 'progressive')
 		local indices = not first 
-			  and (CONFIG.px_size[2]<=1 or video.filter.a>=.71)
+			  and (CONFIG.px_size[2]<=1 or video.filter.a>=.81)
 			  and (cycles + current_cycle >= 2*cycles_per_img) 
 		      and video.interlaced 
 			  or  video.progressiv
@@ -3303,7 +3226,7 @@ function CONVERTER:process()
         video.filter:flush()
 
         completed_imgs, current_cycle = completed_imgs + 1, current_cycle + cycles
-		video.framefill_ratio = video.framefill_ratio*filter_b + (1-filter_b)*cycles/cycles_per_img
+		-- video.framefill_ratio = vi	deo.framefill_ratio*filter_b + (1-filter_b)*cycles/cycles_per_img
 		
         -- skip image if drift is too big
         -- if current_cycle>cycles_per_img then print(current_cycle/cycles_per_img) end
@@ -3331,7 +3254,9 @@ function CONVERTER:process()
     io.stdout:write(info() .. '\n')
     io.stdout:flush()
 
-	self._prev = video.image
+	update_info()
+	for i =0,#curr do prev[i] = curr[i] end
+	self._prev = prev
 	
     audio:close()
     video:close()

@@ -160,6 +160,12 @@ INIT
 *------------------------------------------------------
 * Initialisations communes MO5/MO6/PC128
 *------------------------------------------------------
+
+*  LDA   $C000         reset du basic
+* $1FDF = $A5 --> restore palette
+  CLR    $2200        reset basic 1
+  CLR    $2300        reset basic 128
+
   IFEQ  (MODE-MODE_PAL)*(MODE-MODE_BM59)
 * MO5   -> 00
 * MO5N  -> 01
@@ -233,7 +239,7 @@ INIT
   LDA   ,X            port A du PIA systeme
   ANDA  #$E1          raz couleur cadre (noir)
   STA   ,X            change couleur cadre
-  BRA   INIT8         suite des initialisations
+  JMP   INIT8         suite des initialisations
 
 *------------------------------------------------------
 * Erreur
@@ -282,11 +288,11 @@ INIT_TO
   LDB   #$E7          Valeur espace I/O
   STB   PATCH_CYC     pour compenser 1 cycle
   
-  LDB   #$40
+  LDD   #$240
   STB   PATCH_ECR
-  LDB   #2
-  STB   PATCH_POS
-
+  STA   PATCH_POS
+  
+  CLR   $60D1        force reset basic
 
 * $FFF0
 * T9000 -> 00
