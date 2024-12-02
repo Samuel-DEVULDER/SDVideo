@@ -1001,6 +1001,7 @@ function FILTER:push(bytecode)
 	if t==nil then t = {}; self.t[self.i] = t end
 	if self.a>=.001 then
 		local u = self.t[self.i-1]
+		for i=#u+1,bytecode:len() do u[i] = 0 end
 		local a,b,f = self.a,1-self.a,math.floor
 		for i=1,bytecode:len() do t[i] = f(.5 + u[i]*a + b*bytecode:byte(i)) end
 	else
@@ -1199,7 +1200,7 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, pset, duration)
 			-- ' -vf "nlmeans"'..
 			-- ' -vf "owdenoise"'..
 			-- ' -vf "removegrain"'..
-			-- ' -vf "tmix"'..
+			' -vf "tmix"'..
 			-- ' -vf "vaguedenoiser"'..
 			CONFIG.ffmpeg_extra ..
 			' -an -f rawvideo -pix_fmt rgb24 pipe:', 
@@ -1979,23 +1980,29 @@ function VIDEO:otsu(gray)
 	for i=0,63999 do local g = gray[i]; histo[g] = histo[g]+1 end
 	local wB,sumB,sum1,maximum,level = 0,0,0,-1,256
 	for i=0,255 do sum1 = sum1 + i*histo[i] end
+	local function sqr(x) return x*x end
 	for i=0,255 do
 		local wF = 64000-wB
-		if wB>0 and wF>0 then
+		if wB*wF>0 then
 			local mF = (sum1-sumB)/wF
-			local v = wB * wF * ((sumB / wB) - mF) * ((sumB / wB) - mF)
+			local v = wB * wF * sqr((sumB / wB) - mF)
 			if v > maximum then	maximum,level = v,i end
 		end
 		wF = histo[i]
 		wB,sumB = wB + wF,sumB + i*wF
-	end		
-	for i=0,63999 do 
-		if gray[i]>level then
-			local a,b = unpack(self._mask[i])
-			self.image[a] = self.image[a] + b
-		end
-		gray[i] = 0
-	end			
+	end	
+	local m,j,img = {128,64,32,16,8,4,2,1},0,self.image
+	for i=0,7999 do for _,m in ipairs(m) do
+		if gray[j]>level then img[i] = img[i] + m end
+		gray[j],j = 0,j+1
+	end end
+	-- for i=0,63999 do 
+		-- if gray[i]>level then
+			-- local a,b = unpack(self._mask[i])
+			-- self.image[a] = self.image[a] + b
+		-- end
+		-- gray[i] = 0
+	-- end			
 end
 
 function VIDEO:setup_gray()
@@ -2099,7 +2106,7 @@ elseif MODE==MODE_DITH then -- N&B
 		{ 5, 9, 3, 1} 
 	}
 	-- CONFIG.dither = compo(norm,double,vac)(8,8)	
-	-- CONFIG.dither = compo(norm,bayer,2){{1}}
+	CONFIG.dither = compo(norm, double, bayer, 2){{1}}
 	function VIDEO:pset(x,y, r,g,b)
         if not self.dither then 
 			self:init_dither()
@@ -2767,7 +2774,7 @@ elseif MODE==MODE_RGB5 then
     end
 elseif MODE==MODE_EDGE then
     CONFIG.asm_mode     = 0
-	CONFIG.ffmpeg_extra = ' -vf "gblur=sigma=2"'
+	CONFIG.ffmpeg_extra = ' -vf "gblur=sigma=1.4"'
     function VIDEO:pset(x,y, r,g,b)
 		self:setup_gray()
 		for i=1,644 do self._gray[-i], self._gray[63999+i] = 0,0 end
@@ -2781,8 +2788,8 @@ elseif MODE==MODE_EDGE then
 			
 			-- sobel operator
 			local mx,max = 10,math.max
-			for p=0,63999 do mx=max(mx,img[p]) end
-			-- local mx,max = sqrt(2*(4*255)^2),math.max
+			-- for p=0,63999 do mx=max(mx,img[p]) end
+			-- local K = 255/sqrt(2*(4*255)^2)
 			for p=0,63999 do
 				local a,b,c, d,e,f,	g,h,i = 
 					img[p-321], img[p-320], img[p-319],
@@ -2790,6 +2797,7 @@ elseif MODE==MODE_EDGE then
 					img[p+319],img[p+320],img[p+321]
 				local x = (a-c+g-i)+2*(d-f)
 				local y = (a+c-g-i)+2*(b-h)		
+				-- gray[p] = round(sqrt(x*x+y*y)*K)
 				local t = sqrt(x*x+y*y)
 				gray[p],mx = t,max(mx,t)
 			end
@@ -3099,7 +3107,7 @@ function CONVERTER:process()
     local cycles_per_img = 1000000 / self.fps
     local current_cycle  = 0
     local completed_imgs = 0
-    local pos            = 8000
+    local pos            = 8040
 
 	-- user feedback
 	local last_etc=1e38
@@ -3142,6 +3150,7 @@ function CONVERTER:process()
 			io.stdout:write(info() .. '\r')
 			io.stdout:flush()
 			time_str = (self.duration<3600 and _ms(tstamp) or hms(tstamp))
+			-- if tstamp>2 then video.running=false end
 		end
 
 		-- affichage info écran
@@ -3173,9 +3182,9 @@ function CONVERTER:process()
 	
 	-- la 1ere image doit se faire de 1 en 1
     local curr,prev,first = video.image,self._prev,true
-	if not prev then
+	if prev==nil then
 		prev = {} 
-		for i=0,#curr do prev[i] = 0 end
+		for i=0,7999 do prev[i] = 0 end
 	end
 	
 	local filter_s,filter_a,filter_b = 1.5,.87,.95 -- .925 -- .95
@@ -3248,14 +3257,14 @@ function CONVERTER:process()
 		current_cycle = current_cycle - cycles_per_img
 
         -- next image
-        video:next_image() 		
+		if audio.running then video:next_image() end
     end
 	tstamp = self.duration -- update_info()
     io.stdout:write(info() .. '\n')
     io.stdout:flush()
 
-	update_info()
-	for i =0,#curr do prev[i] = curr[i] end
+	-- update_info()
+	for i=0,7999 do prev[i] = curr[i] end
 	self._prev = prev
 	
     audio:close()
@@ -3417,7 +3426,7 @@ if #arg>1 then -- infer name
     end
     file = subs:longest():gsub("%W+$", "")
     if file:len()<=4 then file = basename(first or 'Medley') end
-    file = file.."#"..num
+	if num>1 then file = file.."#"..num end
     io.stderr:write("\n===> "..tag..file.." <===\n")
     io.stderr:flush()
 end
