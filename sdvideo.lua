@@ -2106,11 +2106,12 @@ elseif MODE==MODE_DITH then -- N&B
 		{ 5, 9, 3, 1} 
 	}
 	-- CONFIG.dither = compo(norm,double,vac)(8,8)	
-	CONFIG.dither = compo(norm, double, bayer, 2){{1}}
+	-- CONFIG.dither = compo(norm, double, bayer, 2){{1}}
+	CONFIG.dither = compo(norm, double, bayer){{1}}
 	function VIDEO:pset(x,y, r,g,b)
         if not self.dither then 
 			self:init_dither()
-			local _mask,_dith,_r,_g,_b = {},{},{},{},{}
+			local _mask,_dith,_r,_g,_b,floor = {},{},{},{},{},math.floor
 			for x=0,319 do for y=0,199 do
 				_dith[x + 320*y] = self.dither:get(x,y)
 				_mask[x + 320*y] = 2^(7-(x%8))
@@ -2120,13 +2121,12 @@ elseif MODE==MODE_DITH then -- N&B
 				_r[i],_g[i],_b[i] = l*GRAY_R,l*GRAY_G,l*GRAY_B
 			end
 			self.pset = function(self, x,y, r,g,b)
-				x = x+320*y
-				local i,f = self.image,math.floor(x/8)
-				if self.overwrite and (i[f]/_mask[x]) % 2 >= 1 then
-					i[f] = i[f] - _mask[x]
-				end
-				if _r[r] + _g[g] + _b[b] >= _dith[x] then
-					i[f] = i[f] + _mask[x]
+				x,y = x+320*y
+				x,y,r,g = floor(x/8),_mask[x],self.image,_r[r] + _g[g] + _b[b] >= _dith[x]
+				if self.overwrite then
+					r[x] = r[x] + (g and y or 0) - (r[x]/y % 2 >= 1 and y or 0)
+				elseif g then
+					r[x] = r[x] + y
 				end
 			end
 		end
@@ -2135,22 +2135,23 @@ elseif MODE==MODE_DITH then -- N&B
 elseif MODE==MODE_RGB2 then -- RGB
 	CONFIG.asm_mode  = 1
     CONFIG.px_size   = {1,3}
-	-- CONFIG.dither    = compo(norm,double,bayer){{3,1,2}} -- 24
+	CONFIG.dither    = compo(norm,double,bayer){{3,1,2}} -- 24
+	-- CONFIG.dither    = compo(norm,double,bayer){{3,1,4,2}} -- 24
 	-- CONFIG.dither    = compo(norm,halve,halve,vac)(16,5) -- 20
 
 	-- 12 = 3*4
-	CONFIG.dither    = compo(norm,vac)(16,5) -- très belle qualité gfx
+	-- CONFIG.dither    = compo(norm,vac)(16,5) -- très belle qualité gfx
 	
 	local function pset(self, x,y, r,g,b)
 		local f,d = self._linear,self.dither:get(x,y)
         local m,p,q = self._mask[x],math.floor((x+y*960)/8),self.image
 
 		if self.overwrite then
-			if (q[p   ]/m) % 2 >= 1 then q[p   ] = q[p   ]-m end
-			if (q[p+40]/m) % 2 >= 1 then q[p+40] = q[p+40]-m end
-			if (q[p+80]/m) % 2 >= 1 then q[p+80] = q[p+80]-m end
+			local m2 = m+m
+			if q[p   ] % m2 >= m then q[p   ] = q[p   ]-m end
+			if q[p+40] % m2 >= m then q[p+40] = q[p+40]-m end
+			if q[p+80] % m2 >= m then q[p+80] = q[p+80]-m end
 		end
-
         if f[r]>=d then q[p]    = q[p]    + m end
         if f[g]>=d then q[p+40] = q[p+40] + m end
         if f[b]>=d then q[p+80] = q[p+80] + m end
@@ -2928,6 +2929,7 @@ function CONVERTER:vidname()
 							  :gsub('%s*%d+%s*[fF][pP][sS]','')
 							  :gsub('%s*%[HD%]','')
 							  :gsub('%[%]','')
+							  :gsub('%s+$','')
 end
 function CONVERTER:_compress(pos, prev, curr, indices_fcn, out_fcn)
 	local k,b0,b1,b2
@@ -3224,7 +3226,7 @@ function CONVERTER:process()
 		-- real_compression
 		-- print((cycles + current_cycle >= 2*cycles_per_img) and 'interlaced' or 'progressive')
 		local indices = not first 
-			  and (CONFIG.px_size[2]<=1 or video.filter.a>=.81)
+			  and (CONFIG.px_size[2]<=1 or video.filter.a>=.85)
 			  and (cycles + current_cycle >= 2*cycles_per_img) 
 		      and video.interlaced 
 			  or  video.progressiv
