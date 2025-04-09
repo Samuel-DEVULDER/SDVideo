@@ -1384,35 +1384,35 @@ VIDEO.font = {
         "X...",
         "...."
     },['0']={
-        ".XX.",
+        "XXX.",
         "X.X.",
         "X.X.",
         "X.X.",
-        "XX..",
-        "...."
-    },['1']={
-        ".X..",
-        "XX..",
-        ".X..",
-        ".X..",
         "XXX.",
         "...."
-    },['2']={
-        "XX..",
+    },['1']={
         "..X.",
-        ".X..",
+        "..X.",
+        "..X.",
+        "..X.",
+        "..X.",
+        "...."
+    },['2']={
+        "XXX.",
+        "..X.",
+        "XXX.",
         "X...",
         "XXX.",
         "...."
     },['3']={
-        "XX..",
+        "XXX.",
         "..X.",
-        "XX..",
+        "XXX.",
         "..X.",
-        "XX..",
+        "XXX.",
         "...."
     },['4']={
-        "..X.",
+        "X.X.",
         "X.X.",
         "XXX.",
         "..X.",
@@ -1421,37 +1421,37 @@ VIDEO.font = {
     },['5']={
         "XXX.",
         "X...",
-        "XX..",
+        "XXX.",
         "..X.",
-        "XX..",
+        "XXX.",
         "...."
     },['6']={
-        ".XX.",
+        "XXX.",
         "X...",
-        "XX..",
+        "XXX.",
         "X.X.",
-        ".X..",
+        "XXX.",
         "...."
     },['7']={
         "XXX.",
         "..X.",
-        ".X..",
-        ".X..",
-        "X...",
+        "..X.",
+        "..X.",
+        "..X.",
         "...."
     },['8']={
-        ".X..",
+        "XXX.",
         "X.X.",
-        ".X..",
+        "XXX.",
         "X.X.",
-        ".X..",
+        "XXX.",
         "...."
     },['9']={
-        ".X..",
+        "XXX.",
         "X.X.",
-        ".XX.",
+        "XXX.",
         "..X.",
-        "XX..",
+        "XXX.",
         "...."
     },[':']={
         "....",
@@ -2105,9 +2105,12 @@ elseif MODE==MODE_DITH then -- N&B
 		{10,15, 6, 2},
 		{ 5, 9, 3, 1} 
 	}
-	-- CONFIG.dither = compo(norm,double,vac)(8,8)	
-	-- CONFIG.dither = compo(norm, double, bayer, 2){{1}}
-	CONFIG.dither = compo(norm, double, bayer){{1}}
+	-- CONFIG.dither = compo(norm,double,vac)(8,8)	-- 128 levels
+	-- CONFIG.dither = compo(norm,bayer,vac)(8,8)	-- 256 levels
+	-- CONFIG.dither = compo(norm,vac)(8,8)      	-- 64 levels
+	CONFIG.dither = compo(norm, double, bayer, 2){{1}} -- 32 levels
+	-- CONFIG.dither = compo(norm, double, bayer){{1}} -- 8 levels
+	-- CONFIG.dither = compo(norm, bayer, bayer){{1}} -- 16 levels
 	function VIDEO:pset(x,y, r,g,b)
         if not self.dither then 
 			self:init_dither()
@@ -2138,6 +2141,8 @@ elseif MODE==MODE_RGB2 then -- RGB
 	CONFIG.dither    = compo(norm,double,bayer){{3,1,2}} -- 24
 	-- CONFIG.dither    = compo(norm,double,bayer){{3,1,4,2}} -- 24
 	-- CONFIG.dither    = compo(norm,halve,halve,vac)(16,5) -- 20
+	
+	-- CONFIG.dither    = compo(norm,double){{9,1,5,10,2,6},{12,4,8,11,3,7}}
 
 	-- 12 = 3*4
 	-- CONFIG.dither    = compo(norm,vac)(16,5) -- très belle qualité gfx
@@ -3065,7 +3070,7 @@ function CONVERTER:_stat()
     -- info
 	local stat_str = string.format('%dx%d [%s] (%s) %s at %d fps (%d%% zoom)',
         self.w, self.h, MODE_TXT[MODE], self.aspect_ratio,
-        self.duration>=3600 and hms(self.duration, "%dh %dm %ds") or _ms(self.duration, "%dm %ds"), 
+        self.duration>=3600 and hms(self.duration, "%dh%dm%ds") or _ms(self.duration, "%d'%d\""), 
 		self.fps, percent(math.max(self.w/self.W,self.h/self.H)))
     io.stdout:write('> '..stat_str..'\n')
 	local TOT = 0 for i=0,3 do TOT = TOT+stat.type[i] end
