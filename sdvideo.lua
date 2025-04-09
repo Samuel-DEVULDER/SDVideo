@@ -41,8 +41,13 @@
 
 local MODE_TXT = {}
 for i,v in pairs{
-				 "EDGE",
-				 "OTSU", "DITH", "BM59", 
+				-- B/W
+				 "EDGE", 
+				 "OTSU", 
+				 "BAYR", "VACD", "HLFT", "DITH", 
+				 -- GRAY
+				 "BM59", 
+				 -- COLOR
 			     "RGB2", "C345", "RGB6",
 				 "RGB4", "RGB5", "CR16",
 				 nil} do
@@ -1321,7 +1326,7 @@ VIDEO.font = {
         ".XX.",
         "...."
     },["'"]={
-        "..X.",
+        ".X..",
         ".X..",
         "....",
         "....",
@@ -2045,8 +2050,25 @@ if MODE==MODE_OTSU then -- Otsu
 		end
 		self:pset(x,y,r,g,b)
     end
-elseif MODE==MODE_DITH then -- N&B
+elseif MODE==MODE_DITH 
+    or MODE==MODE_BAYR 
+	or MODE==MODE_HLFT 
+	or MODE==MODE_VACD 
+	then -- N&B
 	CONFIG.asm_mode  = 0
+	if MODE==MODE_HLFT then
+		CONFIG.dither = compo(norm,double,transp){
+			{ 7,13,11, 4},
+			{12,16,14, 8},
+			{10,15, 6, 2},
+			{ 5, 9, 3, 1} 
+		}
+	elseif MODE==MODE_VACD then
+		CONFIG.dither = compo(norm,double,vac)(8,8)	-- 128 levels
+	else -- default to bayer
+		CONFIG.dither = compo(norm, double, bayer, 2){{1}} -- 32 levels
+	end
+
     -- CONFIG.dither    = 
 	-- compo(norm,vac)(8,8)
 	-- compo(norm,vac)(16,16)
@@ -2099,16 +2121,8 @@ elseif MODE==MODE_DITH then -- N&B
 		-- { 1,22,13,56,40,32, 7,57},
 		-- {34,61,37, 5,17,62,20,46}
 	-- }
-	CONFIG.dither = compo(norm,double,transp){
-		{ 7,13,11, 4},
-		{12,16,14, 8},
-		{10,15, 6, 2},
-		{ 5, 9, 3, 1} 
-	}
-	-- CONFIG.dither = compo(norm,double,vac)(8,8)	-- 128 levels
 	-- CONFIG.dither = compo(norm,bayer,vac)(8,8)	-- 256 levels
 	-- CONFIG.dither = compo(norm,vac)(8,8)      	-- 64 levels
-	CONFIG.dither = compo(norm, double, bayer, 2){{1}} -- 32 levels
 	-- CONFIG.dither = compo(norm, double, bayer){{1}} -- 8 levels
 	-- CONFIG.dither = compo(norm, bayer, bayer){{1}} -- 16 levels
 	function VIDEO:pset(x,y, r,g,b)
@@ -3070,7 +3084,7 @@ function CONVERTER:_stat()
     -- info
 	local stat_str = string.format('%dx%d [%s] (%s) %s at %d fps (%d%% zoom)',
         self.w, self.h, MODE_TXT[MODE], self.aspect_ratio,
-        self.duration>=3600 and hms(self.duration, "%dh%dm%ds") or _ms(self.duration, "%d'%d\""), 
+        self.duration>=3600 and hms(self.duration, "%dh%2d'%d\"") or _ms(self.duration, "%d'%d\""), 
 		self.fps, percent(math.max(self.w/self.W,self.h/self.H)))
     io.stdout:write('> '..stat_str..'\n')
 	local TOT = 0 for i=0,3 do TOT = TOT+stat.type[i] end
@@ -3176,7 +3190,7 @@ function CONVERTER:process()
 				title_str = title_str:sub(2) .. title_str:sub(1,1)
 			end
 		end
-		local col = MODE==MODE_DITH and {255,255,255}
+		local col = MODE<=MODE_DITH and {255,255,255}
                	 or MODE==MODE_BM59 and {155,155,155} 
 				 or                     {255,0,0}
 		video:progressbar(math.ceil(200/CONFIG.px_size[2])-1, tstamp/self.duration,unpack(col))
