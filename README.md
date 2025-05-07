@@ -79,10 +79,10 @@ Mode| Resolution | Colors | TO7 | MO5 | TO770 | MO6 | TO8(D), TO9+ | Comment
 ----|------------|--------|-----|-----|-------|-----|----|------
 EDGE| 320x200    | 2      |  X  |  X  |   X   |  X  |  X |  Monochromatic (edge detection)
 OTSU| 320x200    | 2      |  X  |  X  |   X   |  X  |  X |  Monochromatic (automatic threshold)
-BAYR| 320x200    | 2      |  X  |  X  |   X   |  X  |  X |  Monochromatic (bayer dithering)
-VACD| 320x200    | 2      |  X  |  X  |   X   |  X  |  X |  Monochromatic (void and cluster dithering)
-HLFT| 320x200    | 2      |  X  |  X  |   X   |  X  |  X |  Monochromatic (halftone dithering)
-DITH| 320x200    | 2      |  X  |  X  |   X   |  X  |  X |  Monochromatic (variation of bayer with better bandwidth)
+BAYR| 320x200    | 2      |  X  |  X  |   X   |  X  |  X |  Monochromatic (bayer 8x8 dithering, 64 levels)
+DITH| 320x200    | 2      |  X  |  X  |   X   |  X  |  X |  Monochromatic (half-8x8 bayer, 32 levels)
+VACD| 320x200    | 2      |  X  |  X  |   X   |  X  |  X |  Monochromatic (void and cluster dithering, 64 levels
+HLFT| 320x200    | 2      |  X  |  X  |   X   |  X  |  X |  Monochromatic (halftone dithering, 32 levels²)
 BM59| 160x200    | 4      |     |     |       |  X  |  X |  Grayscale (special bm4 mode with 2x1 pixels)
 RGB2| 320x66     | 8*     |  X  |  X  |   X   |  X  |  X | One of R/G/B color on each line so 66 is actually 200/3
 C345|  80x100    | 60*    |     |     |       |  X  | X  | Specific palette. R/G B one two separate rows. 16 Real colors (3*4 + 5 - 1) but 60 virtual (3*4*5).

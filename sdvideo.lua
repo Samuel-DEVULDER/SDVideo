@@ -2067,6 +2067,8 @@ elseif MODE==MODE_DITH
 	elseif MODE==MODE_VACD then
 		-- CONFIG.dither = compo(norm,double,vac)(8,8)	-- 128 levels
 		CONFIG.dither = compo(norm,halve,vac)(8,8)	-- 32 levels
+	elseif MODE==MODE_BAYR then 
+		CONFIG.dither = compo(norm, bayer, 4){{1}} -- 64 levels
 	else -- default to bayer
 		CONFIG.dither = compo(norm, double, bayer, 2){{1}} -- 32 levels
 	end
