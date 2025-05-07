@@ -2834,7 +2834,10 @@ elseif MODE==MODE_EDGE then
     end
 
 else
-    error("Invalid MODE="..(MODE and MODE or "<empty>"))
+	local msg = "Invalid MODE="..(MODE and MODE or "<empty>")
+	msg = msg .. "\npossible values are:"
+	for _,v in ipairs(MODE_TXT) do msg = msg .. " "..v end
+    error(msg)
 end
 
 function VIDEO:clear()
