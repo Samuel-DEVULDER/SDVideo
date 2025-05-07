@@ -133,6 +133,7 @@ local CONFIG        = nil
 local GRAY_R		= 0.2126
 local GRAY_G		= 0.7152
 local GRAY_B		= 0.0722
+local MODE_BM59_PROG_COL 
 
 if type(MODE)=='string' then
 	for k,v in ipairs(MODE_TXT) do
@@ -2272,8 +2273,13 @@ elseif MODE==MODE_BM59 then -- BM59
 		io.stderr:write(string.rep(' ',79)..'\r')
         io.stderr:flush()
 
-	
 		print('w', unpack(w.base))
+		for t=0,255 do
+			if PALETTE.linear(t)*3>=1 then 
+				MODE_BM59_PROG_COL = {t,t-1,t}
+				break
+			end
+		end
 
 		return {
 			0x000*w.base[1],0x111*w.base[2],0x111*w.base[3],0x111*w.base[4],			
@@ -3198,7 +3204,7 @@ function CONVERTER:process()
 			end
 		end
 		local col = MODE<=MODE_DITH and {255,255,255}
-               	 or MODE==MODE_BM59 and {155,155,155} 
+               	 or MODE==MODE_BM59 and MODE_BM59_PROG_COL
 				 or                     {255,0,0}
 		video:progressbar(math.ceil(200/CONFIG.px_size[2])-1, tstamp/self.duration,unpack(col))
 		-- 0..1.1   => green 
