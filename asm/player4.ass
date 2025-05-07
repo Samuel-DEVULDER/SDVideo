@@ -183,14 +183,26 @@ INIT
   COM   >$2300        force le basic a s'intialiser   
 
   IFEQ  (MODE-MODE_BW)*(MODE-MODE_BM59)
-  LDB   #1            memoire forme
+  LDD   #$01          memoire forme
   ORB   ,X
   STB   ,X            
+  LDB   COLOR
+  LSLB
+  ANDB  #$F0
+  STB   ,-S
+  LDB   #7
+  ANDB   COLOR
+  BCC   *+4
+  ORB   #8
+  ORB   ,S+
+  EORB  #$88
+  STB   <COLDAT,PCR
   JSR   ECRAN1        remplissage forme avec 0
   FCB   %00000000
   DEC   ,X            memoire fond
   JSR   ECRAN1        remplissage fond
-  FCB   %01110000     blanc sur noir
+COLDAT
+  FCB   %01110000     couleur
   INC   ,X            memoire forme  
   IFEQ  MODE-MODE_BM59
   LDD   #$5900        mode $59/tour noir
@@ -230,7 +242,8 @@ INIT
   ENDC
 
   TST   >$FFF0
-  BNE   INIT_GEN2
+  BEQ   *+5
+  JMP   INIT_GEN2
 
 *------------------------------------------------------
 * Initialisations MO5 
@@ -312,13 +325,16 @@ INIT_TO
   LDX   #$E7C0        base regs TO
 
   IFEQ  (MODE-MODE_BW)*(MODE-MODE_BM59)
-  LDB   #1            memoire forme
+  LDB   #$01          memoire forme
   ORB   3,X
   STB   3,X            
+  LDB   COLOR
+  STB   <COLDAT2,PCR
   JSR   ECRAN1        remplissage forme avec 0
   FCB   %00000000
   DEC   3,X           memoire fond
   JSR   ECRAN1        remplissage fond N/B
+COLDAT2  
   FCB   %11111000
   INC   3,X           memoire forme  
   IFEQ  MODE-MODE_BM59
@@ -831,6 +847,8 @@ PALDATA
 *  FDB   $F00,$F0F,$FF0,$FFF
 *  FDB   $222,$006,$060,$066
 *  FDB   $600,$606,$660,$666
+
+COLOR set PALDATA+32
     
   ECHO *************************************
   ECHO * MODE &MODE

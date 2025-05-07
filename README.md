@@ -64,7 +64,7 @@ which allows playing most video between 11 to 13 frames per second which is pret
 
 ## Usage
 
-	[FPS=<N>] [MODE=<N>] tools/luajit sdvideo.lua <video-files>
+	[FPS=<N>] [MODE=<DESC>] [COLOR=0xPQ] tools/luajit sdvideo.lua <video-files>
 
 `<Video-files>` can be any video file (MP4/AVI/MOV/MKV) you wish to convert or even a YouTube or Vimeo or any other [youtube-dl](https://youtube-dl.org/) compatible URL. YouTube playlists are treated as the set of all the videos in the playlist.
 
@@ -72,26 +72,29 @@ which allows playing most video between 11 to 13 frames per second which is pret
 	
 `FPS=<N>` allow choosing a proper FPS for the video. Don't take it too high otherwise the converter will reduce the image size to keep up with the FPS you choose. A negative value will reduce the FPs too keep a full-screen image. The default value of 11 fps is a good compromise. A value bigger than 31 will convert fullscreen image at 30fps, but consecutive images can be merged together resuling in mlore blurry pictures from time to time.
 	
-`MODE=<N>` is actually a numerical parameter indicating the type of output to produce. To every machine is able do play each mode, but high-end machines (MO6, TO8, TO9+) can play all. Default mode (if omitted) is 7 which usually gives colorful result without sacrificing too much of the resolution.
+`MODE=<DESC>` is actually a numerical parameter indicating the type of output to produce. To every machine is able do play each mode, but high-end machines (MO6, TO8, TO9+) can play all. Default mode (if omitted) is 7 which usually gives colorful result without sacrificing too much of the resolution.
 
 Here is a table summing this up:
 Mode| Resolution | Colors | TO7 | MO5 | TO770 | MO6 | TO8(D), TO9+ | Comment
 ----|------------|--------|-----|-----|-------|-----|----|------
-0   | 320x200    | 2      |  X  |  X  |   X   |  X  |  X |  Black and white
-1   | 320x66     | 8*     |  X  |  X  |   X   |  X  |  X | One of R/G/B color on each line so 66 is actually 200/3
-2/3  |  80x200   | 16     |     |  X  |   Y   |  X  | Y  | Standard Thomson palette
-4/5  |  80x200   | 16     |     |  X  |   Y   |  X  | Y  | Specific palette designed for dithering
-6/7  |  80x100   | 60*    |     |     |       |  X  | Y  | Specific palette. R/G B one two separate rows. 16 Real colors (3*4 + 5 - 1) but 60 virtual (3*4*5).
-8/9  |  80x66     | 216*  |     |     |       |  X  | Y  | One of R/G/B component (6 levels each) set at every pixel, creating 6*6*6=216 virtual colors.
-10/11| 80x200     | 16    |     |     |       |  X  | Y  | Colors are created from a color-reduction algorithm running over all the frames of the video. *Slow process!*
-12/13| 80x200     | 16    |     |     |       |  X  | Y  | Same as 2/3 but with another dither matrix.
-14/15| 80x200     | 16    |     |     |       |  X  | Y  | [Dawnbriger 16](http://www.logicielsmoto.com/phpBB/viewtopic.php?p=5317#p5317) palette with dithering.
-16/17| 80x200     | 16    |     |     |       |  X  | Y  | Gray scale.
-18/19| 80x200     | 16    |     |     |       |  X  | Y  | Experimental palette which do not include saturated colors for high intensities.
+EDGE| 320x200    | 2      |  X  |  X  |   X   |  X  |  X |  Monochromatic (edge detection)
+OTSU| 320x200    | 2      |  X  |  X  |   X   |  X  |  X |  Monochromatic (automatic threshold)
+BAYR| 320x200    | 2      |  X  |  X  |   X   |  X  |  X |  Monochromatic (bayer dithering)
+VACD| 320x200    | 2      |  X  |  X  |   X   |  X  |  X |  Monochromatic (void and cluster dithering)
+HLFT| 320x200    | 2      |  X  |  X  |   X   |  X  |  X |  Monochromatic (halftone dithering)
+DITH| 320x200    | 2      |  X  |  X  |   X   |  X  |  X |  Monochromatic (variation of bayer with better bandwidth)
+BM59| 160x200    | 4      |     |     |       |  X  |  X |  Grayscale (special bm4 mode with 2x1 pixels)
+RGB2| 320x66     | 8*     |  X  |  X  |   X   |  X  |  X | One of R/G/B color on each line so 66 is actually 200/3
+C345|  80x100    | 60*    |     |     |       |  X  | X  | Specific palette. R/G B one two separate rows. 16 Real colors (3*4 + 5 - 1) but 60 virtual (3*4*5).
+RGB6|  80x66     | 216*   |     |     |       |  X  | X  | One of R/G/B component (6 levels each) set at every pixel, creating 6*6*6=216 virtual colors.
+RGB4| 80x200     | 68*    |     |     |       |  X  | X  | 4 levels of R/G/B + 4 levels of gray.
+RGB5| 80x200     | 128*   |     |     |       |  X  | X  | 5 levels of R/G/B + 3 saturated mixed colors.
+CR16| 80x200     | 16     |     |     |       |  X  | X  | Colors are created from a color-reduction algorithm running over all the frames of the video. *Slow process!*
 
 **Notice:**
-* An X/Y mode indicates to use X for MO-machine and Y for TO-machine.
 * A start (*) after the number of color indicates that this is indeed the number of virtual colors. These are colors that your eyes build up when it merges adjacent ones.
+
+`COLOR=0xPQ` allow changing the forground (P) and the background (Q) color for monochromatic modes. Default is white on black.
 
 ## How to view SDVideo files in DCMOTO ?
 
@@ -121,15 +124,15 @@ You can also find some of my tests on Youtube:
 
 Mode | Converted video (click to view on YouTube)
 ----|----
-MODE=5 |[![MODE=5](https://img.youtube.com/vi/ZnYCgsjjhs4/0.jpg)](https://www.youtube.com/watch?v=ZnYCgsjjhs4) 
-MODE=7 | [![MODE=7](https://img.youtube.com/vi/sKI7Ro2MoOs/0.jpg)](https://www.youtube.com/watch?v=sKI7Ro2MoOs) 
-MODE=9 | [![MODE=9](https://img.youtube.com/vi/ECxBXCi1PeU/0.jpg)](https://www.youtube.com/watch?v=ECxBXCi1PeU) 
+MODE=C345 | [![MODE=C345](https://img.youtube.com/vi/sKI7Ro2MoOs/0.jpg)](https://www.youtube.com/watch?v=sKI7Ro2MoOs) 
+MODE=RGB4 | [![MODE=RGB4](https://img.youtube.com/vi/ZnYCgsjjhs4/0.jpg)](https://www.youtube.com/watch?v=ZnYCgsjjhs4) 
+MODE=RGB5 | [![MODE=RGB5](https://img.youtube.com/vi/ECxBXCi1PeU/0.jpg)](https://www.youtube.com/watch?v=ECxBXCi1PeU) 
 
 Here is how an MO6 machine can playback a well known [PC-demo](https://www.pouet.net/prod.php?which=63) of 1993:
 
 [![](https://img.youtube.com/vi/3PXrQAOnrnc/0.jpg)](https://www.youtube.com/watch?v=3PXrQAOnrnc)
 
-or a TO8 replaying with MODE=7 a [famous game](https://en.wikipedia.org/wiki/Another_World_(video_game)) intro:
+or a TO8 replaying with MODE=C345 a [famous game](https://en.wikipedia.org/wiki/Another_World_(video_game)) intro:
 
 [![](https://img.youtube.com/vi/jIY-GlHY2e4/0.jpg)](https://www.youtube.com/watch?v=jIY-GlHY2e4)
 

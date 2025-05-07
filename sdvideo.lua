@@ -114,6 +114,7 @@ end
 -- utiliser un fps<0 si la taille 100% doit etre conservee
 local MODE          = env('MODE',MODE_DITH)
 local FPS           = env('FPS',16)
+local COLOR         = env('COLOR',0x70)
 local FFMPEG        = locate('ffmpeg', 'tools')
 local YT_DL         = locate('yt-dlp', 'tools')
 local BIN           = locate('bin/')
@@ -2057,14 +2058,15 @@ elseif MODE==MODE_DITH
 	then -- N&B
 	CONFIG.asm_mode  = 0
 	if MODE==MODE_HLFT then
-		CONFIG.dither = compo(norm,double,transp){
+		CONFIG.dither = compo(norm,double,transp){ -- 32 levels
 			{ 7,13,11, 4},
 			{12,16,14, 8},
 			{10,15, 6, 2},
 			{ 5, 9, 3, 1} 
 		}
 	elseif MODE==MODE_VACD then
-		CONFIG.dither = compo(norm,double,vac)(8,8)	-- 128 levels
+		-- CONFIG.dither = compo(norm,double,vac)(8,8)	-- 128 levels
+		CONFIG.dither = compo(norm,halve,vac)(8,8)	-- 32 levels
 	else -- default to bayer
 		CONFIG.dither = compo(norm, double, bayer, 2){{1}} -- 32 levels
 	end
@@ -3333,13 +3335,19 @@ function OUT:open()
         end
         return raw
     end
+	local function to770(mo5col)
+		local a,b = math.floor(mo5col/16),mo5col%16
+		return (b>=8 and 0 or 128)+(b%8) + ((a+8)%16)*8
+	end
 
     local asm_mode=CONFIG.asm_mode --(MODE<6 and MODE) or (MODE%2==0 and 4 or 5)
 
 	self.stream = assert(io.open(self.file, 'wb'))
     self.stream:write(file_content(1*512, raw('bootblk', 'asm/bootblk.ass')))
-    self.stream:write(file_content(7*512, raw('player4'..asm_mode, '-dMODE='..asm_mode..' asm/player4.ass'),
-                                           PALETTE:file_content()))
+    self.stream:write(file_content(7*512, raw('player4'..asm_mode, 
+											  '-dMODE='..asm_mode..' asm/player4.ass'),
+					                          PALETTE:file_content()..
+											  string.char(to770(COLOR))))
 end
 function OUT:frame(buf0,buf1,buf2,audio)
 	if not self.stream then self:open() end
