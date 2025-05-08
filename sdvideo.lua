@@ -1503,9 +1503,9 @@ VIDEO.font = {
         ".X..",
         "...."
     },['@']={
-        ".X..",
-        "X.X.",
-        "XXX.",
+        ".XX.",
+        "X..X",
+        "X.XX",
         "X...",
         ".XX.",
         "...."
@@ -1596,7 +1596,7 @@ VIDEO.font = {
     },['M']={
         "X.X.",
         "XXX.",
-        "X.X.",
+        "XXX.",
         "X.X.",
         "X.X.",
         "...."
@@ -2969,9 +2969,68 @@ function CONVERTER:_compress(pos, prev, curr, indices_fcn, out_fcn)
 		while prev[i] ~= curr[i] do
 			k = i - pos
 			if k<0 then 
-				b0,b1,b2,pos = 3,math.floor(i/256),i%256,i
+				b0,b1,b2,pos = 3,128+math.floor(i/256),i%256,i
 			elseif k<=1 then
-				if k==0 and curr[pos+1]==prev[pos+1] then
+				if k==0 
+				and curr[pos-2]==curr[pos+0]
+				and curr[pos-1]==curr[pos+1]
+				and curr[pos+0]==curr[pos+2]
+				and curr[pos+1]==curr[pos+3]
+				and curr[pos+2]==curr[pos+4]
+				and curr[pos+3]==curr[pos+5] then
+					-- rpt6,-2
+					b0,b1,b2 = 3,0xf0,0
+					prev[pos] = curr[pos]; pos = pos+1
+					prev[pos] = curr[pos]; pos = pos+1
+					prev[pos] = curr[pos]; pos = pos+1
+					prev[pos] = curr[pos]; pos = pos+1
+					prev[pos] = curr[pos]; pos = pos+1
+					prev[pos] = curr[pos]; pos = pos+1
+				elseif k==0 
+				and curr[pos-1]==curr[pos+0]
+				and curr[pos-0]==curr[pos+1]
+				and curr[pos+1]==curr[pos+2]
+				and curr[pos+2]==curr[pos+3]
+				and curr[pos+3]==curr[pos+4]
+				and curr[pos+4]==curr[pos+5] then
+					-- rpt6,-1
+					b0,b1,b2 = 3,0xe0,0
+					prev[pos] = curr[pos]; pos = pos+1
+					prev[pos] = curr[pos]; pos = pos+1
+					prev[pos] = curr[pos]; pos = pos+1
+					prev[pos] = curr[pos]; pos = pos+1
+					prev[pos] = curr[pos]; pos = pos+1
+					prev[pos] = curr[pos]; pos = pos+1
+				elseif k==0 
+				and curr[pos-2]==curr[pos+0]
+				and curr[pos-1]==curr[pos+1]
+				and curr[pos+0]==curr[pos+2]
+				and curr[pos+1]==curr[pos+3] then
+					-- rpt4,-2
+					b0,b1,b2 = 3,0xf8,0
+					prev[pos] = curr[pos]; pos = pos+1
+					prev[pos] = curr[pos]; pos = pos+1
+					prev[pos] = curr[pos]; pos = pos+1
+					prev[pos] = curr[pos]; pos = pos+1
+				elseif k==0 
+				and curr[pos+0]==curr[pos+1]
+				and curr[pos+1]==curr[pos+2]
+				and curr[pos+2]==curr[pos+3] then
+					-- rpt4
+					b0,b1,b2 = 3,0x00,curr[pos]
+					prev[pos] = curr[pos]; pos = pos+1
+					prev[pos] = curr[pos]; pos = pos+1
+					prev[pos] = curr[pos]; pos = pos+1
+					prev[pos] = curr[pos]; pos = pos+1
+				elseif k==0 
+				and curr[pos+0]==curr[pos+1]
+				and curr[pos+1]==curr[pos+2] then
+					-- rpt3
+					b0,b1,b2 = 3,0xC0,curr[pos]
+					prev[pos] = curr[pos]; pos = pos+1
+					prev[pos] = curr[pos]; pos = pos+1
+					prev[pos] = curr[pos]; pos = pos+1
+				elseif k==0 and curr[pos+1]==prev[pos+1] then
 					b0,b1,b2  = 2,curr[pos],curr[pos+2]
 					prev[pos] = curr[pos]; pos = pos+2
 					prev[pos] = curr[pos]; pos = pos+1
@@ -2983,7 +3042,7 @@ function CONVERTER:_compress(pos, prev, curr, indices_fcn, out_fcn)
 			elseif k<=257 then -- deplacement 8 bit
 				b0,b1,b2,prev[i],pos = 1,k-2,curr[i],curr[i],i+1
 			else -- deplacement arbitraire
-				b0,b1,b2,pos = 3,math.floor(i/256),i%256,i
+				b0,b1,b2,pos = 3,128+math.floor(i/256),i%256,i
 			end
 			-- print(zz, b0, b1, b2, '-->', pos)
 			-- if b2==nil then print() print(i, b0, b1, b2, curr[i+1]) end
@@ -3095,8 +3154,8 @@ function CONVERTER:_stat()
     self.video_cor = video_cor
 
     -- info
-	local stat_str = string.format('%dx%d [%s] (%s) %s at %d fps (%d%% zoom)',
-        self.w, self.h, MODE_TXT[MODE], self.aspect_ratio,
+	local stat_str = string.format('%dx%d [%s] %s fps:%d zoom:%d%%',
+        self.w, self.h, MODE_TXT[MODE],
         self.duration>=3600 and hms(self.duration, "%dh%2d'%d\"") or _ms(self.duration, "%d'%d\""), 
 		self.fps, percent(math.max(self.w/self.W,self.h/self.H)))
     io.stdout:write('> '..stat_str..'\n')
@@ -3283,7 +3342,7 @@ function CONVERTER:process()
         -- add padding if image is too simple
         while current_cycle<cycles_per_img do
 			-- print('Y', current_cycle, cycles_per_img)
-            current_cycle = current_cycle + self.out:frame(3,0,0,audio)
+            current_cycle = current_cycle + self.out:frame(3,128,0,audio)
             pos = 0
         end
 
