@@ -1281,7 +1281,7 @@ function VIDEO:pset(x,y, r,g,b)
 		end
 		local p,v = math.floor(x/2) + y*40,t:byte(self.dither:get(x,y))
 		t = self.image[p]
-		self.image[p] = ((x%2)==0 and t%16+v*16 or t-(t%16)+v)
+		self.image[p] = ((x%2)==0 and (t%16)+v*16 or t-(t%16)+v)
 	end
 	
 	self.pset_fst = function(self, x,y, r,g,b)
@@ -1296,7 +1296,7 @@ function VIDEO:pset(x,y, r,g,b)
 	end
 	
 	self.overwrite = function(self, ovr)
-		self._overwrite, self.pset = ovr, ovr and self.pset_ovr or self.pset_fast
+		self._overwrite, self.pset = ovr, ovr and self.pset_ovr or self.pset_fst
 	end
 	
 	self.pset = self.pset_fst
