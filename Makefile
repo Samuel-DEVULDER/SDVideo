@@ -51,7 +51,7 @@ else
 	YT_DL_URL=https://github.com/yt-dlp/yt-dlp/releases/download/2022.03.08.1/yt-dlp
 endif
 
-DISTRO=SDDrive-$(VERSION)-$(OS)-$(MACHINE)
+DISTRO=SDVideo-$(VERSION)-$(OS)-$(MACHINE)
 
 BIN=bin/bootblk.raw bin/player0.raw bin/player1.raw \
     bin/player40.raw bin/player41.raw bin/player42.raw \
@@ -284,12 +284,12 @@ URL_Touhou=https://www.youtube.com/watch?v=uOyaCOViAPA
 # Double Trouble - Simon's Cat
 URL_Cat=https://www.youtube.com/watch?v=sHWEc-yxfb4
 # URL_Cat=https://www.youtube.com/watch?v=3VLcLH97eRw
-VID_Cat=0
+VID_Cat=OTSU
 VAR_Cat=FPS=11
 
 # Sting - Russians
 URL_Russians=https://www.youtube.com/watch?v=wHylQRVN2Qs
-VID_Russians=0
+VID_Russians=DITH VACD BM59 HLTF
 
 # Aliens in 60 seconds
 # URL_Aliens=https://www.youtube.com/watch?v=LOzU9n_o7dU
@@ -301,7 +301,7 @@ VID_Russians=0
 
 # Pink Floyd - Delicate soud of thunder
 URL_Pink=https://www.youtube.com/playlist?list=PLk3LgDZ_RH0MyrYJOnTNe0qN6XFhAbG9T
-VID_Pink=1 18 19
+VID_Pink=VACD HLFT DITH BM59 RGB2 C345 RGB6 RGB4 RGB5 CR16
 #4 5 7 9 11 15 17 19
 
 # Indiana Jones - Boulder scene
@@ -309,51 +309,51 @@ VID_Pink=1 18 19
 # URL_Indi=https://www.youtube.com/watch?v=aADExWV1bsM
 # URL_Indi=https://www.youtube.com/watch?v=c6XHLe94SJA
 URL_Indi=https://www.youtube.com/watch?v=IaiOm7ZIuzA
-VID_Indi=10 11 18 19
+VID_Indi=VACD HLFT DITH BM59 RGB2 C345 RGB6 RGB4 RGB5 CR16
 VAR_Indi=FPS=-20
 
 # Microcosmos
 # URL_Micro=https://www.dailymotion.com/video/x84o53
 URL_Micro=https://vimeo.com/84981267
-VID_Micro=2 3 18 19
+VID_Micro=VACD HLFT DITH BM59 RGB2 C345 RGB6 RGB4 RGB5 CR16
 
 # DaftPunk - Discovery
 URL_Discovery=https://www.youtube.com/playlist?list=PLSdoVPM5WnndLX6Ngmb8wktMF61dJirKl
-VID_Discovery=4 5 1
+VID_Discovery=VACD HLFT DITH BM59 RGB2 C345 RGB6 RGB4 RGB5 CR16
 
 # Shaka Punk
 URL_Shaka=https://www.youtube.com/watch?v=210jld2vrxQ  https://www.youtube.com/watch?v=EF2PGnZmXCI  https://www.youtube.com/watch?v=-LVWXQ2F3KI https://www.youtube.com/watch?v=kp4ENt3aK-I https://www.youtube.com/watch?v=iMtcqx4vXXA https://www.youtube.com/watch?v=9RRhKrrbFwE https://www.youtube.com/watch?v=MEecsZXQjCs 
-VID_Shaka=10 11 1
+VID_Shaka=VACD HLFT DITH BM59 RGB2 C345 RGB6 RGB4 RGB5 CR16
 
 # Brain Control - Turtles all the way down
 URL_Turtles=https://www.youtube.com/watch?v=sBKmqkh9bb8
-VID_Turtles=1 18 19
+VID_Turtles=VACD HLFT DITH BM59 RGB2 C345 RGB6 RGB4 RGB5 CR16
 
 # Batman forver
 # URL_Bat=https://www.youtube.com/watch?v=FKa7X-5L8es
 URL_Bat=https://www.youtube.com/watch?v=YJosZfm560Q
-VID_Bat=2 3
+VID_Bat=VACD RGB2 BM59
 
 # Spinning a mountain
 URL_Spinning=https://www.youtube.com/watch?v=c5UoU7O3AzQ
-VID_Spinning=1 6 7 
+VID_Spinning=VACD HLFT DITH BM59 RGB2 C345 RGB6 RGB4 RGB5 CR16
 
 # Skies
 URL_Skies=https://www.youtube.com/watch?v=r6sgojf-LzM
-VID_Skies=1 10 11
+VID_Skies=VACD HLFT DITH BM59 RGB2 C345 RGB6 RGB4 RGB5 CR16
 
 # Commodore Amiga 500 Best Demo Effects
 URL_A500=https://www.youtube.com/watch?v=G3HUp7LH5ig
-VID_A500=6 7
+VID_A500=VACD BAYR RGB2 C345
 VAR_A500=FPS=11
 
 # Second Reality by Future Crew (PC Demo)
 URL_2nd_R=https://www.youtube.com/watch?v=L33eQfT72yo
 # https://www.youtube.com/watch?v=TpD4j42elks
-VID_2nd_R=4 5
+VID_2nd_R=VACD RGB2 C345
 VAR_2nd_R=FPS=11
 
 # Kefrensh megademo
 URL_Desert=https://www.youtube.com/watch?v=4HuJK5nITyo https://www.youtube.com/watch?v=fYpLZhkkyRs
-VID_Desert=4 5
+VID_Desert=RGB2 C345 RGB6 HALF DITH C16 RGB4 RGB5
 

@@ -114,7 +114,7 @@ end
 -- utiliser un fps<0 si la taille 100% doit etre conservee
 local MODE          = env('MODE',MODE_DITH)
 local FPS           = env('FPS',16)
-local COLOR         = env('COLOR',0x70)
+local COLOR         = env('COLOR',-1)
 local FFMPEG        = locate('ffmpeg', 'tools')
 local YT_DL         = locate('yt-dlp', 'tools')
 local BIN           = locate('bin/')
@@ -136,7 +136,7 @@ local GRAY_B		= 0.0722
 local MODE_BM59_PROG_COL 
 
 if type(MODE)=='string' then
-	for k,v in ipairs(MODE_TXT) do
+	for k,v in pairs(MODE_TXT) do
 		if v==MODE then MODE=k end
 	end
 end
@@ -441,10 +441,12 @@ local PALETTE = {ef={}}
 -- thomson levels in PC world
 for i=0,15 do PALETTE.ef[i+1]=round(255*(i/15)^(1/2.8)) end
 function PALETTE.linear(u)
+	-- do return (u/255)^2.2 end
 	if not PALETTE.__linear then 
 		PALETTE.__linear = {}
 		for u=0,255 do
 			PALETTE.__linear[u] = 
+				-- (u/255)^2.2
 				u<10.31475 and u/3294.6 or (((u+14.025)/269.025)^2.4)
 				-- (u/255)^1.8
 				-- (u/255)^1.5
@@ -1035,7 +1037,7 @@ function FILTER:byte(offset)
 		return a<=bc and bc
 		    or b==bc and (a<=c and a or c)
 			or           (a<=b and a or b)
-	elseif true then -- return media
+	elseif true then -- return median
 		local q = self._q if q==nil then q={} self._q = q end
 		for i=1,m do q[i] = t[i][offset] end
 		table.sort(q)
@@ -1199,6 +1201,7 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, pset, duration)
 			' -s '..w..'x'..h..
 			-- ' -vf "hqdn3d=luma_spatial=12: chroma_spatial=1: luma_tmp=1: chroma_tmp=1"' ..
 			' -vf "tmedian"'..
+			' -vf "eq=contast=2"'..
 			-- ' -vf "hqdn3d"' ..
 			-- ' -vf "atadenoise"' ..
 			-- ' -vf "bm3d"'..
@@ -1398,11 +1401,11 @@ VIDEO.font = {
         "XXX.",
         "...."
     },['1']={
-        "..X.",
-        "..X.",
-        "..X.",
-        "..X.",
-        "..X.",
+        ".X..",
+        "XX..",
+        ".X..",
+        ".X..",
+        ".X..",
         "...."
     },['2']={
         "XXX.",
@@ -2143,8 +2146,7 @@ elseif MODE==MODE_DITH
 				_r[i],_g[i],_b[i] = l*GRAY_R,l*GRAY_G,l*GRAY_B
 			end
 			self.pset = function(self, x,y, r,g,b)
-				x,y = x+320*y
-				x,y,r,g = floor(x/8),_mask[x],self.image,_r[r] + _g[g] + _b[b] >= _dith[x]
+				x,y,r,g = floor(x/8+40*y),_mask[x],self.image,_r[r] + _g[g] + _b[b] >= _dith[x+320*y]
 				if self.overwrite then
 					r[x] = r[x] + (g and y or 0) - (r[x]/y % 2 >= 1 and y or 0)
 				elseif g then
@@ -2159,6 +2161,7 @@ elseif MODE==MODE_RGB2 then -- RGB
     CONFIG.px_size   = {1,3}
 	CONFIG.dither    = compo(norm,double,bayer){{3,1,2}} -- 24
 	-- CONFIG.dither    = compo(norm,double,bayer){{3,1,4,2}} -- 24
+	CONFIG.dither    = compo(norm,vac)(12,4) -- 48
 	-- CONFIG.dither    = compo(norm,halve,halve,vac)(16,5) -- 20
 	
 	-- CONFIG.dither    = compo(norm,double){{9,1,5,10,2,6},{12,4,8,11,3,7}}
@@ -2210,7 +2213,8 @@ elseif MODE==MODE_BM59 then -- BM59
 		-- compo(norm,halve,bayer,2){{1},{2}}
 		-- norm(vac(8,16))
 		-- norm(vac(5,11))
-		compo(norm,vac)(8,16) -- ok
+		compo(norm,vac)(4,8)
+		-- compo(norm,vac)(8,16) -- ok
 		
 	-- compo(norm,double){
 		-- {7,4},
@@ -2220,7 +2224,7 @@ elseif MODE==MODE_BM59 then -- BM59
 	-- }
 
 	CONFIG.palette   = function(CONVERTER,VIDEO)
-		local H = {w={}} for i=0,255 do H.w[i]=0 end		
+		local H = {w={},r=0,g=0,b=0} for i=0,255 do H.w[i]=0 end		
 		local function map(vals, histo)
 			local t={}; t[0] = 0
 			local k,v0,v1=1,0,PALETTE.linear(vals[1])
@@ -2249,7 +2253,7 @@ elseif MODE==MODE_BM59 then -- BM59
                 local stat = VIDEO:new(TMP.file,TMP.fps,80,100,80,100,
 					function(self, x,y, r,g,b)
 					local t = math.floor(r*GRAY_R + g*GRAY_G + b*GRAY_B)
-					H.w[t] = H.w[t]+1
+					H.w[t],H.r,H.g,H.b = H.w[t]+1,H.r+r,H.g+g,H.b+b
 				end, TMP.duration)
                 stat.super_next_image = stat.next_image
                 stat.mill = {'|', '/', '-', '\\'}
@@ -2274,15 +2278,25 @@ elseif MODE==MODE_BM59 then -- BM59
         io.stderr:flush()
 
 		print('w', unpack(w.base))
-		for t=0,255 do
-			if PALETTE.linear(t)*3>=1 then 
-				MODE_BM59_PROG_COL = {t,t-1,t}
-				break
+		
+		do local best = 1e300
+			for t=0,255 do local x = math.abs(PALETTE.linear(t)*4*(GRAY_R+GRAY_G+GRAY_B)-1)
+				if x<best then best = x
+					MODE_BM59_PROG_COL = {t,t,t}
+				end
 			end
 		end
+		
+		local function tint(col)
+			local function m(x)
+				return round(x*col/math.max(H.r,H.g,H.b,1))
+			end
+			return m(H.r)+16*m(H.g)+256*m(H.b)
+		end
+		-- rescale the base to have approx
 
 		return {
-			0x000*w.base[1],0x111*w.base[2],0x111*w.base[3],0x111*w.base[4],			
+			0x000,tint(w.base[2]),tint(w.base[3]),tint(w.base[4]),
 			3840,3855,4080,4095,
 			1911,826,931,938,
 			2611,2618,3815,123
@@ -2842,7 +2856,7 @@ elseif MODE==MODE_EDGE then
 else
 	local msg = "Invalid MODE="..(MODE and MODE or "<empty>")
 	msg = msg .. "\npossible values are:"
-	for _,v in ipairs(MODE_TXT) do msg = msg .. " "..v end
+	for _,v in pairs(MODE_TXT) do msg = msg .. " "..v end
     error(msg)
 end
 
@@ -2964,83 +2978,50 @@ function CONVERTER:vidname()
 							  :gsub('%s+$','')
 end
 function CONVERTER:_compress(pos, prev, curr, indices_fcn, out_fcn)
-	local k,b0,b1,b2
+	local k,b0,b1,b2,ci,cj,ck
 	for _,i in indices_fcn(prev,curr) do
 		while prev[i] ~= curr[i] do
+			ck,ci,cj = curr[i-1],curr[i],curr[i+1]
 			k = i - pos
 			if k<0 then 
 				b0,b1,b2,pos = 3,128+math.floor(i/256),i%256,i
-			elseif k<=1 then
-				if k==0 
-				and curr[pos-2]==curr[pos+0]
-				and curr[pos-1]==curr[pos+1]
-				and curr[pos+0]==curr[pos+2]
-				and curr[pos+1]==curr[pos+3]
-				and curr[pos+2]==curr[pos+4]
-				and curr[pos+3]==curr[pos+5] then
-					-- rpt6,-2
-					b0,b1,b2 = 3,0xf0,0
-					prev[pos] = curr[pos]; pos = pos+1
-					prev[pos] = curr[pos]; pos = pos+1
-					prev[pos] = curr[pos]; pos = pos+1
-					prev[pos] = curr[pos]; pos = pos+1
-					prev[pos] = curr[pos]; pos = pos+1
-					prev[pos] = curr[pos]; pos = pos+1
-				elseif k==0 
-				and curr[pos-1]==curr[pos+0]
-				and curr[pos-0]==curr[pos+1]
-				and curr[pos+1]==curr[pos+2]
-				and curr[pos+2]==curr[pos+3]
-				and curr[pos+3]==curr[pos+4]
-				and curr[pos+4]==curr[pos+5] then
-					-- rpt6,-1
-					b0,b1,b2 = 3,0xe0,0
-					prev[pos] = curr[pos]; pos = pos+1
-					prev[pos] = curr[pos]; pos = pos+1
-					prev[pos] = curr[pos]; pos = pos+1
-					prev[pos] = curr[pos]; pos = pos+1
-					prev[pos] = curr[pos]; pos = pos+1
-					prev[pos] = curr[pos]; pos = pos+1
-				elseif k==0 
-				and curr[pos-2]==curr[pos+0]
-				and curr[pos-1]==curr[pos+1]
-				and curr[pos+0]==curr[pos+2]
-				and curr[pos+1]==curr[pos+3] then
-					-- rpt4,-2
-					b0,b1,b2 = 3,0xf8,0
-					prev[pos] = curr[pos]; pos = pos+1
-					prev[pos] = curr[pos]; pos = pos+1
-					prev[pos] = curr[pos]; pos = pos+1
-					prev[pos] = curr[pos]; pos = pos+1
-				elseif k==0 
-				and curr[pos+0]==curr[pos+1]
-				and curr[pos+1]==curr[pos+2]
-				and curr[pos+2]==curr[pos+3] then
-					-- rpt4
-					b0,b1,b2 = 3,0x00,curr[pos]
-					prev[pos] = curr[pos]; pos = pos+1
-					prev[pos] = curr[pos]; pos = pos+1
-					prev[pos] = curr[pos]; pos = pos+1
-					prev[pos] = curr[pos]; pos = pos+1
-				elseif k==0 
-				and curr[pos+0]==curr[pos+1]
-				and curr[pos+1]==curr[pos+2] then
-					-- rpt3
-					b0,b1,b2 = 3,0xC0,curr[pos]
-					prev[pos] = curr[pos]; pos = pos+1
-					prev[pos] = curr[pos]; pos = pos+1
-					prev[pos] = curr[pos]; pos = pos+1
-				elseif k==0 and curr[pos+1]==prev[pos+1] then
-					b0,b1,b2  = 2,curr[pos],curr[pos+2]
-					prev[pos] = curr[pos]; pos = pos+2
-					prev[pos] = curr[pos]; pos = pos+1
+			elseif k==0 then
+  			     -- local s = string.char(curr[pos-2] or 123, curr[pos-1] or 214,
+					-- curr[pos], curr[pos+1], curr[pos+2],
+					-- curr[pos+3], curr[pos+4], curr[pos+5])
+				-- local s3 = s:sub(3)
+				-- if s:sub(1,6)==s3 then 
+				if ck==cj and ci==curr[i-2] and ci==curr[i+2] and cj==curr[i+3] 
+				then -- rpt4,-2
+					b0,b1,b2,pos,prev[i],prev[i+1],prev[i+2],prev[i+3] = 
+						3,0xf8,0,pos+4,ci,cj,ci,cj,ci,cj
+					if  ci==curr[i+4] and cj==curr[i+5]
+					then -- rpt6,-2
+						b1,pos,prev[pos],prev[pos+1] = 0xf0,pos+2,ci,cj
+					end
+				elseif ci==ck        and ci==cj
+				   and ci==curr[i+2] and ci==curr[i+3]
+				   and ci==curr[i+4] and ci==curr[i+5]
+				then -- rpt6,-1
+					b0,b1,b2,pos,prev[i],prev[i+1],prev[i+2],prev[i+3],prev[i+4],prev[i+5]
+						= 3,0xe0,0,pos+6,ci,ci,ci,ci,ci,ci
+				elseif ci==cj and ci==curr[i+2]
+			    then -- rpt3
+					b0,b1,b2,pos,prev[i],prev[i+1],prev[i+2] = 
+						3,0xC0,ci,pos+3,ci,ci,ci
+					if ci==curr[i+3] then -- rpt4
+						b1,pos,prev[pos] = 0x00,pos+1,ci
+					end
+				elseif cj==prev[i+1] then
+					b0,b1,b2,pos,prev[i],prev[i+2] = 2,ci,curr[i+2],pos+3,ci,curr[i+2]
 				else
-					b0,b1,b2  = 0,curr[pos],curr[pos+1]
-					prev[pos] = curr[pos]; pos = pos+1
-					prev[pos] = curr[pos]; pos = pos+1
+					b0,b1,b2,pos,prev[i],prev[i+1] = 0,ci,cj,pos+2,ci,cj
 				end
+			elseif k==1 then
+					b0,b1,b2,pos,prev[pos],prev[pos+1] = 
+						0,curr[pos],curr[pos+1],pos+2,curr[pos],curr[pos+1]
 			elseif k<=257 then -- deplacement 8 bit
-				b0,b1,b2,prev[i],pos = 1,k-2,curr[i],curr[i],i+1
+				b0,b1,b2,prev[i],pos = 1,k-2,ci,ci,i+1
 			else -- deplacement arbitraire
 				b0,b1,b2,pos = 3,128+math.floor(i/256),i%256,i
 			end
@@ -3066,11 +3047,20 @@ function CONVERTER:_stat()
 	stat:pset(0,0,0,0,0)
     stat.super_pset = stat.pset
     stat.histo = {}; for i=0,255 do stat.histo[i]=0 end
-    function stat:pset(x,y, r,g,b)
-        self:super_pset(x,y,r,g,b)
+	function stat:pset(x,y, r,g,b)
+		self:super_pset(x,y,r,g,b)
 		local h = self.histo
-        h[r],h[g],h[b] = h[r]+1,h[g]+1,h[b]+1
-    end
+		h[r],h[g],h[b] = h[r]+1,h[g]+1,h[b]+1
+	end	
+	local chg_color = COLOR<0 and CONFIG.asm_mode==0
+	if chg_color then
+		stat.n,stat.r,stat.g,stat.b,stat._pset_ = 0,0,0,0,stat.pset
+		function stat:pset(x,y, r,g,b)
+			self:_pset_(x,y,r,g,b)
+			local l = PALETTE.linear
+			stat.n,stat.r,stat.g,stat.b = stat.n+1,stat.r+l(r),stat.g+l(g),stat.b+l(b)
+		end
+	end
     stat.super_next_image = stat.next_image
     stat.mill = {'|', '/', '-', '\\'}
     stat.mill[0] = stat.mill[4]
@@ -3096,7 +3086,7 @@ function CONVERTER:_stat()
     end
     io.stderr:write(string.rep(' ',79)..'\r')
     io.stderr:flush()
-
+	
 	-- nb de trames vidéos par image
 	local avg_trames = (stat.trames/stat.cpt) -- * 1.15 -- 15% safety margin
 	-- nombre de trames théoriques max par image
@@ -3148,16 +3138,19 @@ function CONVERTER:_stat()
 			break
 		end
 	end
-    -- print(stat.min .. '    ' .. stat.max .. '                  ')
+    -- print('min/max', stat.min, stat.max)
     io.stdout:flush()
     local video_cor = {stat.min, 255/(stat.max - stat.min)}
     self.video_cor = video_cor
 
     -- info
-	local stat_str = string.format('%dx%d [%s] %s fps:%d zoom:%d%%',
-        self.w, self.h, MODE_TXT[MODE],
+	local stat_str = string.format('%s %dx%d (%d%%) %dfps %s',
         self.duration>=3600 and hms(self.duration, "%dh%2d'%d\"") or _ms(self.duration, "%d'%d\""), 
-		self.fps, percent(math.max(self.w/self.W,self.h/self.H)))
+        self.w, self.h, 
+		percent(math.max(self.w/self.W,self.h/self.H)),
+		self.fps, 
+		MODE_TXT[MODE],
+	nil)
     io.stdout:write('> '..stat_str..'\n')
 	local TOT = 0 for i=0,3 do TOT = TOT+stat.type[i] end
     io.stdout:write(string.format('> %d frames: %d%% %d%% %d%% %d%%\n',
@@ -3167,6 +3160,27 @@ function CONVERTER:_stat()
                                     percent(stat.type[2]/TOT),
                                     percent(stat.type[3]/TOT)))
     io.stdout:flush()
+	
+	if chg_color then -- uses average
+		stat.r,stat.g,stat.b = stat.r/stat.n,stat.g/stat.n,stat.b/stat.n
+		local m,r_,g_,b_ = 1/math.max(stat.r, stat.g, stat.b)
+		local pal = {0x000,0x00F,0x0F0,0x0FF,0xF00,0xF0F,0xFF0,0xFFF,
+                   0x666*0,0x338,0x383,0x388,0x833,0x838,0x883,0x069}
+		local rgb = function(p) 
+			local l = function(x) return PALETTE.linear(PALETTE.ef[1+(math.floor(x)%16)]) end
+			return l(p),l(p/16),l(p/256)
+		end
+		r_,g_,b_,m = stat.r*m,stat.g*m,stat.b*m,1e300
+		for i,p in ipairs(pal) do
+			local r,g,b,t = rgb(p) t = math.max(r,g,b) r,g,b = r/t,g/t,b/t
+			t =2*(r-r_)^2 + 4*(g-g_)^2 + (b-b_)^2
+			-- print(i-1, t, r,g,b, r_,g_,b_)
+			if t<m then m,COLOR = t,i-1 end
+		end
+		if COLOR~=7 then print(r_,g_,b_,'->',COLOR,'=',rgb(pal[COLOR+1])) end
+		COLOR = 0x10*COLOR
+		-- os.exit(0)
+	end
 	
 	-- self.avg_chg = (2*(stat.type[0]+stat.type[2])+1*stat.type[1])/(stat.type[0]+stat.type[1]+stat.type[2])
 	-- print('average bytes changed per frames = ', self.avg_chg)
@@ -3184,6 +3198,7 @@ function CONVERTER:process()
 	-- print(self.video_cor[1],self.video_cor[2])
     if self.video_cor[1]~=0 or self.video_cor[2]~=1 then
         local cor = self.video_cor
+	-- print('min/max corr', cor[1],cor[2])
         local super_pset = video.pset
         function video:pset(x,y, r,g,b)
             local function f(x)
@@ -3280,8 +3295,9 @@ function CONVERTER:process()
 		for i=0,7999 do prev[i] = 0 end
 	end
 	
-	local filter_s,filter_a,filter_b = 1.5,.87,.95 -- .925 -- .95
-	
+	local filter_s,filter_a = 1.5,.95 -- .87 -- .925 -- .95
+	local filter_b = filter_a -- damp to return to zero
+	filter_b = .5 
     -- conversion
 	video.filter.a = .95 -- progressive start
     video:next_image() 	
@@ -3308,10 +3324,10 @@ function CONVERTER:process()
 					t = t - cycles_per_img
 				until t<cycles_per_img
 			else
-				video.filter.a = video.filter.a*filter_a
+				video.filter.a = video.filter.a*filter_b
 			end
 		else
-			video.filter.a = video.filter.a*filter_a
+			video.filter.a = video.filter.a*filter_b
 		end
 		
 		-- real_compression
@@ -3406,6 +3422,7 @@ function OUT:open()
         return raw
     end
 	local function to770(mo5col)
+		mo5col = 0<mo5col and mo5col<255 and mo5col or 0x70
 		local a,b = math.floor(mo5col/16),mo5col%16
 		return (b>=8 and 0 or 128)+(b%8) + ((a+8)%16)*8
 	end
@@ -3525,7 +3542,7 @@ if #arg>1 then -- infer name
     end
     file = subs:longest():gsub("%W+$", "")
     if file:len()<=4 then file = basename(first or 'Medley') end
-	if num>1 then file = file.."#"..num end
+	if num>1 then file = file.."#"..num; COLOR=COLOR>0 and COLOR or 0x70 end
     io.stderr:write("\n===> "..tag..file.." <===\n")
     io.stderr:flush()
 end
