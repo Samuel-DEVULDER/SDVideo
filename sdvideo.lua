@@ -115,6 +115,7 @@ end
 local MODE          = env('MODE',MODE_DITH)
 local FPS           = env('FPS',16)
 local COLOR         = env('COLOR',-1)
+local SCROLL        = env('SCROLL', 'true')
 local FFMPEG        = locate('ffmpeg', 'tools')
 local YT_DL         = locate('yt-dlp', 'tools')
 local BIN           = locate('bin/')
@@ -1201,7 +1202,7 @@ function VIDEO:new(file, fps, w, h, screen_width, screen_height, pset, duration)
 			' -s '..w..'x'..h..
 			-- ' -vf "hqdn3d=luma_spatial=12: chroma_spatial=1: luma_tmp=1: chroma_tmp=1"' ..
 			' -vf "tmedian"'..
-			' -vf "eq=contast=2"'..
+			-- ' -vf "eq=contrast=2"'..
 			-- ' -vf "hqdn3d"' ..
 			-- ' -vf "atadenoise"' ..
 			-- ' -vf "bm3d"'..
@@ -1264,21 +1265,42 @@ function VIDEO:init_dither()
     self.dither = m
 end
 
+function VIDEO:overwrite(overwrite)
+	self._overwrite = overwrite
+end
+
 function VIDEO:pset(x,y, r,g,b)
 	if not self.dither then	self:init_dither(); self._cache = {} end
-	local k = PALETTE.key(r,g,b)
-	local t = self._cache[k]
-	if not t then
-		t = PALETTE:compute(self.dither.wh,r,g,b)
-		self._cache[k] = t
+
+	self.pset_ovr = function(self, x,y, r,g,b)
+		local k = PALETTE.key(r,g,b)
+		local t = self._cache[k]
+		if not t then
+			t = PALETTE:compute(self.dither.wh,r,g,b)
+			self._cache[k] = t
+		end
+		local p,v = math.floor(x/2) + y*40,t:byte(self.dither:get(x,y))
+		t = self.image[p]
+		self.image[p] = ((x%2)==0 and t%16+v*16 or t-(t%16)+v)
 	end
-	local o,p,v = (x%2),math.floor(x/2) + y*40,t:byte(self.dither:get(x,y))
-	if o==0 then v=v*16 end
-	t = self.image[p]
-	if self.overwrite then
-		t = o==0 and t%16 or t-(t%16)
+	
+	self.pset_fst = function(self, x,y, r,g,b)
+		local k = PALETTE.key(r,g,b)
+		local t = self._cache[k]
+		if not t then
+			t = PALETTE:compute(self.dither.wh,r,g,b)
+			self._cache[k] = t
+		end
+		local p,v = math.floor(x/2) + y*40,t:byte(self.dither:get(x,y))
+		self.image[p] = self.image[p]+((x%2)==0 and v*16 or v) 
 	end
-	self.image[p] = t + v
+	
+	self.overwrite = function(self, ovr)
+		self._overwrite, self.pset = ovr, ovr and self.pset_ovr or self.pset_fast
+	end
+	
+	self.pset = self.pset_fst
+	self:pset(x,y, r,g,b)
 end
 VIDEO.font = {
     [' ']={
@@ -2029,18 +2051,21 @@ function VIDEO:setup_gray()
 	
 	self._gray = {} for i=0,63999 do self._gray[i] = 0 end
 	
-	self.pset = function(self, x,y, r,g,b)
-		if self.overwrite then
-			local i,f,_mask = self.image,unpack(self._mask[x+320*y])
-			if (i[f]/_mask) % 2 >= 1 then
-				i[f] = i[f] - _mask
-			end
-			if self._r[r]+self._g[g]+self._b[b]>50 then
-				i[f] = i[f] + _mask
-			end
-		else
-			self._gray[x+y*320] = round(self._r[r]+self._g[g]+self._b[b])
+	self.pset_ovr = function(self, x,y, r,g,b)
+		local i,f,_mask = self.image,unpack(self._mask[x+320*y])
+		if (i[f]/_mask) % 2 >= 1 then
+			i[f] = i[f] - _mask
 		end
+		if self._r[r]+self._g[g]+self._b[b]>50 then
+			i[f] = i[f] + _mask
+		end
+	end
+	self.pset_fst = function(self, x,y, r,g,b)
+		self._gray[x+y*320] = round(self._r[r]+self._g[g]+self._b[b])
+	end
+	self.pset = self.pset_fst
+	self.overwrite = function(self, ovr)
+		self._overwrite, self.pset = ovr, ovr and self.pset_ovr or self.pset_fst
 	end
 end
 
@@ -2145,13 +2170,19 @@ elseif MODE==MODE_DITH
 				local l = PALETTE.linear(i)
 				_r[i],_g[i],_b[i] = l*GRAY_R,l*GRAY_G,l*GRAY_B
 			end
-			self.pset = function(self, x,y, r,g,b)
+			self.pset_ovr = function(self, x,y, r,g,b)
 				x,y,r,g = floor(x/8+40*y),_mask[x],self.image,_r[r] + _g[g] + _b[b] >= _dith[x+320*y]
-				if self.overwrite then
-					r[x] = r[x] + (g and y or 0) - (r[x]/y % 2 >= 1 and y or 0)
-				elseif g then
-					r[x] = r[x] + y
+				r[x] = r[x] + (g and y or 0) - (r[x]/y % 2 >= 1 and y or 0)
+			end
+			self.pset_fst = function(self, x,y, r,g,b)
+				if _r[r] + _g[g] + _b[b] >= _dith[x+320*y] then 
+					y,r = floor(x/8+40*y),self.image
+					r[y] = r[y] + _mask[x] 
 				end
+			end
+			self.pset = self.pset_fst
+			self.overwrite = function(self, overwrite)
+				self._overwrite, self.pset = overwrite, overwrite and self.pset_ovr or self.pset_fst
 			end
 		end
 		self:pset(x,y,r,g,b)
@@ -2160,8 +2191,8 @@ elseif MODE==MODE_RGB2 then -- RGB
 	CONFIG.asm_mode  = 1
     CONFIG.px_size   = {1,3}
 	CONFIG.dither    = compo(norm,double,bayer){{3,1,2}} -- 24
-	-- CONFIG.dither    = compo(norm,double,bayer){{3,1,4,2}} -- 24
-	CONFIG.dither    = compo(norm,vac)(12,4) -- 48
+	CONFIG.dither    = compo(norm,double,bayer){{3,1,4,2}} -- 24
+	-- CONFIG.dither    = compo(norm,vac)(12,4) -- 48
 	-- CONFIG.dither    = compo(norm,halve,halve,vac)(16,5) -- 20
 	
 	-- CONFIG.dither    = compo(norm,double){{9,1,5,10,2,6},{12,4,8,11,3,7}}
@@ -2169,20 +2200,6 @@ elseif MODE==MODE_RGB2 then -- RGB
 	-- 12 = 3*4
 	-- CONFIG.dither    = compo(norm,vac)(16,5) -- très belle qualité gfx
 	
-	local function pset(self, x,y, r,g,b)
-		local f,d = self._linear,self.dither:get(x,y)
-        local m,p,q = self._mask[x],math.floor((x+y*960)/8),self.image
-
-		if self.overwrite then
-			local m2 = m+m
-			if q[p   ] % m2 >= m then q[p   ] = q[p   ]-m end
-			if q[p+40] % m2 >= m then q[p+40] = q[p+40]-m end
-			if q[p+80] % m2 >= m then q[p+80] = q[p+80]-m end
-		end
-        if f[r]>=d then q[p]    = q[p]    + m end
-        if f[g]>=d then q[p+40] = q[p+40] + m end
-        if f[b]>=d then q[p+80] = q[p+80] + m end
-	end
     function VIDEO:pset(x,y, r,g,b)
         if not self.dither then 
 			self:init_dither()
@@ -2191,8 +2208,33 @@ elseif MODE==MODE_RGB2 then -- RGB
             self._mask = {}
             for i=0,319 do self._mask[i]=2^(7-(i%8)) end
         end
-		pset(self, x,y, r,g,b)
-		self.pset = pset
+		self.pset_ovr = function(self, x,y, r,g,b)
+			local f,d = self._linear,self.dither:get(x,y)
+			local m,p,q = self._mask[x],math.floor((x+y*960)/8),self.image
+			local m2,t = m+m
+					t =   q[p   ] if t % m2 >= m then t = t-m end if f[r]>=d then t = t + m end
+			q[p   ],t = t,q[p+40] if t % m2 >= m then t = t-m end if f[g]>=d then t = t + m end
+			q[p+40],t = t,q[p+80] if t % m2 >= m then t = t-m end if f[b]>=d then t = t + m end
+			q[p+80]   = t
+		end
+		self.pset_fst = function(self, x,y, r,g,b)
+			local f,d = self._linear,self.dither:get(x,y)
+			local fr,fg,fb = f[r]>=d,f[g]>=d,f[b]>=d
+			if fr or fg or fb then
+				local m,p,q = self._mask[x],math.floor((x+y*960)/8),self.image
+				-- q[p]    = q[p]    + f[r]>=d and m or 0
+				-- q[p+40] = q[p+40] + f[g]>=d and m or 0
+				-- q[p+80] = q[p+80] + f[b]>=d and m or 0
+				if fr then q[p]    = q[p]    + m end
+				if fg then q[p+40] = q[p+40] + m end
+				if fb then q[p+80] = q[p+80] + m end
+			end
+		end
+		self.overwrite = function(self, ovr)
+			self._overwrite, self.pset = ovr, ovr and self.pset_ovr or self.pset_fst
+		end
+		self.pset = self.pset_fst
+		self:pset(x,y, r,g,b)
     end
 
 	for _,f in pairs(VIDEO.font) do
@@ -2304,33 +2346,35 @@ elseif MODE==MODE_BM59 then -- BM59
     end
 	local otab = {}
 	for i=0,159 do otab[i] = 4^(3-(i%4)) end
-	VIDEO.plot = function(self,p,o,c)
-		local q = self.image
-		if self.overwrite then
-			q[p] = q[p] - ((q[p]/o)%4)*o
-		end
-		q[p] = q[p] + c*o
-    end 
-	local function pset(self, x,y, r,g,b)
-		local l,f = self._l_R[r]+self._l_G[r]+self._l_B[b],math.floor
-		self:plot(f(x/4) + y*40, otab[x], f(l) +
-			(((l%1)>=self.dither:get(x,y)) and 1 or 0))
-	end
-    function VIDEO:pset(x,y, r,g,b)
+	function VIDEO:pset(x,y, r,g,b)
+		local _l_R,_l_G,l_B
         if not self.dither then 
 			self:init_dither()
-            self._l_R = {}
-			self._l_G = {}
-			self._l_B = {}
+            self._l_R,self._l_G,self._l_B = {},{},{}
             local f = PALETTE.linear
             for i=0,255 do
 				self._l_R[i]=f(i)*3*GRAY_R
 				self._l_G[i]=f(i)*3*GRAY_G
 				self._l_B[i]=f(i)*3*GRAY_B
 			end
+			_l_R,_l_G,_l_B = self._l_R,self._l_G,self.l_B
         end
-		pset(self,x,y,r,g,b)
-		self.pset = pset
+		self.plot_ovr = function(self,p,o,c)
+			self.image[p] = self.image[p] + c*o - ((q[p]/o)%4)*o
+		end 
+		self.plot_fst = function(self,p,o,c)
+			self.image[p] = self.image[p] + c*o
+		end 
+		self.plot = self.plot_fst
+		self.overwrite = function(self, ovr)
+			self._overwrite, self.plot = ovr, ovr and self.plot_ovr or self.plot_fst
+		end
+		self.pset = function (self, x,y, r,g,b)
+			local l,f = _l_R[r]+_l_G[r]+_l_B[b],math.floor
+			self:plot(f(x/4) + y*40, otab[x], 
+				(((l%1)>=self.dither:get(x,y)) and f(l) + 1 or f(l)))
+		end
+    	self:pset(x,y,r,g,b)
     end
 elseif MODE==MODE_C345 then
 	CONFIG.asm_mode	 = 3
@@ -2413,51 +2457,6 @@ elseif MODE==MODE_C345 then
 			0x010*g.base[2],0x010*g.base[3],0x010*g.base[4],0x010*g.base[5]
 		}
     end
-    function VIDEO:plot(p,o,r,g,b)
-		local p1,p2,img = p,p+40,self.image
-		if self.overwrite then local
-			t = img[p1]; img[p1] = o==0 and t%16 or t-(t%16)
-			t = img[p2]; img[p2] = o==0 and t%16 or t-(t%16)
-		end
-		if ZIGZAG and o==1 then p1,p2=p2,p1 end
-		o = o==0 and 16 or 1
-		local t = b+r*3
-		if t>0 then img[p1] = img[p1] +      t*o end
-		if g>0 then img[p2] = img[p2] + (g+11)*o end
-	end
-	local function pset(self, x,y, r,g,b)
-		local f,d = self._linear,self.dither:get(x,y)
-        r,g,b = f[r][1],f[g][2],f[b][3]
-		if true then
-		r = math.floor(r) +
-        -- (r%1>self.dither:get(x,3*y+0) and 1 or 0)
-        -- (r%1>=(r>=1 and d or self.dither:get(x,3*y+0)) and 1 or 0)
-        (r%1>d and 1 or 0)
-        g = math.floor(g) +
-        -- (g%1>self.dither:get(x,3*y+1) and 1 or 0)
-        -- (g%1>=(g>=1 and d or self.dither:get(x,3*y+1)) and 1 or 0)
-        (g%1>d and 1 or 0)
-        b = math.floor(b) +
-        -- (b%1>self.dither:get(x,3*y+2) and 1 or 0)
-        -- (b%1>=(b>=1 and d or self.dither:get(x,3*y+2)) and 1 or 0)
-        (b%1>d and 1 or 0)
-		else
-        r = math.floor(r) +
-        -- (r%1>self.dither:get(x,3*y+0) and 1 or 0)
-        (r%1>=(r>=1 and d or self.dither:get(x,3*y+0)) and 1 or 0)
-        -- (r%1>d and 1 or 0)
-        g = math.floor(g) +
-        -- (g%1>self.dither:get(x,3*y+1) and 1 or 0)
-        (g%1>=(g>=1 and d or self.dither:get(x,3*y+1)) and 1 or 0)
-        -- (g%1>d and 1 or 0)
-        b = math.floor(b) +
-        -- (b%1>self.dither:get(x,3*y+2) and 1 or 0)
-        (b%1>=(b>=1 and d or self.dither:get(x,3*y+2)) and 1 or 0)
-        -- (b%1>d and 1 or 0)
-		end
-
-        self:plot(math.floor(x/2) + y*80,x%2,r,g,b)
-	end
     function VIDEO:pset(x,y, r,g,b)
         if not self.dither then 
 			self:init_dither()
@@ -2467,8 +2466,61 @@ elseif MODE==MODE_C345 then
                 self._linear[i]={t*3,t*4,t*2}
             end
         end
-		pset(self, x,y, r,g,b)
-		self.pset = pset
+		self.plot_ovr = function(self,p,o,r,g,b)
+			local p1,p2,img,t = p,p+40,self.image
+			if ZIGZAG and o==1 then p1,p2=p2,p1 end
+			t = img[p1]; img[p1] = o==0 and t%16 or t-(t%16)
+			t = img[p2]; img[p2] = o==0 and t%16 or t-(t%16)
+			o,t = o==0 and 16 or 1,b+r*3
+			if t>0 then img[p1] = img[p1] +      t*o end
+			if g>0 then img[p2] = img[p2] + (g+11)*o end
+		end 
+		self.plot_fst = function(self,p,o,r,g,b)
+			local p1,p2,img = p,p+40,self.image
+			if ZIGZAG and o==1 then p1,p2=p2,p1 end
+			o = o==0 and 16 or 1
+			local t = b+r*3
+			if t>0 then img[p1] = img[p1] +      t*o end
+			if g>0 then img[p2] = img[p2] + (g+11)*o end
+		end 
+		self.plot = self.plot_fst
+		self.overwrite = function(self, ovr)
+			self._overwrite, self.plot = ovr, ovr and self.plot_ovr or self.plot_fst
+		end	
+		self.pset = function(self, x,y, r,g,b)
+			local f,d = self._linear,self.dither:get(x,y)
+			r,g,b = f[r][1],f[g][2],f[b][3]
+			if true then
+			r = math.floor(r) +
+			-- (r%1>self.dither:get(x,3*y+0) and 1 or 0)
+			-- (r%1>=(r>=1 and d or self.dither:get(x,3*y+0)) and 1 or 0)
+			(r%1>d and 1 or 0)
+			g = math.floor(g) +
+			-- (g%1>self.dither:get(x,3*y+1) and 1 or 0)
+			-- (g%1>=(g>=1 and d or self.dither:get(x,3*y+1)) and 1 or 0)
+			(g%1>d and 1 or 0)
+			b = math.floor(b) +
+			-- (b%1>self.dither:get(x,3*y+2) and 1 or 0)
+			-- (b%1>=(b>=1 and d or self.dither:get(x,3*y+2)) and 1 or 0)
+			(b%1>d and 1 or 0)
+			else
+			r = math.floor(r) +
+			-- (r%1>self.dither:get(x,3*y+0) and 1 or 0)
+			(r%1>=(r>=1 and d or self.dither:get(x,3*y+0)) and 1 or 0)
+			-- (r%1>d and 1 or 0)
+			g = math.floor(g) +
+			-- (g%1>self.dither:get(x,3*y+1) and 1 or 0)
+			(g%1>=(g>=1 and d or self.dither:get(x,3*y+1)) and 1 or 0)
+			-- (g%1>d and 1 or 0)
+			b = math.floor(b) +
+			-- (b%1>self.dither:get(x,3*y+2) and 1 or 0)
+			(b%1>=(b>=1 and d or self.dither:get(x,3*y+2)) and 1 or 0)
+			-- (b%1>d and 1 or 0)
+			end
+
+			self:plot(math.floor(x/2) + y*80,x%2,r,g,b)
+		end
+		self:pset(x,y, r,g,b)
     end
 elseif MODE==MODE_RGB6 then -- RGB6
     CONFIG.asm_mode	 = 3
@@ -2545,7 +2597,7 @@ elseif MODE==MODE_RGB6 then -- RGB6
     end
 	function VIDEO:plot(p,o,r,g,b)
 		local img = self.image
-		if self.overwrite then
+		if self._overwrite then
 			local t
 			t = img[p   ]; img[p   ] = o==0 and t%16 or t-(t%16)
 			t = img[p+40]; img[p+40] = o==0 and t%16 or t-(t%16)
@@ -2581,7 +2633,7 @@ elseif MODE==MODE_RGB6 then -- RGB6
                 r,g,b = b,r,g
             end
         end
-        self:plot(math.floor(x/2) + y*120, x%2, r,g,b)
+		self:plot(math.floor(x/2) + y*120, x%2, r,g,b)
 	end
     function VIDEO:pset(x,y, r,g,b)
         if not self.dither then 
@@ -2589,6 +2641,27 @@ elseif MODE==MODE_RGB6 then -- RGB6
             self._linear = {}
 			for i=0,255 do self._linear[i] = PALETTE.linear(i)*5 end
         end
+		self.plot_ovr = function(self,p,o,r,g,b)
+			local img,t = self.image
+			t = img[p   ]; img[p   ] = o==0 and t%16 or t-(t%16)
+			t = img[p+40]; img[p+40] = o==0 and t%16 or t-(t%16)
+			t = img[p+80]; img[p+80] = o==0 and t%16 or t-(t%16)
+			o = o==0 and 16 or 1
+			if r>0 then img[p] = img[p] + r*o end p=p+40
+			if g>0 then img[p] = img[p] + g*o end p=p+40
+			if b>0 then img[p] = img[p] + b*o end
+		end 
+		self.plot_fst = function(self,p,o,r,g,b)
+			local img = self.image
+			o = o==0 and 16 or 1
+			if r>0 then img[p] = img[p] + r*o end p=p+40
+			if g>0 then img[p] = img[p] + g*o end p=p+40
+			if b>0 then img[p] = img[p] + b*o end
+		end 
+		self.plot = self.plot_fst
+		self.overwrite = function(self, ovr)
+			self._overwrite, self.plot = ovr, ovr and self.plot_ovr or self.plot_fst
+		end	
         pset(self,x,y,r,g,b)
 		self.pset = pset
     end
@@ -2852,7 +2925,6 @@ elseif MODE==MODE_EDGE then
 		end
 		self:pset(x,y,r,g,b)
     end
-
 else
 	local msg = "Invalid MODE="..(MODE and MODE or "<empty>")
 	msg = msg .. "\npossible values are:"
@@ -2866,7 +2938,7 @@ end
 
 function VIDEO:read_rgb24(raw)
 	self:clear()
-	self.overwrite = false
+	self:overwrite(false)
 	local i,w,b,p = math.floor,self.width,FILTER.byte,self.pset
 	local ox = i((self.screen_width - w)/2)
 	local oy = i((self.screen_height - 6 - 7 - self.height)/2)+6
@@ -2883,7 +2955,7 @@ function VIDEO:read_rgb24(raw)
 		)
 	end
 	self.filter:flush()
-	self.overwrite = true
+	self:overwrite(true)
 end
 function VIDEO:progressbar(y, frac, r,g,b)
 	local t=round(self.screen_width*math.max(math.min(1,frac),0))
@@ -3055,10 +3127,14 @@ function CONVERTER:_stat()
 	local chg_color = COLOR<0 and CONFIG.asm_mode==0
 	if chg_color then
 		stat.n,stat.r,stat.g,stat.b,stat._pset_ = 0,0,0,0,stat.pset
-		function stat:pset(x,y, r,g,b)
+		local function pset(self, x,y, r,g,b)
 			self:_pset_(x,y,r,g,b)
 			local l = PALETTE.linear
 			stat.n,stat.r,stat.g,stat.b = stat.n+1,stat.r+l(r),stat.g+l(g),stat.b+l(b)
+		end
+		stat.pset = pset
+		stat.overwrite = function(self, bool)
+			self._overwrite, self.pset = bool, pset
 		end
 	end
     stat.super_next_image = stat.next_image
@@ -3173,7 +3249,7 @@ function CONVERTER:_stat()
 		r_,g_,b_,m = stat.r*m,stat.g*m,stat.b*m,1e300
 		for i,p in ipairs(pal) do
 			local r,g,b,t = rgb(p) t = math.max(r,g,b) r,g,b = r/t,g/t,b/t
-			t =2*(r-r_)^2 + 4*(g-g_)^2 + (b-b_)^2
+			t = 2*(r-r_)^2 + 4*(g-g_)^2 + (b-b_)^2
 			-- print(i-1, t, r,g,b, r_,g_,b_)
 			if t<m then m,COLOR = t,i-1 end
 		end
@@ -3248,7 +3324,7 @@ function CONVERTER:process()
 	elseif title_str:len()>hchars then 
 		for i=1,hchars do title_str = title_str..' ' end
 	end
-	if title_str:len()>hchars then title_x = 1 end
+	if title_str:len()>hchars and SCROLL then title_x = 1 end
 
 	-- video.framefill_ratio = 0
 	local function update_info()
@@ -3262,15 +3338,16 @@ function CONVERTER:process()
 		end
 
 		-- affichage info écran
+		local y_line = math.ceil(200/CONFIG.px_size[2])-7
 		if stat_str~='' then 
-			video:puts(video.screen_width-wchars*stat_str:len(),video.screen_height-7, stat_str) 
+			video:puts(video.screen_width-wchars*stat_str:len(),y_line, stat_str) 
 		end
-		video:puts(0,math.ceil(200/CONFIG.px_size[2])-7, time_str
+		video:puts(0,y_line, time_str
 					-- ..' b='..percent(video.filter.a)..'%'
 					-- ..' f='..math.floor(100*video.framefill_ratio)..'%'
 					,nil)
 		video:puts(title_x, 0, title_str)
-		if title_str:len()>hchars then
+		if title_str:len()>hchars and SCROLL then
 			title_x = title_x - 30/(CONFIG.px_size[1]*self.fps)
 			if title_x <= -wchars then
 				title_x = title_x + wchars
@@ -3280,7 +3357,7 @@ function CONVERTER:process()
 		local col = MODE<=MODE_DITH and {255,255,255}
                	 or MODE==MODE_BM59 and MODE_BM59_PROG_COL
 				 or                     {255,0,0}
-		video:progressbar(math.ceil(200/CONFIG.px_size[2])-1, tstamp/self.duration,unpack(col))
+		video:progressbar(y_line+6, tstamp/self.duration,unpack(col))
 		-- 0..1.1   => green 
 		-- 1.1..2.1 => yellow
 		-- 2.1..3+	   => red

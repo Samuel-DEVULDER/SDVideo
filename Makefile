@@ -132,10 +132,11 @@ tst_conv_sd: $(FFMPEG) $(ALL)
 
 tst_sdvideo: $(ALL)
 	@if test -f $(TMP); then $(RM) $(TMP); fi
-	for i in 0 1 2 3 4 5 6 7 8; do \
+	for i in 0 1 2 3 4 5 6 7 8 10 11 12; do \
 		echo; \
 		echo "MODE=$$i"; \
 		MODE=$$i \
+		FPS=11 \
 		nice -19 \
 		$(LUA) sdvideo.lua \
 			https://www.youtube.com/watch?v=sBKmqkh9bb8 \
