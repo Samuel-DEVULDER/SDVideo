@@ -2347,7 +2347,7 @@ elseif MODE==MODE_BM59 then -- BM59
 	local otab = {}
 	for i=0,159 do otab[i] = 4^(3-(i%4)) end
 	function VIDEO:pset(x,y, r,g,b)
-		local _l_R,_l_G,l_B
+		local _l_R,_l_G,_l_B
         if not self.dither then 
 			self:init_dither()
             self._l_R,self._l_G,self._l_B = {},{},{}
@@ -2466,23 +2466,41 @@ elseif MODE==MODE_C345 then
                 self._linear[i]={t*3,t*4,t*2}
             end
         end
-		self.plot_ovr = function(self,p,o,r,g,b)
-			local p1,p2,img,t = p,p+40,self.image
-			if ZIGZAG and o==1 then p1,p2=p2,p1 end
-			t = img[p1]; img[p1] = o==0 and t%16 or t-(t%16)
-			t = img[p2]; img[p2] = o==0 and t%16 or t-(t%16)
-			o,t = o==0 and 16 or 1,b+r*3
-			if t>0 then img[p1] = img[p1] +      t*o end
-			if g>0 then img[p2] = img[p2] + (g+11)*o end
-		end 
-		self.plot_fst = function(self,p,o,r,g,b)
-			local p1,p2,img = p,p+40,self.image
-			if ZIGZAG and o==1 then p1,p2=p2,p1 end
-			o = o==0 and 16 or 1
-			local t = b+r*3
-			if t>0 then img[p1] = img[p1] +      t*o end
-			if g>0 then img[p2] = img[p2] + (g+11)*o end
-		end 
+		if ZIGZAG then
+			self.plot_ovr = function(self,p,o,r,g,b)
+				local p1,p2,img,t = p,p+40,self.image
+				if o==1 then p1,p2=p2,p1 end
+				t = img[p1]; img[p1] = o==0 and t%16 or t-(t%16)
+				t = img[p2]; img[p2] = o==0 and t%16 or t-(t%16)
+				o,t = o==0 and 16 or 1,b+r*3
+				if t>0 then img[p1] = img[p1] +      t*o end
+				if g>0 then img[p2] = img[p2] + (g+11)*o end
+			end 
+			self.plot_fst = function(self,p,o,r,g,b)
+				local p1,p2,img = p,p+40,self.image
+				if o==1 then p1,p2=p2,p1 end
+				o = o==0 and 16 or 1
+				local t = b+r*3
+				if t>0 then img[p1] = img[p1] +      t*o end
+				if g>0 then img[p2] = img[p2] + (g+11)*o end
+			end 
+		else
+			self.plot_ovr = function(self,p,o,r,g,b)
+				local p1,p2,img,t = p,p+40,self.image
+				t = img[p1]; img[p1] = o==0 and t%16 or t-(t%16)
+				t = img[p2]; img[p2] = o==0 and t%16 or t-(t%16)
+				o,t = o==0 and 16 or 1,b+r*3
+				if t>0 then img[p1] = img[p1] +      t*o end
+				if g>0 then img[p2] = img[p2] + (g+11)*o end
+			end 
+			self.plot_fst = function(self,p,o,r,g,b)
+				local p1,p2,img = p,p+40,self.image
+				o = o==0 and 16 or 1
+				local t = b+r*3
+				if t>0 then img[p1] = img[p1] +      t*o end
+				if g>0 then img[p2] = img[p2] + (g+11)*o end
+			end 
+		end
 		self.plot = self.plot_fst
 		self.overwrite = function(self, ovr)
 			self._overwrite, self.plot = ovr, ovr and self.plot_ovr or self.plot_fst
@@ -2675,7 +2693,7 @@ elseif MODE==MODE_CR16 then -- color reduction
 		-- vac(5,17)
 		-- vac(3,12) -- ok
 		-- compo(bayer,2){{1},{1},{1},{1}}
-			double{{1,5},{3,6},{2,7},{4,8},{5,1},{6,3},{7,2},{8,4}}
+			-- double{{1,5},{3,6},{2,7},{4,8},{5,1},{6,3},{7,2},{8,4}}
 			compo(bayer){{1},{2},{3},{4}}
 	CONFIG.palette   = function(CONVERTER,VIDEO)
         local reducer = ColorReducer:new()
@@ -2702,8 +2720,8 @@ elseif MODE==MODE_CR16 then -- color reduction
                 while stat.running do stat:next_image() end
             end
         end
-		reducer:boostBorderColors()
-		reducer:boostBorderColors()					 
+		-- reducer:boostBorderColors()
+		-- reducer:boostBorderColors()					 
 		-- reducer:boostBorderColors()			
 		-- reducer:boostBorderColors()			
 		-- for i=1,16 do reducer:boostBorderColors() end

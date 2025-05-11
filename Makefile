@@ -136,7 +136,7 @@ tst_sdvideo: $(ALL)
 		echo; \
 		echo "MODE=$$i"; \
 		MODE=$$i \
-		FPS=11 \
+		FPS=13 \
 		nice -19 \
 		$(LUA) sdvideo.lua \
 			https://www.youtube.com/watch?v=sBKmqkh9bb8 \
