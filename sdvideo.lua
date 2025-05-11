@@ -2190,10 +2190,11 @@ elseif MODE==MODE_DITH
 elseif MODE==MODE_RGB2 then -- RGB
 	CONFIG.asm_mode  = 1
     CONFIG.px_size   = {1,3}
-	CONFIG.dither    = compo(norm,double,bayer){{3,1,2}} -- 24
-	CONFIG.dither    = compo(norm,double,bayer){{3,1,4,2}} -- 24
-	-- CONFIG.dither    = compo(norm,vac)(12,4) -- 48
+	-- CONFIG.dither    = compo(norm,double,bayer){{3,1,2}} -- 24
+	-- CONFIG.dither    = compo(norm,double,bayer){{3,1,4,2}} -- 24
+	-- CONFIG.dither    = compo(norm,vac)(8,3) -- 48
 	-- CONFIG.dither    = compo(norm,halve,halve,vac)(16,5) -- 20
+	CONFIG.dither    = compo(norm,double,bayer){{3,1,2,4}}
 	
 	-- CONFIG.dither    = compo(norm,double){{9,1,5,10,2,6},{12,4,8,11,3,7}}
 
@@ -2219,16 +2220,14 @@ elseif MODE==MODE_RGB2 then -- RGB
 		end
 		self.pset_fst = function(self, x,y, r,g,b)
 			local f,d = self._linear,self.dither:get(x,y)
-			local fr,fg,fb = f[r]>=d,f[g]>=d,f[b]>=d
-			if fr or fg or fb then
-				local m,p,q = self._mask[x],math.floor((x+y*960)/8),self.image
-				-- q[p]    = q[p]    + f[r]>=d and m or 0
-				-- q[p+40] = q[p+40] + f[g]>=d and m or 0
-				-- q[p+80] = q[p+80] + f[b]>=d and m or 0
-				if fr then q[p]    = q[p]    + m end
-				if fg then q[p+40] = q[p+40] + m end
-				if fb then q[p+80] = q[p+80] + m end
-			end
+			-- local fr,fg,fb = f[r]>=d,f[g]>=d,f[b]>=d
+			-- if fr or fg or fb then
+			local m,p,q = self._mask[x],math.floor((x+y*960)/8),self.image
+				-- b[g],b[g+40],b[g+80] = fr and b[g]+r or b[g], fg and b[g+40]+r or b[g+40],fb and b[g+80]+r or b[g+80]
+				if f[r]>=d then q[p]    = q[p]    + m end
+				if f[g]>=d then q[p+40] = q[p+40] + m end
+				if f[b]>=d then q[p+80] = q[p+80] + m end
+			-- end
 		end
 		self.overwrite = function(self, ovr)
 			self._overwrite, self.pset = ovr, ovr and self.pset_ovr or self.pset_fst
@@ -2292,7 +2291,7 @@ elseif MODE==MODE_BM59 then -- BM59
         for i,f in ipairs(arg) do
             local TMP = CONVERTER:new(f,nil,3)
             if TMP then
-                local stat = VIDEO:new(TMP.file,TMP.fps,80,100,80,100,
+                local stat = VIDEO:new(TMP.file,TMP.fps,40,50,40,50, --80,100,80,100,
 					function(self, x,y, r,g,b)
 					local t = math.floor(r*GRAY_R + g*GRAY_G + b*GRAY_B)
 					H.w[t],H.r,H.g,H.b = H.w[t]+1,H.r+r,H.g+g,H.b+b
@@ -2357,10 +2356,11 @@ elseif MODE==MODE_BM59 then -- BM59
 				self._l_G[i]=f(i)*3*GRAY_G
 				self._l_B[i]=f(i)*3*GRAY_B
 			end
-			_l_R,_l_G,_l_B = self._l_R,self._l_G,self.l_B
+			_l_R,_l_G,_l_B = self._l_R,self._l_G,self._l_B
         end
 		self.plot_ovr = function(self,p,o,c)
-			self.image[p] = self.image[p] + c*o - ((q[p]/o)%4)*o
+			local q = self.image
+			q[p] = q[p] - (((q[p]/o)%4)-c)*o
 		end 
 		self.plot_fst = function(self,p,o,c)
 			self.image[p] = self.image[p] + c*o
@@ -2408,7 +2408,7 @@ elseif MODE==MODE_C345 then
         for i,f in ipairs(arg) do
             local TMP = CONVERTER:new(f,nil,1)
             if TMP then
-                local stat = VIDEO:new(TMP.file,TMP.fps,80,50,80,50,
+                local stat = VIDEO:new(TMP.file,TMP.fps,40,25,40,25, -- 80,50,80,50,
 					function(self, x,y, r,g,b)
 					H.r[r], H.g[g], H.b[b] = H.r[r]+1, H.g[g]+1, H.b[b]+1
 				end, TMP.duration)
@@ -2572,7 +2572,7 @@ elseif MODE==MODE_RGB6 then -- RGB6
         for i,f in ipairs(arg) do
             local TMP = CONVERTER:new(f,nil,1)
             if TMP then
-                local stat = VIDEO:new(TMP.file,TMP.fps,80,50,80,50,
+                local stat = VIDEO:new(TMP.file,TMP.fps,40,25,40,25,--80,50,80,50,
 					function(self, x,y, r,g,b)
 					H.r[r], H.g[g], H.b[b] = H.r[r]+1, H.g[g]+1, H.b[b]+1
 				end, TMP.duration)
@@ -2700,7 +2700,7 @@ elseif MODE==MODE_CR16 then -- color reduction
         for i,f in ipairs(arg) do
             local TMP = CONVERTER:new(f,nil,3)
             if TMP then
-                local stat = VIDEO:new(TMP.file,TMP.fps,80,50,80,50,
+                local stat = VIDEO:new(TMP.file,TMP.fps,40,25,40,25,--80,50,80,50,
 					function(self, x,y, r,g,b)
                     local col = Color:new(r,g,b):toLinear()
                     -- for i=1,1+1000*math.exp(-(x-40)^2/100) do
@@ -2771,7 +2771,7 @@ elseif MODE==MODE_RGB4 then --
         for i,f in ipairs(arg) do
             local TMP = CONVERTER:new(f,nil,3)
             if TMP then
-                local stat = VIDEO:new(TMP.file,TMP.fps,80,50,80,50,
+                local stat = VIDEO:new(TMP.file,TMP.fps,40,25,40,25,--80,50,80,50,
 					function(self, x,y, r,g,b)
 					H.r[r], H.g[g], H.b[b] = H.r[r]+1, H.g[g]+1, H.b[b]+1
 					local t = math.floor(r*.30 + g*.59 + b*.11)
@@ -2852,7 +2852,7 @@ elseif MODE==MODE_RGB5 then
         for i,f in ipairs(arg) do
             local TMP = CONVERTER:new(f,nil,3)
             if TMP then
-                local stat = VIDEO:new(TMP.file,TMP.fps,80,50,80,50,
+                local stat = VIDEO:new(TMP.file,TMP.fps,40,25,40,25, --80,50,80,50,
 					function(self, x,y, r,g,b)
 					H.r[r], H.g[g], H.b[b] = H.r[r]+1, H.g[g]+1, H.b[b]+1
 					local t = math.floor(r*.30 + g*.59 + b*.11)
@@ -3139,8 +3139,8 @@ function CONVERTER:_stat()
     stat.histo = {}; for i=0,255 do stat.histo[i]=0 end
 	function stat:pset(x,y, r,g,b)
 		self:super_pset(x,y,r,g,b)
-		local h = self.histo
-		h[r],h[g],h[b] = h[r]+1,h[g]+1,h[b]+1
+		x = self.histo
+		x[r],x[g],x[b] = x[r]+1,x[g]+1,x[b]+1
 	end	
 	local chg_color = COLOR<0 and CONFIG.asm_mode==0
 	if chg_color then
