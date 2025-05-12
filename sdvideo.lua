@@ -785,6 +785,12 @@ function PALETTE:compute(n, r,g,b)
 							self.vertices = nil
 						end
 					else
+						if pt[1]==pt[2] and pt[2]==pt[3] then
+							pt[1] = pt[1] + (pt[1]<=0 and 1 or -1) * math.random()/1000
+							pt[2] = pt[2] + (pt[2]<=0 and 1 or -1) * math.random()/1000
+							pt[3] = pt[3] + (pt[3]<=0 and 1 or -1) * math.random()/1000
+						end
+					
 						-- print("adding ", pt[1], pt[2], pt[3], pt[4])
 						local badTetras = {}
 						for _,tetra in ipairs(facets) do
@@ -1286,6 +1292,11 @@ function VIDEO:pset(x,y, r,g,b)
 		self.image[p] = ((x%2)==0 and (t%16)+v*16 or t-(t%16)+v)
 	end
 	
+	local pre = {}
+	for y=0,199 do for x=0,79 do
+		pre[x+y*80] = {math.floor(x/2)+y*40, (x%2)==0 and 16 or 1, self.dither:get(x,y), self.image}
+	end end
+
 	self.pset_fst = function(self, x,y, r,g,b)
 		local k = PALETTE.key(r,g,b)
 		local t = self._cache[k]
@@ -1293,8 +1304,10 @@ function VIDEO:pset(x,y, r,g,b)
 			t = PALETTE:compute(self.dither.wh,r,g,b)
 			self._cache[k] = t
 		end
-		local p,v = math.floor(x/2) + y*40,t:byte(self.dither:get(x,y))
-		self.image[p] = self.image[p]+((x%2)==0 and v*16 or v) 
+		-- local p,v = math.floor(x/2) + y*40,t:byte(self.dither:get(x,y))
+		-- self.image[p] = self.image[p]+((x%2)==0 and v*16 or v) 
+		x,y,r,g = unpack(pre[x+y*80])
+		g[x] = g[x] + y*t:byte(r)
 	end
 	
 	self.overwrite = function(self, ovr)
@@ -1470,8 +1483,8 @@ VIDEO.font = {
         "XXX.",
         "..X.",
         "..X.",
-        "..X.",
-        "..X.",
+        ".X..",
+        ".X..",
         "...."
     },['8']={
         "XXX.",
@@ -2699,7 +2712,9 @@ elseif MODE==MODE_CR16 then -- color reduction
 		-- vac(3,12) -- ok
 		-- compo(bayer,2){{1},{1},{1},{1}}
 			-- double{{1,5},{3,6},{2,7},{4,8},{5,1},{6,3},{7,2},{8,4}}
-			compo(bayer){{1},{3},{2},{4}}
+			-- compo(bayer){{1},{3},{2},{4}}
+			bayer{{3},{1},{2},{4}}
+			-- {{1,2},{2,1}}
 	CONFIG.palette   = function(CONVERTER,VIDEO)
         local reducer = ColorReducer:new()
         for i,f in ipairs(arg) do
@@ -2709,7 +2724,9 @@ elseif MODE==MODE_CR16 then -- color reduction
 					function(self, x,y, r,g,b)
                     local col = Color:new(r,g,b):toLinear()
                     -- for i=1,1+1000*math.exp(-(x-40)^2/100) do
-                        reducer:add(col)
+					-- local t = math.max(col.r,col.g,col.b)*8/Color.ONE
+					-- if t>0 then reducer:add(col:mul(math.ceil(t)/t)) end
+					if math.max(col.r,col.g,col.b)>0 then reducer:add(col) end
                     -- end
                 end, TMP.duration)
                 stat.super_next_image = stat.next_image
@@ -2725,7 +2742,7 @@ elseif MODE==MODE_CR16 then -- color reduction
                 while stat.running do stat:next_image() end
             end
         end
-		-- reducer:boostBorderColors()
+		reducer:boostBorderColors()
 		-- reducer:boostBorderColors()					 
 		-- reducer:boostBorderColors()			
 		-- reducer:boostBorderColors()			
@@ -2750,7 +2767,8 @@ elseif MODE==MODE_RGB4 then --
     CONFIG.px_size   = {4,1}
     CONFIG.dither    = 
 		-- vac(3,8)
-		compo(bayer){{1},{3},{2},{4}}
+		bayer{{3},{1},{2},{4}}
+		-- compo(bayer){{1},{3},{2},{4}}
 	CONFIG.palette   = function(CONVERTER,VIDEO)
 		local H = {r={},g={},b={},w={}}
 		for i=0,255 do H.r[i]=0; H.g[i]=0; H.b[i]=0; H.w[i]=0 end		local function map(vals, histo)
@@ -2833,7 +2851,8 @@ elseif MODE==MODE_RGB5 then
     CONFIG.px_size   = {4,1}
     CONFIG.dither    = 
 		-- vac(3,8)
-		compo(bayer){{1},{3},{2},{4}}
+		-- compo(bayer){{1},{3},{2},{4}}
+		bayer{{3},{1},{2},{4}}
 	CONFIG.palette   = function(CONVERTER,VIDEO)
 		local H = {r={},g={},b={},w={}}
 		for i=0,255 do H.r[i]=0; H.g[i]=0; H.b[i]=0; H.w[i]=0 end		local function map(vals, histo)
