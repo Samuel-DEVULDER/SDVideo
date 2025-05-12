@@ -44,12 +44,14 @@ for i,v in pairs{
 				-- B/W
 				 "EDGE", 
 				 "OTSU", 
-				 "BAYR", "VACD", "HLFT", "DITH", 
+				 "BAYR", "HLFT", "DITH", 
 				 -- GRAY
 				 "BM59", 
 				 -- COLOR
 			     "RGB2", "C345", "RGB6",
 				 "RGB4", "RGB5", "CR16",
+				 -- VOID and CLUSTER
+				 "VAC1", "VAC2",
 				 nil} do
 	local n = i-1
 	_G['MODE_' .. v], MODE_TXT[n] = n, v
@@ -2083,7 +2085,7 @@ if MODE==MODE_OTSU then -- Otsu
 elseif MODE==MODE_DITH 
     or MODE==MODE_BAYR 
 	or MODE==MODE_HLFT 
-	or MODE==MODE_VACD 
+	or MODE==MODE_VAC1 
 	then -- N&B
 	CONFIG.asm_mode  = 0
 	if MODE==MODE_HLFT then
@@ -2093,7 +2095,7 @@ elseif MODE==MODE_DITH
 			{10,15, 6, 2},
 			{ 5, 9, 3, 1} 
 		}
-	elseif MODE==MODE_VACD then
+	elseif MODE==MODE_VAC1 then
 		-- CONFIG.dither = compo(norm,double,vac)(8,8)	-- 128 levels
 		CONFIG.dither = compo(norm,halve,vac)(8,8)	-- 32 levels
 	elseif MODE==MODE_BAYR then 
@@ -2187,19 +2189,22 @@ elseif MODE==MODE_DITH
 		end
 		self:pset(x,y,r,g,b)
     end
-elseif MODE==MODE_RGB2 then -- RGB
+elseif MODE==MODE_RGB2 or MODE==MODE_VAC2 then -- RGB
 	CONFIG.asm_mode  = 1
     CONFIG.px_size   = {1,3}
 	-- CONFIG.dither    = compo(norm,double,bayer){{3,1,2}} -- 24
 	-- CONFIG.dither    = compo(norm,double,bayer){{3,1,4,2}} -- 24
 	-- CONFIG.dither    = compo(norm,vac)(8,3) -- 48
 	-- CONFIG.dither    = compo(norm,halve,halve,vac)(16,5) -- 20
-	CONFIG.dither    = compo(norm,double,bayer){{3,1,2,4}}
+	
+	CONFIG.dither    = compo(norm,double,bayer){{3,1,2,4}} -- 32 pas mal
 	
 	-- CONFIG.dither    = compo(norm,double){{9,1,5,10,2,6},{12,4,8,11,3,7}}
 
 	-- 12 = 3*4
-	-- CONFIG.dither    = compo(norm,vac)(16,5) -- très belle qualité gfx
+	if MODE==MODE_VAC2 then
+	CONFIG.dither    = compo(norm,vac)(16,5) -- très belle qualité gfx
+	end
 	
     function VIDEO:pset(x,y, r,g,b)
         if not self.dither then 
@@ -2251,10 +2256,10 @@ elseif MODE==MODE_BM59 then -- BM59
          -- {7,3},
          -- {8,4},
 		-- }
-		-- compo(norm,halve,bayer,2){{1},{2}}
+		compo(norm,halve,bayer,2){{1},{2}}
 		-- norm(vac(8,16))
 		-- norm(vac(5,11))
-		compo(norm,vac)(4,8)
+		-- compo(norm,vac)(4,8)
 		-- compo(norm,vac)(8,16) -- ok
 		
 	-- compo(norm,double){
@@ -2379,7 +2384,9 @@ elseif MODE==MODE_BM59 then -- BM59
 elseif MODE==MODE_C345 then
 	CONFIG.asm_mode	 = 3
     CONFIG.px_size   = {4,2}
-    CONFIG.dither    = compo(norm,double){{1,4},{5,8},{3,2},{7,6}}
+    CONFIG.dither    = 
+		-- compo(norm,double){{1,4},{5,8},{3,2},{7,6}}
+		compo(norm){{1,4},{5,8},{3,2},{7,6}}
 	CONFIG.palette   = function(CONVERTER,VIDEO)
 		local H = {r={},g={},b={}}
 		for i=0,255 do H.r[i]=0; H.g[i]=0; H.b[i]=0 end	
@@ -2694,7 +2701,7 @@ elseif MODE==MODE_CR16 then -- color reduction
 		-- vac(3,12) -- ok
 		-- compo(bayer,2){{1},{1},{1},{1}}
 			-- double{{1,5},{3,6},{2,7},{4,8},{5,1},{6,3},{7,2},{8,4}}
-			compo(bayer){{1},{2},{3},{4}}
+			compo(bayer){{1},{3},{2},{4}}
 	CONFIG.palette   = function(CONVERTER,VIDEO)
         local reducer = ColorReducer:new()
         for i,f in ipairs(arg) do
@@ -2743,7 +2750,9 @@ elseif MODE==MODE_CR16 then -- color reduction
 elseif MODE==MODE_RGB4 then -- 
 	CONFIG.asm_mode	 = 3
     CONFIG.px_size   = {4,1}
-    CONFIG.dither    = vac(3,8)
+    CONFIG.dither    = 
+		-- vac(3,8)
+		compo(bayer){{1},{3},{2},{4}}
 	CONFIG.palette   = function(CONVERTER,VIDEO)
 		local H = {r={},g={},b={},w={}}
 		for i=0,255 do H.r[i]=0; H.g[i]=0; H.b[i]=0; H.w[i]=0 end		local function map(vals, histo)
@@ -2824,7 +2833,9 @@ elseif MODE==MODE_RGB4 then --
 elseif MODE==MODE_RGB5 then
 	CONFIG.asm_mode	 = 3
     CONFIG.px_size   = {4,1}
-	CONFIG.dither    = compo(bayer,1){{1},{3},{2},{4}}			
+    CONFIG.dither    = 
+		-- vac(3,8)
+		compo(bayer){{1},{3},{2},{4}}
 	CONFIG.palette   = function(CONVERTER,VIDEO)
 		local H = {r={},g={},b={},w={}}
 		for i=0,255 do H.r[i]=0; H.g[i]=0; H.b[i]=0; H.w[i]=0 end		local function map(vals, histo)
@@ -3064,7 +3075,9 @@ function CONVERTER:vidname()
 							  :gsub('%s*1440p60',''):gsub('%s*1080p',''):gsub('%s*2160p60','')
 							  :gsub('%s*%d+%s*[fF][pP][sS]','')
 							  :gsub('%s*%[HD%]','')
-							  :gsub('%[%]','')
+							  :gsub('%s([fF][uU][lL][lL])?%s%s*[hH][dD]%W','')
+							  :gsub('%[%s*%]','')
+							  :gsub('%(%s*%)','')
 							  :gsub('%s+$','')
 end
 function CONVERTER:_compress(pos, prev, curr, indices_fcn, out_fcn)
@@ -3238,14 +3251,14 @@ function CONVERTER:_stat()
     self.video_cor = video_cor
 
     -- info
-	local stat_str = string.format('%s %dx%d (%d%%) %dfps %s',
-        self.duration>=3600 and hms(self.duration, "%dh%2d'%d\"") or _ms(self.duration, "%d'%d\""), 
+	local stat_tim = self.duration>=3600 and hms(self.duration, "%dh%2d'%d\"") or _ms(self.duration, "%d'%d\"") 
+	local stat_str = string.format('%dx%d (%d%%) %dfps %s',
         self.w, self.h, 
 		percent(math.max(self.w/self.W,self.h/self.H)),
 		self.fps, 
 		MODE_TXT[MODE],
 	nil)
-    io.stdout:write('> '..stat_str..'\n')
+    io.stdout:write('> '..stat_tim..' '..stat_str..'\n')
 	local TOT = 0 for i=0,3 do TOT = TOT+stat.type[i] end
     io.stdout:write(string.format('> %d frames: %d%% %d%% %d%% %d%%\n',
                                     TOT,
@@ -3278,11 +3291,11 @@ function CONVERTER:_stat()
 	
 	-- self.avg_chg = (2*(stat.type[0]+stat.type[2])+1*stat.type[1])/(stat.type[0]+stat.type[1]+stat.type[2])
 	-- print('average bytes changed per frames = ', self.avg_chg)
-	return stat_str
+	return stat_str,stat_tim
 end
 function CONVERTER:process()
     -- collect stats
-    local stat_str = self:_stat()
+    local stat_str,stat_tim = self:_stat()
 
     -- flux audio/video
     local audio  = AUDIO:new(self.file)
@@ -3334,8 +3347,17 @@ function CONVERTER:process()
 	local hchars = math.ceil(video.screen_width/wchars)
 	local title_x, title_str = 0, self:vidname(self.file):gsub('_',' ')
 	local info_sec, time_str = 1,''
+	title_str = stat_tim..' '..title_str
 
-	if 8+stat_str:len()>=hchars then 
+	local t_len = self.duration>=3600 and 8 or 6
+	if t_len+stat_str:len()>hchars then 
+		local t = stat_str:gsub('%(%d+%%%)%s','')
+		if t_len+t:len()<=hchars then stat_str = t end
+		t = t:gsub('%s%S+$','')
+		if t_len+t:len()<=hchars then stat_str = t end
+	end
+
+	if t_len+stat_str:len()>hchars then 
 		for i=1,hchars-1 do title_str = title_str..' ' end
 		title_str, stat_str = title_str..' '.. stat_str..' ', ''
 		for i=1,hchars do title_str = title_str..' ' end
@@ -3372,9 +3394,9 @@ function CONVERTER:process()
 				title_str = title_str:sub(2) .. title_str:sub(1,1)
 			end
 		end
-		local col = MODE<=MODE_DITH and {255,255,255}
-               	 or MODE==MODE_BM59 and MODE_BM59_PROG_COL
-				 or                     {255,0,0}
+		local col = CONFIG.asm_mode==0 and {255,255,255}
+               	 or MODE==MODE_BM59    and MODE_BM59_PROG_COL
+				 or                        {255,0,0}
 		video:progressbar(y_line+6, tstamp/self.duration,unpack(col))
 		-- 0..1.1   => green 
 		-- 1.1..2.1 => yellow
