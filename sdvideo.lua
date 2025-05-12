@@ -2348,8 +2348,6 @@ elseif MODE==MODE_BM59 then -- BM59
 			2611,2618,3815,123
 		}
     end
-	local otab = {}
-	for i=0,159 do otab[i] = 4^(3-(i%4)) end
 	function VIDEO:pset(x,y, r,g,b)
 		local _l_R,_l_G,_l_B
         if not self.dither then 
@@ -2363,21 +2361,21 @@ elseif MODE==MODE_BM59 then -- BM59
 			end
 			_l_R,_l_G,_l_B = self._l_R,self._l_G,self._l_B
         end
-		self.plot_ovr = function(self,p,o,c)
-			local q = self.image
-			q[p] = q[p] - (((q[p]/o)%4)-c)*o
-		end 
-		self.plot_fst = function(self,p,o,c)
-			self.image[p] = self.image[p] + c*o
-		end 
-		self.plot = self.plot_fst
-		self.overwrite = function(self, ovr)
-			self._overwrite, self.plot = ovr, ovr and self.plot_ovr or self.plot_fst
+		local pre = {}
+		for y=0,199 do for x=0,159 do
+			pre[x+160*y] = {math.floor(x/4)+y*40, 4^(3-(x%4)), 1-self.dither:get(x,y)}
+		end end 
+		self.pset_fst = function (self, x,y, r,g,b)
+			x,r,g,b = _l_R[r]+_l_G[g]+_l_B[b],unpack(pre[x+160*y])
+			self.image[r] = self.image[r] + g*math.floor(x+b)
 		end
-		self.pset = function (self, x,y, r,g,b)
-			local l,f = _l_R[r]+_l_G[r]+_l_B[b],math.floor
-			self:plot(f(x/4) + y*40, otab[x], 
-				(((l%1)>=self.dither:get(x,y)) and f(l) + 1 or f(l)))
+		self.pset_ovr = function (self, x,y, r,g,b)
+			x,y,r,g,b = _l_R[r]+_l_G[g]+_l_B[b],self.image,unpack(pre[x+160*y])
+			y[r] = y[r] - (((y[r]/g)%4)-math.floor(x+b))*g
+		end
+		self.pset = self.pset_fst
+		self.overwrite = function(self, ovr)
+			self._overwrite, self.pset = ovr, ovr and self.pset_ovr or self.pset_fst
 		end
     	self:pset(x,y,r,g,b)
     end
