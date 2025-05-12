@@ -2326,7 +2326,7 @@ elseif MODE==MODE_BM59 then -- BM59
 		print('w', unpack(w.base))
 		
 		do local best = 1e300
-			for t=0,255 do local x = math.abs(PALETTE.linear(t)*4*(GRAY_R+GRAY_G+GRAY_B)-1)
+			for t=0,255 do local x = math.abs(PALETTE.linear(t)*3*(GRAY_R+GRAY_G+GRAY_B)-1)
 				if x<best then best = x
 					MODE_BM59_PROG_COL = {t,t,t}
 				end
