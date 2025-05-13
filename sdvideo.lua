@@ -136,7 +136,7 @@ local CONFIG        = nil
 local GRAY_R		= 0.2126
 local GRAY_G		= 0.7152
 local GRAY_B		= 0.0722
-local MODE_BM59_PROG_COL 
+local PROGRESS_COL 
 
 if type(MODE)=='string' then
 	for k,v in pairs(MODE_TXT) do
@@ -478,6 +478,13 @@ function PALETTE:init(pal)
                    self.ef[1+(math.floor(p/16)%16)],
                    self.ef[1+math.floor(p/256)]}
     end
+	-- calc best color for progression bar (red ideally)
+	if nil==PROGRESS_COL then local best = 1e300
+		for i,p in ipairs(self) do local r,g,b = unpack(p)
+			local t = (self.linear(r)-1)^2 + self.linear(g)^2 + self.linear(b)^2
+			if t<best then best,PROGRESS_COL = t,{r,g,b} end
+		end
+	end	
 end
 function PALETTE:file_content()
     local buf = ''
@@ -2236,16 +2243,15 @@ elseif MODE==MODE_RGB2 or MODE==MODE_VAC2 then -- RGB
 			q[p+40],t = t,q[p+80] if t % m2 >= m then t = t-m end if f[b]>=d then t = t + m end
 			q[p+80]   = t
 		end
+		local pre = {}
+		for y=0,199 do for x=0,319 do
+			pre[x+320*y] = {self._linear, self.dither:get(x,y),self._mask[x],math.floor((x+y*960)/8),self.image}
+		end end
 		self.pset_fst = function(self, x,y, r,g,b)
-			local f,d = self._linear,self.dither:get(x,y)
-			-- local fr,fg,fb = f[r]>=d,f[g]>=d,f[b]>=d
-			-- if fr or fg or fb then
-			local m,p,q = self._mask[x],math.floor((x+y*960)/8),self.image
-				-- b[g],b[g+40],b[g+80] = fr and b[g]+r or b[g], fg and b[g+40]+r or b[g+40],fb and b[g+80]+r or b[g+80]
-				if f[r]>=d then q[p]    = q[p]    + m end
-				if f[g]>=d then q[p+40] = q[p+40] + m end
-				if f[b]>=d then q[p+80] = q[p+80] + m end
-			-- end
+			local f,d,m,p,q = unpack(pre[x+320*y])
+			if f[r]>=d then q[p]    = q[p]    + m end
+			if f[g]>=d then q[p+40] = q[p+40] + m end
+			if f[b]>=d then q[p+80] = q[p+80] + m end
 		end
 		self.overwrite = function(self, ovr)
 			self._overwrite, self.pset = ovr, ovr and self.pset_ovr or self.pset_fst
@@ -2298,7 +2304,7 @@ elseif MODE==MODE_BM59 then -- BM59
 				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
 				t[i] = k-1 + f
 				if histo then
-					local DIV=8
+					local DIV=4
 					f = round(f*DIV)/DIV
 					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
 				end
@@ -2309,7 +2315,7 @@ elseif MODE==MODE_BM59 then -- BM59
         for i,f in ipairs(arg) do
             local TMP = CONVERTER:new(f,nil,3)
             if TMP then
-                local stat = VIDEO:new(TMP.file,TMP.fps,40,50,40,50, --80,100,80,100,
+                local stat = VIDEO:new(TMP.file,TMP.fps,80,50,80,50,
 					function(self, x,y, r,g,b)
 					local t = math.floor(r*GRAY_R + g*GRAY_G + b*GRAY_B)
 					H.w[t],H.r,H.g,H.b = H.w[t]+1,H.r+r,H.g+g,H.b+b
@@ -2319,10 +2325,12 @@ elseif MODE==MODE_BM59 then -- BM59
                 stat.mill[0] = stat.mill[4]
                 function stat:next_image()
                     self:super_next_image()
-                    io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
-                                    self.mill[self.cpt % 4],
-                                    percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
-                    io.stderr:flush()
+					if (self.cpt%self.fps)==0 then
+						io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
+										self.mill[self.cpt/self.fps % 4],
+										percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
+						io.stderr:flush()
+					end
                 end
                 while stat.running do stat:next_image() end
             end
@@ -2341,7 +2349,7 @@ elseif MODE==MODE_BM59 then -- BM59
 		do local best = 1e300
 			for t=0,255 do local x = math.abs(PALETTE.linear(t)*3*(GRAY_R+GRAY_G+GRAY_B)-1)
 				if x<best then best = x
-					MODE_BM59_PROG_COL = {t,t,t}
+					PROGRESS_COL = {t,t,t}
 				end
 			end
 		end
@@ -2435,10 +2443,12 @@ elseif MODE==MODE_C345 then
                 stat.mill[0] = stat.mill[4]
                 function stat:next_image()
                     self:super_next_image()
-                    io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
-                                    self.mill[self.cpt % 4],
-                                    percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
-                    io.stderr:flush()
+					if (self.cpt % self.fps)==0 then
+						io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
+										self.mill[self.cpt/self.fps % 4],
+										percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
+						io.stderr:flush()
+					end
                 end
                 while stat.running do stat:next_image() end
             end
@@ -2599,10 +2609,12 @@ elseif MODE==MODE_RGB6 then -- RGB6
                 stat.mill[0] = stat.mill[4]
                 function stat:next_image()
                     self:super_next_image()
-                    io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
-                                    self.mill[self.cpt % 4],
-                                    percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
-                    io.stderr:flush()
+					if (self.cpt % self.fps)==0 then
+						io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
+										self.mill[self.cpt/self.fps % 4],
+										percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
+						io.stderr:flush()
+					end
                 end
                 while stat.running do stat:next_image() end
             end
@@ -2720,7 +2732,7 @@ elseif MODE==MODE_CR16 then -- color reduction
         for i,f in ipairs(arg) do
             local TMP = CONVERTER:new(f,nil,3)
             if TMP then
-                local stat = VIDEO:new(TMP.file,TMP.fps,40,25,40,25,--80,50,80,50,
+                local stat = VIDEO:new(TMP.file,TMP.fps,80,50,80,50,
 					function(self, x,y, r,g,b)
                     local col = Color:new(r,g,b):toLinear()
                     -- for i=1,1+1000*math.exp(-(x-40)^2/100) do
@@ -2734,10 +2746,12 @@ elseif MODE==MODE_CR16 then -- color reduction
                 stat.mill[0] = stat.mill[4]
                 function stat:next_image()
                     self:super_next_image()
-                    io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
-                                    self.mill[self.cpt % 4],
-                                    percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
-                    io.stderr:flush()
+					if (self.cpt % self.fps)==0 then
+						io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
+										self.mill[self.cpt/self.fps % 4],
+										percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
+						io.stderr:flush()
+					end
                 end
                 while stat.running do stat:next_image() end
             end
@@ -2807,10 +2821,12 @@ elseif MODE==MODE_RGB4 then --
                 stat.mill[0] = stat.mill[4]
                 function stat:next_image()
                     self:super_next_image()
-                    io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
-                                    self.mill[self.cpt % 4],
-                                    percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
-                    io.stderr:flush()
+					if (self.cpt % self.fps)==0 then
+						io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
+										self.mill[self.cpt/self.fps % 4],
+										percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
+						io.stderr:flush()
+					end
                 end
                 while stat.running do stat:next_image() end
             end
@@ -2891,10 +2907,12 @@ elseif MODE==MODE_RGB5 then
                 stat.mill[0] = stat.mill[4]
                 function stat:next_image()
                     self:super_next_image()
-                    io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
-                                    self.mill[self.cpt % 4],
-                                    percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
-                    io.stderr:flush()
+					if (self.cpt % self.fps)==0 then
+						io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
+										self.mill[self.cpt/self.fps % 4],
+										percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
+						io.stderr:flush()
+					end
                 end
                 while stat.running do stat:next_image() end
             end
@@ -3163,7 +3181,9 @@ function CONVERTER:_stat()
     -- auto determination des parametres
     local neg_fps = self.fps<0
 	self.fps = math.abs(self.fps)
-    local stat = self:_new_video((neg_fps and self.fps > FPS_MAX) and 3 or self.fps)
+	-- on simule un plein écran à fps/quant
+	local quant = 1
+    local stat = self:_new_video((neg_fps and self.fps > FPS_MAX) and 3 or math.ceil(self.fps/quant))
 	stat:pset(0,0,0,0,0)
     stat.super_pset = stat.pset
     stat.histo = {}; for i=0,255 do stat.histo[i]=0 end
@@ -3191,8 +3211,10 @@ function CONVERTER:_stat()
     stat.duration = self.duration
     function stat:next_image()
         self:super_next_image()
-        io.stderr:write(string.format('> analyzing video...%s %d%%\r', self.mill[self.cpt % 4], percent(self.cpt/(self.fps*self.duration))))
+		if (self.cpt%self.fps)==0 then
+        io.stderr:write(string.format('> determining best zoom or fps...%s %d%%\r', self.mill[self.cpt/self.fps % 4], percent(self.cpt/(self.fps*self.duration))))
         io.stderr:flush()
+		end
     end
 	stat._compress = self._compress
     stat.trames = 0
@@ -3214,7 +3236,7 @@ function CONVERTER:_stat()
 	-- nb de trames vidéos par image
 	local avg_trames = (stat.trames/stat.cpt) -- * 1.15 -- 15% safety margin
 	-- nombre de trames théoriques max par image
-	local max_trames = 1000000/(self.fps*CYCLES)
+	local max_trames = 1000000/(stat.fps*CYCLES)
 	-- rapport entre les deux
 	local ratio = max_trames / avg_trames
 	-- print(avg_trames, max_trames, ratio)
@@ -3412,7 +3434,7 @@ function CONVERTER:process()
 			end
 		end
 		local col = CONFIG.asm_mode==0 and {255,255,255}
-               	 or MODE==MODE_BM59    and MODE_BM59_PROG_COL
+               	 or                        PROGRESS_COL
 				 or                        {255,0,0}
 		video:progressbar(y_line+6, tstamp/self.duration,unpack(col))
 		-- 0..1.1   => green 
