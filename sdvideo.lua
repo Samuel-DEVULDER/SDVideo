@@ -81,8 +81,9 @@ end
 local function env(var, default)
 	local val  = os.getenv(var)
 	local code = 'return ' .. (val or 'false') .. 
-       ' or ' .. ' MODE_' .. (val or '')  .. 
+       ' or ' .. 'MODE_' .. tostring(val):gsub('%.','_') .. 
        ' or ' .. (val or default)
+	   -- print(code)
 	return loadstring(code)();
 end
 local function locate(file,...)
@@ -117,6 +118,7 @@ end
 local MODE          = env('MODE',MODE_DITH)
 local FPS           = env('FPS',16)
 local COLOR         = env('COLOR',-1)
+local GAMMA         = env('GAMMA',-1)
 local SCROLL        = env('SCROLL', 'true')
 local FFMPEG        = locate('ffmpeg', 'tools')
 local YT_DL         = locate('yt-dlp', 'tools')
@@ -449,8 +451,9 @@ function PALETTE.linear(u)
 		PALETTE.__linear = {}
 		for u=0,255 do
 			PALETTE.__linear[u] = 
+				GAMMA>0 and (u/255)^GAMMA
 				-- (u/255)^2.2
-				u<10.31475 and u/3294.6 or (((u+14.025)/269.025)^2.4)
+				or u<10.31475 and u/3294.6 or (((u+14.025)/269.025)^2.4)
 				-- (u/255)^1.8
 				-- (u/255)^1.5
 				-- (u/255)^(2.4/2.2)
@@ -464,7 +467,9 @@ end
 	-- print(i,pc, PALETTE.linear(pc))
 -- end
 function PALETTE.unlinear(u)
-    return u<0 and 0 or u>1 and 255 or u<0.00313 and (u*3294.6) or ((u^(1/2.4))*269.025-14.025)
+    return u<0 and 0 or u>1 and 255
+		or GAMMA>0 and (u^1/GAMMA)*255
+		or u<0.00313 and (u*3294.6) or ((u^(1/2.4))*269.025-14.025)
     -- return u<0 and 0 or u>1 and 255 or (u^(1/2.2))*255
 end
 
@@ -1307,7 +1312,7 @@ function VIDEO:pset(x,y, r,g,b)
 	self.pset_fst = function(self, x,y, r,g,b)
 		local k = PALETTE.key(r,g,b)
 		local t = self._cache[k]
-		if not t then
+		if nil==t then
 			t = PALETTE:compute(self.dither.wh,r,g,b)
 			self._cache[k] = t
 		end
@@ -1700,7 +1705,7 @@ VIDEO.font = {
         "X.X.",
         "X.X.",
         "X.X.",
-        "X.X",
+        "X.X.",
         "XXX.",
         "...."
     },['V']={
@@ -1924,7 +1929,7 @@ VIDEO.font = {
         "....",
         "X.X.",
         "X.X.",
-        "X.X",
+        "X.X.",
         ".XX.",
         "...."
     },['v']={
@@ -1992,6 +1997,35 @@ VIDEO.font = {
         "...."
     }
 }
+
+for _,c in ipairs{0xC0,0xC1,0xC2,0xC3,0xC4,0xC5} do VIDEO.font[string.char(c)] = VIDEO.font['A'] end
+for _,c in ipairs{0xC7                         } do VIDEO.font[string.char(c)] = VIDEO.font['C'] end
+for _,c in ipairs{0xC8,0xC9,0xCA,0xCB          } do VIDEO.font[string.char(c)] = VIDEO.font['E'] end
+for _,c in ipairs{0xCC,0xCD,0xCE,0xCF          } do VIDEO.font[string.char(c)] = VIDEO.font['I'] end
+for _,c in ipairs{0xD0                         } do VIDEO.font[string.char(c)] = VIDEO.font['D'] end
+for _,c in ipairs{0xD1                         } do VIDEO.font[string.char(c)] = VIDEO.font['N'] end
+for _,c in ipairs{0xD2,0xD3,0xD4,0xD5,0xD6     } do VIDEO.font[string.char(c)] = VIDEO.font['O'] end
+for _,c in ipairs{0xD9,0xDA,0xDB,0xDC          } do VIDEO.font[string.char(c)] = VIDEO.font['U'] end
+for _,c in ipairs{0xDD                         } do VIDEO.font[string.char(c)] = VIDEO.font['Y'] end
+
+for _,c in ipairs{0xE0,0xE1,0xE2,0xE3,0xE4,0xE5} do VIDEO.font[string.char(c)] = VIDEO.font['a'] end
+for _,c in ipairs{0xE8,0xE9,0xEA,0xEB          } do VIDEO.font[string.char(c)] = VIDEO.font['e'] end
+for _,c in ipairs{0xEC,0xED,0xEE,0xEF          } do VIDEO.font[string.char(c)] = VIDEO.font['i'] end
+for _,c in ipairs{0xF0,0XF2,0xF3,0xF4,0xF5,0xF6} do VIDEO.font[string.char(c)] = VIDEO.font['o'] end
+for _,c in ipairs{0xF1                         } do VIDEO.font[string.char(c)] = VIDEO.font['n'] end
+for _,c in ipairs{0xF9,0xFA,0xFB,0xFC          } do VIDEO.font[string.char(c)] = VIDEO.font['u'] end
+for _,c in ipairs{0xFD,0xFF                    } do VIDEO.font[string.char(c)] = VIDEO.font['y'] end
+
+
+VIDEO.font['é']=VIDEO.font['e']
+VIDEO.font['è']=VIDEO.font['e']
+VIDEO.font['ê']=VIDEO.font['e']
+VIDEO.font['à']=VIDEO.font['a']
+VIDEO.font['ô']=VIDEO.font['o']
+VIDEO.font['ù']=VIDEO.font['u']
+VIDEO.font['î']=VIDEO.font['i']
+VIDEO.font['ï']=VIDEO.font['i']
+VIDEO.font['ç']=VIDEO.font['c']
 function VIDEO:putc(x,y,chr)
     local f = VIDEO.font[chr]
     if f==nil then f = VIDEO.font['?'] end
@@ -2261,9 +2295,9 @@ elseif MODE==MODE_RGB2 or MODE==MODE_VAC2 then -- RGB
     end
 
 	for _,f in pairs(VIDEO.font) do
-		for i,s in ipairs(f) do
+		for i,s in ipairs(f) do if s:len()==4 then
 			f[i] = s:gsub('(.)', '%1%1')
-		end
+		end end
 	end
 elseif MODE==MODE_BM59 then -- BM59
 	CONFIG.asm_mode	 = 2
@@ -2325,9 +2359,10 @@ elseif MODE==MODE_BM59 then -- BM59
                 stat.mill[0] = stat.mill[4]
                 function stat:next_image()
                     self:super_next_image()
-					if (self.cpt%self.fps)==0 then
+					local cpt = math.floor(self.cpt/3)
+					if 3*cpt==self.cpt then
 						io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
-										self.mill[self.cpt/self.fps % 4],
+										self.mill[cpt % 4],
 										percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
 						io.stderr:flush()
 					end
@@ -2443,9 +2478,10 @@ elseif MODE==MODE_C345 then
                 stat.mill[0] = stat.mill[4]
                 function stat:next_image()
                     self:super_next_image()
-					if (self.cpt % self.fps)==0 then
+					local cpt = math.floor(self.cpt/3)
+					if 3*cpt==self.cpt then
 						io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
-										self.mill[self.cpt/self.fps % 4],
+										self.mill[cpt % 4],
 										percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
 						io.stderr:flush()
 					end
@@ -2609,9 +2645,10 @@ elseif MODE==MODE_RGB6 then -- RGB6
                 stat.mill[0] = stat.mill[4]
                 function stat:next_image()
                     self:super_next_image()
-					if (self.cpt % self.fps)==0 then
+					local cpt = math.floor(self.cpt/3)
+					if 3*cpt==self.cpt then
 						io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
-										self.mill[self.cpt/self.fps % 4],
+										self.mill[cpt % 4],
 										percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
 						io.stderr:flush()
 					end
@@ -2746,9 +2783,10 @@ elseif MODE==MODE_CR16 then -- color reduction
                 stat.mill[0] = stat.mill[4]
                 function stat:next_image()
                     self:super_next_image()
-					if (self.cpt % self.fps)==0 then
+					local cpt = math.floor(self.cpt/3)
+					if 3*cpt==self.cpt then
 						io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
-										self.mill[self.cpt/self.fps % 4],
+										self.mill[cpt % 4],
 										percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
 						io.stderr:flush()
 					end
@@ -2756,7 +2794,7 @@ elseif MODE==MODE_CR16 then -- color reduction
                 while stat.running do stat:next_image() end
             end
         end
-		reducer:boostBorderColors()
+		-- reducer:boostBorderColors()
 		-- reducer:boostBorderColors()					 
 		-- reducer:boostBorderColors()			
 		-- reducer:boostBorderColors()			
@@ -2821,9 +2859,10 @@ elseif MODE==MODE_RGB4 then --
                 stat.mill[0] = stat.mill[4]
                 function stat:next_image()
                     self:super_next_image()
-					if (self.cpt % self.fps)==0 then
+					local cpt = math.floor(self.cpt/3)
+					if 3*cpt==self.cpt then
 						io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
-										self.mill[self.cpt/self.fps % 4],
+										self.mill[cpt % 4],
 										percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
 						io.stderr:flush()
 					end
@@ -2907,9 +2946,10 @@ elseif MODE==MODE_RGB5 then
                 stat.mill[0] = stat.mill[4]
                 function stat:next_image()
                     self:super_next_image()
-					if (self.cpt % self.fps)==0 then
+					local cpt = math.floor(self.cpt/3)
+					if 3*cpt==self.cpt then
 						io.stderr:write(string.format('> analyzing colors...%s %d%%\r',
-										self.mill[self.cpt/self.fps % 4],
+										self.mill[cpt % 4],
 										percent((i-1+self.cpt/self.fps/TMP.duration)/#arg)))
 						io.stderr:flush()
 					end
@@ -3116,55 +3156,83 @@ function CONVERTER:vidname()
 							  :gsub('%s+$','')
 end
 function CONVERTER:_compress(pos, prev, curr, indices_fcn, out_fcn)
-	local k,b0,b1,b2,ci,cj,ck
+	local k,b0,b1,b2,c0,c1,c2,c3
+	
 	for _,i in indices_fcn(prev,curr) do
 		while prev[i] ~= curr[i] do
-			ck,ci,cj = curr[i-1],curr[i],curr[i+1]
 			k = i - pos
-			if k<0 then 
-				b0,b1,b2,pos = 3,128+math.floor(i/256),i%256,i
-			elseif k==0 then
-  			     -- local s = string.char(curr[pos-2] or 123, curr[pos-1] or 214,
-					-- curr[pos], curr[pos+1], curr[pos+2],
-					-- curr[pos+3], curr[pos+4], curr[pos+5])
-				-- local s3 = s:sub(3)
-				-- if s:sub(1,6)==s3 then 
-				if ck==cj and ci==curr[i-2] and ci==curr[i+2] and cj==curr[i+3] 
-				then -- rpt4,-2
-					b0,b1,b2,pos,prev[i],prev[i+1],prev[i+2],prev[i+3] = 
-						3,0xf8,0,pos+4,ci,cj,ci,cj,ci,cj
-					if  ci==curr[i+4] and cj==curr[i+5]
-					then -- rpt6,-2
-						b1,pos,prev[pos],prev[pos+1] = 0xf0,pos+2,ci,cj
-					end
-				elseif ci==ck        and ci==cj
-				   and ci==curr[i+2] and ci==curr[i+3]
-				   and ci==curr[i+4] and ci==curr[i+5]
-				then -- rpt6,-1
-					b0,b1,b2,pos,prev[i],prev[i+1],prev[i+2],prev[i+3],prev[i+4],prev[i+5]
-						= 3,0xe0,0,pos+6,ci,ci,ci,ci,ci,ci
-				elseif ci==cj and ci==curr[i+2]
-			    then -- rpt3
-					b0,b1,b2,pos,prev[i],prev[i+1],prev[i+2] = 
-						3,0xC0,ci,pos+3,ci,ci,ci
-					if ci==curr[i+3] then -- rpt4
-						b1,pos,prev[pos] = 0x00,pos+1,ci
-					end
-				elseif cj==prev[i+1] then
-					b0,b1,b2,pos,prev[i],prev[i+2] = 2,ci,curr[i+2],pos+3,ci,curr[i+2]
-				else
-					b0,b1,b2,pos,prev[i],prev[i+1] = 0,ci,cj,pos+2,ci,cj
+			if k<0 or k>257 then -- deplacement arbitraire
+				pos,b0,b1,b2 = i,3,128+math.floor(i/256),i%256
+			else
+				c0,c1,c2,c3 = curr[pos],curr[pos+1],curr[pos+2],curr[pos+3]
+				if  k<8 and c0==c2 and c1==c3 
+				and c0==curr[pos-40] and c1==curr[pos-39]
+				and c0==curr[pos+4] and c1==curr[pos+5] 
+				and c0==curr[pos+6] and c1==curr[pos+7] 
+				then --  LZ-2,8,2
+					pos,b0,b1,b2,
+					prev[pos],prev[pos+1],prev[pos+2],prev[pos+3],
+					prev[pos+4],prev[pos+5],prev[pos+6],prev[pos+7]
+					= 
+					pos+8,3,128+64,0,
+					c0,c1,c0,c1,c0,c1,c0,c1
+				elseif k<6 and c0==curr[pos-1]
+				and    c0==c1 and c0==c2 and c0==c3
+				and    c0==curr[pos+4] 
+				and    c0==curr[pos+5]
+				then -- LZ-1,6
+					pos,b0,b1,b2,
+					prev[pos],prev[pos+1],prev[pos+2],prev[pos+3],
+					prev[pos+4],prev[pos+5]
+					= 
+					pos+6,3,128+64+32,0,
+					c0,c0,c0,c0,c0,c0
+				elseif k<6 and c0==0 
+				and    c0==c1 and c0==c2 and c0==c3
+				and    c0==curr[pos+4] 
+				and    c0==curr[pos+5]
+				then -- LZ6
+					pos,b0,b1,b2,
+					prev[pos],prev[pos+1],prev[pos+2],prev[pos+3],
+					prev[pos+4],prev[pos+5]
+					= 
+					pos+6,3,128+64+32+16+8,0,
+					c0,c0,c0,c0,c0,c0
+				elseif k<4 
+				and    c0==curr[pos-40] and c1==curr[pos-39] 
+				and    c2==curr[pos-38] and c3==curr[pos-37]
+			    then -- LZ-40,4
+					pos,b0,b1,b2,
+					prev[pos],prev[pos+1],prev[pos+2],prev[pos+3]
+					= 
+					pos+4,3,128+64+32+16,0,
+					c0,c1,c2,c3
+				elseif k<4 and c0==c1 and c0==c2 and c0==c3
+				then -- CP4
+					pos,b0,b1,b2,
+					prev[pos],prev[pos+1],prev[pos+2],prev[pos+3]
+					= 
+					pos+4,3,0,c0,
+					c0,c0,c0,c0
+				elseif k==0 and c1==prev[pos+1] then
+					pos,b0,b1,b2,
+					prev[pos],prev[pos+1],prev[pos+2]
+					= 
+					pos+3,2,c0,c2,
+					c0,c1,c2
+				elseif k<2 then
+					pos,b0,b1,b2,
+					prev[pos],prev[pos+1]
+					= 
+					pos+2,0,c0,c1,
+					c0,c1
+				else -- deplacement 8 bit
+					pos,b0,b1,b2,prev[i] = i+1,1,k-2,curr[i],curr[i]
 				end
-			elseif k==1 then
-					b0,b1,b2,pos,prev[pos],prev[pos+1] = 
-						0,curr[pos],curr[pos+1],pos+2,curr[pos],curr[pos+1]
-			elseif k<=257 then -- deplacement 8 bit
-				b0,b1,b2,prev[i],pos = 1,k-2,ci,ci,i+1
-			else -- deplacement arbitraire
-				b0,b1,b2,pos = 3,128+math.floor(i/256),i%256,i
 			end
 			-- print(zz, b0, b1, b2, '-->', pos)
 			-- if b2==nil then print() print(i, b0, b1, b2, curr[i+1]) end
+			if b1<0 or b1>255 then error(b0..' '..b1..' '..b2) end
 			out_fcn(b0,b1,b2)
 		end
 	end
@@ -3234,7 +3302,8 @@ function CONVERTER:_stat()
     io.stderr:flush()
 	
 	-- nb de trames vidéos par image
-	local avg_trames = (stat.trames/stat.cpt) -- * 1.15 -- 15% safety margin
+	local avg_trames = (stat.trames/stat.cpt) -- * 1.15 -- 15% safety margin*
+	-- print('+',avg_trames)
 	-- nombre de trames théoriques max par image
 	local max_trames = 1000000/(stat.fps*CYCLES)
 	-- rapport entre les deux
@@ -3319,7 +3388,8 @@ function CONVERTER:_stat()
 		r_,g_,b_,m = stat.r*m,stat.g*m,stat.b*m,1e300
 		for i,p in ipairs(pal) do
 			local r,g,b,t = rgb(p) t = math.max(r,g,b) r,g,b = r/t,g/t,b/t
-			t = 2*(r-r_)^2 + 4*(g-g_)^2 + (b-b_)^2
+			local function f(x,y) return x*math.abs(y)^2 end
+			t = f(2,r-r_) + f(4,g-g_) + f(1,b-b_)
 			-- print(i-1, t, r,g,b, r_,g_,b_)
 			if t<m then m,COLOR = t,i-1 end
 		end
@@ -3335,6 +3405,7 @@ end
 function CONVERTER:process()
     -- collect stats
     local stat_str,stat_tim = self:_stat()
+	-- do return end
 
     -- flux audio/video
     local audio  = AUDIO:new(self.file)
@@ -3564,6 +3635,8 @@ function OUT:open()
         INP:close()
         size = size - buf:len()
         if size<0 then
+			print()
+			print('buf', buf:len())
             print('size',size)
             error('File ' .. file .. ' is too big')
         end
@@ -3586,11 +3659,12 @@ function OUT:open()
     local asm_mode=CONFIG.asm_mode --(MODE<6 and MODE) or (MODE%2==0 and 4 or 5)
 
 	self.stream = assert(io.open(self.file, 'wb'))
-    self.stream:write(file_content(1*512, raw('bootblk', 'asm/bootblk.ass')))
-    self.stream:write(file_content(7*512, raw('player4'..asm_mode, 
+    self.stream:write(file_content( 1*512, raw('bootblk', 'asm/bootblk.ass')))
+    self.stream:write(file_content(10*512, raw('player4'..asm_mode, 
 											  '-dMODE='..asm_mode..' asm/player4.ass'),
 					                          PALETTE:file_content()..
-											  string.char(to770(COLOR))))
+											  string.char(0<COLOR and COLOR<255 and COLOR
+											              or 0x70)))
 end
 function OUT:frame(buf0,buf1,buf2,audio)
 	if not self.stream then self:open() end

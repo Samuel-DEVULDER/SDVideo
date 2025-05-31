@@ -22,10 +22,19 @@
 * Le chargement et le lancement du programme sont
 * realises grace a un secteur de boot.
 
-MODE_BW     set 0   Memoire forme: N&B
+MODE_MONO   set 0   Memoire forme: N&B
 MODE_RGB    set 1   Memoire forme: R/G/B
 MODE_BM59   set 2   Memoire forme, palette 4 couls
 MODE_PAL    set 3   Memoire fond, palette
+
+MACH_TO7    set 0
+MACH_TO770  set 1
+MACH_TO9    set 2
+MACH_TO8    set 3
+MACH_TO9p   set 6
+
+MACH_MO5    set 128+2
+MACH_MO6    set 128+3
 
 ****************************************************
 *                Version 2024.03.11                *
@@ -154,252 +163,67 @@ READ_BIT MACRO
 *------------------------------------------------------
 INIT
   ORCC  #$50          desactive les interruptions
+  LDB   >$FFF0
   LDA   >$FFF2        $FFF2: $F0(MO) et $70(TO)
-  BPL   INIT_TO       TO detecte
+  BMI   INIT_MO       MO5/MO6
+
+*------------------------------------------------------
+* Initialisations communes TO7/TO8
+*------------------------------------------------------
+  STB   MACHINE
+  
+  LDX   #$E7C0        base regs TO
+  LDU   #$5F40        fin memoire video+1 ligne
+
+  LDD   #$0240
+  STB   PATCH_ECR
+  STA   PATCH_POS
+
+  LDD   #$E7C3        Valeur espace I/O
+  STA   PATCH_CYC     pour compenser 1 cycle
+  STB   TRAME_SWAP_PATCH1
+  STB   TRAME_SWAP_PATCH2
+  STD   TRAME_FONDFORME_PATCH
+  
+  STB   <$5F          change le mode gfx pour reset
+  CLR   <$D1          force reset basic
+  
+  BRA   INIT2
 
 *------------------------------------------------------
 * Initialisations communes MO5/MO6/PC128
 *------------------------------------------------------
+INIT_MO
+  ADDB  #MACH_MO5
+  STB   MACHINE
+  
+  LDX   #$A7C0        adresse selection banque video
+  LDU   #$1F40        fin memoire video+1 ligne
 
 *  LDA   $C000         reset du basic
 * $1FDF = $A5 --> restore palette
+*  COM   <$5F          change le mode gfx pour reset
+
+*  LDB    #$FF
+  STB    $2300        reset basic 128
   CLR    $2200        reset basic 1
-  CLR    $2300        reset basic 128
 
-  IFEQ  (MODE-MODE_PAL)*(MODE-MODE_BM59)
-* MO5   -> 00
-* MO5N  -> 01
-* MO5NR -> 01
-* MO6   -> 01
-* PC128 -> 01
-  LDA   >$FFF0       type d'ordinateur
-  BEQ   ERROR
-  ENDC
-
-  LDU   #$1F40        fin memoire video+1 ligne
-  LDX   #$A7C0        adresse selection banque video
-
-  COM   <$5F          change le mode gfx pour reset
-  COM   >$2300        force le basic a s'intialiser
-
-  IFEQ  (MODE-MODE_BW)*(MODE-MODE_BM59)
-  LDD   #$01          memoire forme
-  ORB   ,X
-  STB   ,X
-  LDB   COLOR
-  LSLB
-  ANDB  #$F0
-  STB   ,-S
-  LDB   #7
-  ANDB   COLOR
-  BCC   *+4
-  ORB   #8
-  ORB   ,S+
-  EORB  #$88
-  STB   <COLDAT,PCR
-  JSR   ECRAN1        remplissage forme avec 0
-  FCB   %00000000
-  DEC   ,X            memoire fond
-  JSR   ECRAN1        remplissage fond
-COLDAT
-  FCB   %01110000     couleur
-  INC   ,X            memoire forme
+*------------------------------------------------------
+* Initialisation mode graphique
+*------------------------------------------------------
+INIT2
   IFEQ  MODE-MODE_BM59
-  LDD   #$5900        mode $59/tour noir
-  ELSE
-  LDD   #$0000        mode std/tour noir
+  JSR   ECRAN_BM59
   ENDC
-  ENDC
-
-  IFEQ  MODE-MODE_RGB
-  LDB   #1            memoire forme
-  ORB   ,X
-  STB   ,X
-  JSR   ECRAN1        remplissage forme avec 0
-  FCB   %00000000
-  DEC   ,X            memoire fond
-  JSR   ECRAN1        remplissage fond
-  FCB   %00010000     rouge sur noir
-  JSR   ECRAN3        remplissage fond
-  FCB   %01000000
-  FCB   %00100000
-  FCB   %00010000
-  INC   ,X            memoire forme
-  LDD   #$0000        mode std/tour noir
-  ENDC
-
   IFEQ  MODE-MODE_PAL
-  LDB   #254          memoire fond
-  ANDB  ,X
-  STB   ,X
-  JSR   ECRAN1        remplissage fond noir/noir
-  FCB   %00000000
-  INC   ,X            memoire forme
-  JSR   ECRAN1        remplissage forme XXXX----
-  FCB   %11110000
-  DEC   ,X            memoire fond
-  LDD   #$0000        mode std/tour noir
+  JSR   ECRAN_PAL
   ENDC
-
-  TST   >$FFF0
-  BEQ   *+5
-  JMP   INIT_GEN2
-
-*------------------------------------------------------
-* Initialisations MO5
-* Attention aux differences PIA systeme MO5 et MO6
-*------------------------------------------------------
-  LDA   ,X            port A du PIA systeme
-  ANDA  #$E1          raz couleur cadre (noir)
-  STA   ,X            change couleur cadre
-  JMP   INIT8         suite des initialisations
-
-*------------------------------------------------------
-* Erreur
-*------------------------------------------------------
-ERROR
-  LDX   #ERRORMSG
-  BSR   PUTS
-
-ERROR2
-  BSR   GETC          attente appui touche
-  TSTB
-  BEQ   ERROR2
-
-RESET
-  JMP   [$FFFE]       reset
-
-PUTC
-  SWI
-  FCB   $82
-  JMP   $E803
-
-GETC
-  SWI
-  FCB   $8A
-  JMP   $E806
-
-  BSR   PUTC
-PUTS
-  LDB   ,X+
-  BNE   PUTS-2
-  RTS
-
-*------------------------------------------------------
-* Initialisations communes TO7-TO8
-*------------------------------------------------------
-INIT_TO
-  LDB   #$81          patch des adresses pour TO (=CMPA)
-  STB   GETC
-  STB   PUTC
-
-  STB   <$5F          change le mode gfx pour reset
-
-  LDB   #$E0          valeur adresse EXCMD (poids fort)
-  STB   PATCH_READ    adresse execution EXCMD (pour CMD18)
-  STB   PATCH_FIN     adresse execution EXCMD (pour CMD12)
-  LDB   #$E7          Valeur espace I/O
-  STB   PATCH_CYC     pour compenser 1 cycle
-
-  LDD   #$240
-  STB   PATCH_ECR
-  STA   PATCH_POS
-
-  CLR   $60D1        force reset basic
-
-* $FFF0
-* T9000 -> 00
-* TO7   -> 00
-* TO770 -> 01
-* TO9   -> 02
-* TO8   -> 03
-* TO9+  -> 06
-  LDA   >$FFF0       type d'ordinateur
-  CMPA  #3
-  IFEQ  (MODE-MODE_PAL)*(MODE-MODE_BM59)
-  BCS   ERROR
-  ENDC
-  PSHS  CC
-
-  LDU   #$5F40        fin memoire video+1 ligne
-  LDX   #$E7C0        base regs TO
-
-  IFEQ  (MODE-MODE_BW)*(MODE-MODE_BM59)
-  LDB   #$01          memoire forme
-  ORB   3,X
-  STB   3,X
-  LDB   COLOR
-  STB   <COLDAT2,PCR
-  JSR   ECRAN1        remplissage forme avec 0
-  FCB   %00000000
-  DEC   3,X           memoire fond
-  JSR   ECRAN1        remplissage fond N/B
-COLDAT2
-  FCB   %11111000
-  INC   3,X           memoire forme
-  IFEQ  MODE-MODE_BM59
-  LDD   #$5900
-  ELSE
-  LDD   #$0000
-  ENDC
-  ENDC
-
   IFEQ  MODE-MODE_RGB
-  LDB   #1            memoire forme
-  ORB   3,X
-  STB   3,X
-  JSR   ECRAN1        remplissage forme avec 0
-  FCB   %00000000
-  DEC   3,X           memoire fond
-  JSR   ECRAN1
-  FCB   %11001000
-  JSR   ECRAN3        remplissage fond
-  FCB   %11100000
-  FCB   %11010000
-  FCB   %11001000
-  INC   3,X           memoire forme
-  LDD   #$0000
+  JSR   ECRAN_RGB
   ENDC
-
-  IFEQ  MODE-MODE_PAL
-  LDB   #254          memoire forme
-  ANDB  3,X
-  STB   3,X
-  JSR   ECRAN1        remplissage fond noir
-  FCB   %00000000
-  INC   3,X           memoire fond
-  JSR   ECRAN1        remplissage forme XXXX----
-  FCB   %11110000
-  DEC   3,X           memoire forme
-  LDD   #$2008        pas transpo/noir=8
+  IFEQ  MODE-MODE_MONO
+  JSR   ECRAN_MONO
   ENDC
-
-  PULS  CC
-  BCC   INIT_GEN2
-
-*------------------------------------------------------
-* Initialisations TO7 et TO7/70
-*------------------------------------------------------
-  LDB   3,X           port A du PIA systeme
-  ANDB  #$15          couleur cadre 0 (noir)
-  STB   3,X           change couleur cadre
-  BRA   INIT8         suite des initialisations
-
-*------------------------------------------------------
-* Initialisations MO6 / PC128 / TO8 / TO9+
-* A = mode video
-* B = indexe de la couleur noir
-*------------------------------------------------------
-INIT_GEN2
-  STD   $1C,X         mode video + couleur cadre (noir)
-
-  LDA   ,X            PIA systeme
-  ANDA  #$FB          clear mute bit
-  STA   ,X            modification PIA
-
-  JSR   PALETTE
-
-*  JMP   INIT8         suite des initialisations
 
 *------------------------------------------------------
 * Initialisations communes
@@ -408,6 +232,11 @@ INIT_GEN2
 * L'adresse de SD_LB0 passe de $208E-$608E a $2051-$6051
 * pour tous les controleurs a partir de juillet 2018
 INIT8
+  TFR   X,D           $A7xx/$E7xx
+  SUBA  #$07          valeur adresse EXCMD (poids fort)
+  STA   PATCH_READ    adresse execution EXCMD (pour CMD18)
+  STA   PATCH_FIN     adresse execution EXCMD (pour CMD12)
+
   TFR   DP,A          valeur de DP dans A
   LDB   #$51          adresse de SD_LB0 version recente
   TFR   D,X           stockee dans le registre X
@@ -443,15 +272,16 @@ INIT9
   STA   <$CF          selection PB
 
 * Passage progressif du CNA a 0
-  LDA  <$CD
-  ANDA #63
-  BEQ  INIT12
+  LDA   <$CD
+  ANDA  #63
+  BEQ   INIT12
 INIT10
   LDB   #200          1ms
 INIT11
   DECB
   BNE  INIT11
   DECA
+  STA  <$CD
   BNE  INIT10
 
 * Passage progressif du CNA a 32
@@ -485,6 +315,9 @@ READ_VID
   BSR   SAUT          lecture bloc (secteur sdplay)
   BSR   SAUT          lecture bloc (secteur sdplay)
   BSR   SAUT          lecture bloc (secteur sdplay)
+  BSR   SAUT          lecture bloc (secteur sdplay)
+  BSR   SAUT          lecture bloc (secteur sdplay)
+  BSR   SAUT          lecture bloc (secteur sdplay)
 
 *------------------------------------------------------
 * PREPARATION PILE
@@ -507,8 +340,6 @@ PREP_STACK
 
   LDX   #$0000        adresse ecran
   VAR   PATCH_ECR,-2
-  STX   DEB_ECRAN
-
   JMP   DEB_BLOC      1 bloc = 170 * 3 + 2
 
 *------------------------------------------------------
@@ -543,81 +374,52 @@ STOP
 *  BCS   STOP
 
 * nettoyage ecran
-  LDU  #0
-  VAR  DEB_ECRAN,-2
+  LDU  PATCH_ECR
   LEAU 8000,U
-  BSR  ECRAN1
-  FCB  0
+  CLRB
+  JSR  ECRAN1
 
 * recommencer la lecture du fichier
   JMP   READ_VID
 
 *------------------------------------------------------
-* Initialise la memoire video avec la valeur suivant
-* l'addresse d'appel
+* Erreur
 *------------------------------------------------------
-ECRAN1
-  PSHS  D,X,Y,U
-  LDX   8,S           recup adr. retour
-  LDA   ,X            recup "val"
-  LDB   ,X+           2x (plus rapide que TFR)
-  STX   8,S           mise a jour adr. retour
-  TFR   D,X           remplissage registres
-  LEAY  ,X
-  LDA   #200          nb de lignes ecran
-ECRAN11
-  PSHU  B,X,Y         ecrit une ligne
-  PSHU  B,X,Y         (5*8) avec "val"
-  PSHU  B,X,Y
-  PSHU  B,X,Y
-  PSHU  B,X,Y
-  PSHU  B,X,Y
-  PSHU  B,X,Y
-  PSHU  B,X,Y
-  DECA
-  BNE   ECRAN11
-  PULS  D,X,Y,U,PC
+ERROR
+  LDX   #ERRORMSG
+  BSR   PUTS
 
-*------------------------------------------------------
-* Initialise la memoire video avec les valeurs suivant
-* l'addresse d'appel
-*------------------------------------------------------
-ECRAN3
-  PSHS  D,X,Y,U
-  LDX   8,S           recuperation donnees
-  LEAU  -40,U
-  BSR   ECRAN31       remplissage ecran
-  BSR   ECRAN31
-  BSR   ECRAN31
-  STX   8,S           restauration PC pour poursuite
-  PULS  D,X,Y,U,PC
-ECRAN31
-  LDA   ,X            lecture "val"
-  LDB   ,X+           D="val" "val"
-  LEAU  -40,U
-  PSHS  U,X
-  TFR   D,Y           Y=D="val" "val"
-  LEAX  ,Y            X=Y=D="val" "val"
-  LDA   #66           extra yellow line for progress bar
-ECRAN32
-  PSHU  B,X,Y         ecrit une ligne
-  PSHU  B,X,Y         (5*8) avec "val"
-  PSHU  B,X,Y
-  PSHU  B,X,Y
-  PSHU  B,X,Y
-  PSHU  B,X,Y
-  PSHU  B,X,Y
-  PSHU  B,X,Y
-  LEAU  -2*40,U       remontee de 3 lignes
-  DECA                repete 66 fois
-  BNE   ECRAN32
-  PULS  X,U,PC
+ERROR2
+  BSR   GETC          attente appui touche
+  TSTB
+  BEQ   ERROR2
+
+RESET
+  JMP   [$FFFE]       reset
+
+PUTC
+  TST   MACHINE
+  LBPL  $E803
+  SWI
+  FCB   $82
+
+GETC
+  TST   MACHINE
+  LBPL  $E806
+  SWI
+  FCB   $8A
+
+  BSR   PUTC
+PUTS
+  LDB   ,X+
+  BNE   PUTS-2
+  RTS
 
 *-----------------------------------------------------
 * Mise a jour palette. B=index de la 1ere couleur
 *-----------------------------------------------------
 PALETTE
-  PSHS  X,U
+  PSHS  D,X,U
   LEAX  <$E7-$C0,X    X=$A7E7/$E7E7
   LSLB
   STB   -12,X         $A7DB/$E7DB
@@ -638,8 +440,267 @@ PALETTE4
   STA   -13,X
   CMPU  #PALDATA+32
   BNE   PALETTE4
-  PULS  X,U,PC
+  PULS  D,X,U,PC
 
+*------------------------------------------------------
+* Ecran special BM59 MO6/TO8/TO9= uniquement
+*------------------------------------------------------
+  IFEQ  MODE-MODE_BM59  
+ECRAN_BM59
+  LDB   MACHINE
+  CMPB  #MACH_MO5
+  BEQ   ERROR         mauvaise machine
+  CMPB  #MACH_TO8
+  BCS   ERROR         mauvaise machine
+  LDD   #$5900
+  BSR   PALETTE  
+  BSR   TOUR
+  STA   $1C,X
+  BRA   FILL_FORME
+  ENDC
+
+*------------------------------------------------------
+* Ecran 80x200 MO6/TO8/TO9 uniquement
+*------------------------------------------------------
+  IFEQ  MODE-MODE_PAL
+ECRAN_PAL
+  LDB   MACHINE
+  CMPB  #MACH_MO5
+  BEQ   ERROR         mauvaise machine
+  CMPB  #MACH_TO8
+  BCS   ERROR         mauvaise machine
+  LSLB
+  LDD   #$2008
+  BCC   *+5
+  LDD   #$0000        MO6
+  BSR   PALETTE  
+  STA   $1C,X
+  BSR   TOUR
+  CLRB
+  BSR   FILL_FOND
+  LDB   #$F0
+  BSR   FILL_FORME
+  JMP   FOND
+  ENDC
+
+*-----------------------------------------------------
+* Couleur de tour (dans B)
+*-----------------------------------------------------
+TOUR
+  PSHS B
+  LDB  MACHINE
+  CMPB #MACH_MO5
+  BEQ  TOUR_MO5
+  BCC  TOUR_MO6
+  CMPB #MACH_TO9
+  BCS  TOUR_TO770
+  PULS B
+  STB  >$E7DD
+  RTS
+TOUR_MO6
+  PULS B
+  STB  >$A7DD
+  RTS
+TOUR_MO5
+  LDB  ,S
+  LSLB
+  ANDB #%00011110
+  STB  ,-S
+  LDB  #%11100001
+  ANDB >$A7C0
+  ORB  ,S+
+  STB  >$A7C0
+  PULS B,PC
+TOUR_TO770
+  LDB  ,S
+  LSLB
+  SUBB #$10
+  ROLB
+  LSLB
+  LSLB
+  ANDB #%01110100
+  STB  ,-S
+  LDB  #%10001011
+  ANDB >$E7C3
+  ORB  ,S+
+  STB  >$E7C3
+  PULS B,PC
+  
+*------------------------------------------------------
+* Ecran monochrome
+*------------------------------------------------------
+  IFEQ  MODE-MODE_MONO
+ECRAN_MONO
+  LDD   #$7F00
+  ANDA  MACHINE
+  CMPA  #MACH_TO8
+  BCS   ECRAN_MONO_GEN1
+  BSR   PALETTE      reset palette et mode gfx
+  STB   $1C,X        pour les machine gen2
+ECRAN_MONO_GEN1
+  LDB   #$0F
+  ANDB  COLOR
+  BSR   TOUR
+  LDA   #$11
+  MUL
+  BSR   FILL_FOND_CV
+  CLRB
+  BSR   FILL_FORME
+  LDB   COLOR
+  BSR   FILL_FOND_CV
+  BRA   FORME
+  ENDC
+
+*------------------------------------------------------
+* Une ligne R une ligne G une ligne B
+*------------------------------------------------------
+  IFEQ  MODE-MODE_RGB
+ECRAN_RGB
+  PSHS  D,X,Y,U
+  LDD   #$7F00
+  ANDA  MACHINE
+  CMPA  #MACH_TO8
+  BCS   ECRAN_RGB_GEN1
+  BSR   PALETTE      reset palette et mode gfx
+  STB   $1C,X        pour les machine gen2
+ECRAN_RGB_GEN1
+  BSR   TOUR
+  BSR   FILL_FOND_CV
+  CLRB 
+  BSR   FILL_FORME
+  BSR   FOND
+  LEAU  40,U
+  LDB   #$40          bleu
+  BSR   ECRAN31      
+  LDB   #$20          vert
+  BSR   ECRAN31
+  LDB   #$10          rouge
+  BSR   ECRAN31
+  PULS  D,X,Y,U
+  BRA   FORME
+ECRAN31
+  JSR   COLCONV
+  TFR   B,A
+  TFR   D,Y           Y=D="val" "val"
+  LEAX  ,Y            X=Y=D="val" "val"
+  LDA   #67           ca deborde un peu
+ECRAN32
+  PSHU  B,X,Y         ecrit une ligne
+  PSHU  B,X,Y         (5*8) avec "val"
+  PSHU  B,X,Y
+  PSHU  B,X,Y
+  PSHU  B,X,Y
+  PSHU  B,X,Y
+  PSHU  B,X,Y
+  PSHU  B,X,Y
+  LEAU  -2*40,U       remontee de 3 lignes
+  DECA                repete 66 fois
+  BNE   ECRAN32
+  LEAU  8000,U
+  RTS
+  ENDC
+  
+*------------------------------------------------------
+* Rempli l'ecran fond avec B
+*------------------------------------------------------
+FILL_FOND_CV
+  BSR   COLCONV
+FILL_FOND
+  BSR   FOND
+  BRA   ECRAN1
+  
+*------------------------------------------------------
+* Remplie l'ecran forme avec B
+*------------------------------------------------------
+FILL_FORME
+  BSR   FORME
+* BRA   ECRAN1
+
+*------------------------------------------------------
+* Initialise la memoire video avec la valeur de B
+* U=fin memoire video $1F40 ou $5F40
+* prends 13.5ms = 68% d'un VBL
+*------------------------------------------------------
+ECRAN1
+  PSHS  CC,D,DP,X,Y,U
+  STS   ECRAN12
+  LDA   2,S
+  TFR   B,DP
+  TFR   D,X           
+  LEAY  ,X
+  LDA   #100
+  ORCC  #$50
+  LEAS  ,X
+ECRAN11
+  PSHU  B,DP,X,Y,S
+  PSHU  B,DP,X,Y,S
+  PSHU  B,DP,X,Y,S
+  PSHU  B,DP,X,Y,S
+  PSHU  B,DP,X,Y,S
+  PSHU  B,DP,X,Y,S
+  PSHU  B,DP,X,Y,S
+  PSHU  B,DP,X,Y,S
+  PSHU  B,DP,X,Y,S
+  PSHU  B,DP,X,Y,S
+  DECA
+  BNE   ECRAN11
+  LDS   #0
+  VAR   ECRAN12,-2
+  PULS  CC,D,DP,X,Y,U,PC
+  
+*-----------------------------------------------------
+* Passage en memoire fond
+*-----------------------------------------------------
+FOND
+  PSHS B                          
+  LDB  #$FE
+  CMPB MACHINE                                     (5)
+  BPL  FOND_MO                                     (3)
+  ANDB >$E7C3                                      (5)
+  STB  >$E7C3                                      (5)
+  PULS B,PC                                        (8)
+FOND_MO
+  ANDB >$A7C0                                      (5)
+  STB  >$A7C0                                      (5)
+  PULS B,PC                                        (8)
+
+*-----------------------------------------------------
+* Passage en memoire forme         
+*-----------------------------------------------------
+FORME
+  PSHS B                          
+  LDB  #$81                                        (2)
+  CMPB  MACHINE                                    (5)
+  BCS  FORME_MO                                    (3)
+  ORB  >$E7C3   b7=1 sans importance (lect LEP)    (5)
+  STB  >$E7C3                                      (5)
+  PULS B,PC                                        (8)
+FORME_MO
+  ORB  >$A7C0   b7=1 sans importance (lect LEP)    (5)
+  STB  >$A7C0                                      (5)
+  PULS B,PC                                        (8)
+  
+*------------------------------------------------------
+* Conversion couleur MO5->TO7
+* Param B = $fF = fond/Forme
+*------------------------------------------------------
+COLCONV
+  PSHS  D
+  LDA   MACHINE      deviendra CMPA #nn sur TO
+  BMI   COLCONV2
+  LDA   1,S
+  ANDA  #$F0
+  LSRA
+  STA   1,S  
+  ORB   #$70
+  ADDB  #$08
+  ANDB  #$87
+  ORB   1,S
+  EORB  #%11000000    inversion bit pastel
+  STB   1,S
+COLCONV2
+  PULS  D,PC
+  
 *-----------------------------------------------------
 * Trame de deplacement 8 bits + 1 octet
 * s6 0 1 | DD DD DD DD | VV VV VV VV             (114)
@@ -653,7 +714,7 @@ TRAME_01
   RTS                                              (5)
 
 *-----------------------------------------------------
-* Lit un bloc de 512 octets
+* Attent un debut de bloc                         (53)
 *-----------------------------------------------------
 DEB_BLOC
   REPT  8,READ_BIT    lecture octet               (48)
@@ -691,7 +752,7 @@ TRAME_1X
   BCS   TRAME_11
 
 *-----------------------------------------------------
-* Trame de video 6 pixels (P1 P2 -- -- P3 P4)
+* Trame de video 4+2 pixels (P1 P2 -- -- P3 P4)
 * s6 1 0 | VV VV VV VV | VV VV VV VV             (114)
 *-----------------------------------------------------
 TRAME_10
@@ -710,21 +771,20 @@ TRAME_11
   BCS   TRAME_11_1                                 (3)
 
 *-----------------------------------------------------
-* Trame de repet4
+* Trame de CP4
 * s6 1 1 | 0X XX XX XX | PP PP PP PP             (114)
 *-----------------------------------------------------
-TRAME_11_0
+TRAME_CP4
   REPT  7,GET_BIT                                 (28)
   REPT  8,READ_BIT                                (48)
 * budget = 31
-(info)
-  STB   ,X+                                        (6)
-  STB   ,X+                                        (6)
-  STB   ,X+                                        (6)
-  STB   ,X+                                        (6)
+  STB   ,X                                         (4)
+  STB   1,X                                        (5)
+  STB   2,X                                        (5)
+  STB   3,X                                        (5)
+  LEAX  4,X                                        (5)
   NOP                                              (2)
   RTS                                              (5)
-(info)
 
 TRAME_11_1
   GET_BIT                                          (4)
@@ -736,7 +796,6 @@ TRAME_11_1
 *-----------------------------------------------------
 TRAME_11_10
 * budget = 100
-(info)
   GET_BIT                                          (4)
   LDB   #$00          to/mo                        (2)
   VAR   PATCH_POS,-1
@@ -747,124 +806,147 @@ TRAME_11_10
   REPT  8,READ_BIT    lecture bits poids faible   (48)
   ABX                 ajout poids faible           (3)
   RTS                 nouvelle trame               (5)
-(info)
 
 TRAME_11_11
   GET_BIT                                          (4)
   BCS   TRAME_11_111                               (3)
 
 *-----------------------------------------------------
-* Trame de repet3
-* s6 1 1 | 11 0X XX XX | PP PP PP PP             (114)
+* Trame LZ-40,8,2
+* s6 1 1 | 11 0X XX XX | XX XX XX XX             (114)
 *-----------------------------------------------------
-TRAME_11_110
-  REPT  5,GET_BIT                                 (20)
-  REPT  8,READ_BIT                                (48)
-* budget = 25
-(info)
-  STB   ,X+                                        (6)
-  STB   ,X+                                        (6)
-  STB   ,X+                                        (6)
+TRAME_LZ_2_8_2
+  REPT  13,GET_BIT                                (52)
+* budget = 41
+  LDU   -40,X                                       (6)
+  STU   ,X                                         (5)
+  STU   2,X                                        (6)
+  STU   4,X                                        (6)
+  STU   6,X                                        (6)
+  LEAX  8,X                                        (5)
   NOP                                              (2)
   RTS                                              (5)
-(info)
-
+  
 TRAME_11_111
   GET_BIT                                          (4)
   BCS   TRAME_11_1111                              (3)
 
 *-----------------------------------------------------
-* Trame RPT6,-1
+* Trame LZ-1,6
 * s6 1 1 | 11 10 XX XX | XX XX XX XX             (114)
 *-----------------------------------------------------
-TRAME_11_1110
+TRAME_LZ_1_6
   REPT  12,GET_BIT                                (48)
 * budget = 38
-(info)
-  LDB   -1,X                                       (5)
-  LDA   -1,X                                       (5)
-  STD   ,X                                         (5)
-  STD   2,X                                        (6)
-  STD   4,X                                        (6)
-  LDD   #$7F06                                     (3)
+  LDB  -1,X                                        (5)
+  LDA  -1,X                                        (5)
+  STD  ,X                                          (5)
+  STD  2,X                                         (6)
+  STD  4,X                                         (6)
+  LDD  #$7F06                                      (3)
   ABX                                              (3)
   RTS                                              (5)
-(info)
 
 TRAME_11_1111
   GET_BIT                                          (4)
   BCS   TRAME_11_11111                             (3)
 
 *-----------------------------------------------------
-* Trame RPT6,-2
+* Trame LZ-40,4
 * s6 1 1 | 11 11 0X XX | XX XX XX XX             (114)
 *-----------------------------------------------------
-TRAME_11_11110
+TRAME_LZ_40_4
   REPT  11,GET_BIT                                (44)
 * budget 35
-(info)
-  LDD   -2,X                                       (6)
-  STD   0,X                                        (6)
-  STD   2,X                                        (6)
-  STD   4,X                                        (6)
-  LDD   #$7F06                                     (3)
-  ABX                                              (3)
+  LDU   -40,X                                      (6)
+  STU   ,X++                                       (8)
+  LDU   -40,X                                      (6)
+  STU   ,X++                                       (8)
+  NOP                                              (2)
   RTS                                              (5)
-(info)
 
 TRAME_11_11111
   GET_BIT                                          (4)
   BCS   TRAME_11_111111                            (3)
 
 *-----------------------------------------------------
-* Trame RPT4,-2
-* s6 1 1 | 11 11 10 XX | PP PP PP PP             (114)
+* s6 1 1 | 11 11 10 XX | XX XX XX XX             (114)
 *-----------------------------------------------------
-TRAME_11_111110
+TRAME_LZ_6
   REPT  10,READ_BIT                               (40)
 * budget = 32
-(info)
-  LDD   -2,X                                       (6)
-  STD   ,X                                         (5)
-  STD   2,X                                        (6)
-  LDD   #$7F04                                     (3)
-  ABX                                              (3)
-  NOP                                              (2)
+  LDU   #0                                         (3)
+  STU   ,X                                         (5)
+  STU   2,X                                        (6)
+  STU   4,X                                        (6)
+  LEAX  6,X                                        (5)
   NOP                                              (2)
   RTS                                              (5)
-(info)
 
 TRAME_11_111111
   GET_BIT                                          (4)
   BCS   TRAME_11_1111111                           (3)
 
 *-----------------------------------------------------
-* s6 1 1 | 11 11 11 0X | XX XX XX XX             (114)
+* s6 1 1 | 11 11 11 0X | XX XX XX Xf             (114)
 *-----------------------------------------------------
-TRAME_11_1111110
+TRAME_FONDFORME
+* budget = 65
+  LDU   #$A7C0                                     (3)
+  VAR   TRAME_FONDFORME_PATCH,-2 
+  EXG   X,X                                        (8)
   REPT  9,GET_BIT                                 (36)
-* budget = 29 - RTS
-  BRA   *
+  BCC   TRAME_FOND                                 (3)
+  LDB   #1                                         (2)
+  ORB   ,U                                         (4)
+  STB   ,U                                         (4)
+  RTS                                              (5)
+TRAME_FOND  
+  LDB   #254                                       (2)
+  ANDB  ,U                                         (4)
+  STB   ,U                                         (4)
+  RTS                                              (5)
 
 TRAME_11_1111111
   GET_BIT                                          (4)
   BCS   TRAME_11_11111111                          (3)
 
 *-----------------------------------------------------
+* Permute RAMA/RAMB
 * s6 1 1 | 11 11 11 10 | XX XX XX XX             (114)
 *-----------------------------------------------------
-TRAME_11_11111110
+TRAME_SWAP
   REPT  8,GET_BIT                                 (32)
-* budget = 26 - RTS
-  BRA   *
+* budget = 26
+  EXG   X,Y                                        (8)
+  LDB   #$01                                       (2)
+  EORB  <$C0                                       (4)
+  VAR   TRAME_SWAP_PATCH1,-1
+  STB   <$C0                                       (4)
+  VAR   TRAME_SWAP_PATCH2,-1
+  BRN   *                                          (3)
+  RTS                                              (5)
 
 *-----------------------------------------------------
-* Trame de fin de fichier
-* s6 1 1 | 11 11 11 11 | XX XX XX XX
+* Trame de fin 
+* s6 1 1 | 11 11 11 11 | 1X XX XX XX
 *-----------------------------------------------------
 TRAME_11_11111111
-  REPT  8,GET_BIT                                 (32)
-  JMP   FIN
+* budget = 58
+  REPT  8,READ_BIT                                (48)
+  BPL   TRAME_INDEXE                               (3)
+  JMP   FIN                                        (7)
+
+*-----------------------------------------------------
+* Trame indexee : 128 commandes
+* s6 1 1 | 11 11 11 11 | 0ccccccc
+*-----------------------------------------------------
+TRAME_INDEXE  
+* budget = 7  
+  LSLB                                             (2)
+  LDU   #TRAME_TAB+128                             (3)
+  JMP   [B,U]                                      (7)
+* ca deborde de 5 ==> routines "longues"
 
 *-----------------------------------------------------
 * FIN DE BLOC: 2 octets a lire
@@ -897,6 +979,9 @@ FIN_BLOC
 * son a 168 cycles
 
 * Lecture $FF
+ 
+* xx  recupe pile
+* ktst
   REPT  8,READ_BIT    lecture octet $FF           (48)
   CMPB  #$FE          $FF pas trouve?              (2)
   BEQ   FIN_SPECIAL   cas particulier              (3)
@@ -969,6 +1054,25 @@ WAIT4
   LEAS  -170*2,S                                   (8)
   JMP   TRAME                                      (4)
 
+* changer palette
+* changer mode
+* changer Couleur
+* sync x/y
+
+MACHINE
+  FCB   MACH_MO5
+
+FDB_FIN MACRO
+  FDB  FIN
+  ENDM
+
+TRAME_TAB
+  REPT  32,FDB_FIN
+  REPT  32,FDB_FIN
+  REPT  32,FDB_FIN
+  REPT  32,FDB_FIN
+  
+
 ERRORMSG
   FCB   $14           cursor off
   FCB   $1F,$21,$21   haut fenetre = 11
@@ -980,7 +1084,7 @@ ERRORMSG
   FCC   /MO6, TO8, TO9+ or PC128 required/
   FCB   $7            beep
   FCB   0
-
+  
 * pile permettant de boucler 170 trames
   RMB   2*170-(*-ERRORMSG),0
 STACK

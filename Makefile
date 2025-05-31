@@ -55,8 +55,7 @@ DISTRO=SDVideo-$(VERSION)-$(OS)-$(MACHINE)
 
 BIN=bin/bootblk.raw bin/player0.raw bin/player1.raw \
     bin/player40.raw bin/player41.raw bin/player42.raw \
-	bin/player43.raw bin/player44.raw bin/player45.raw \
-	bin/player46.raw
+	bin/player43.raw
 
 TOOLS=tools/
 LUA=$(TOOLS)luajit$(EXE)
@@ -78,6 +77,30 @@ clean:
 
 ##############################################################################
 # Distribution stuff
+
+distro-current:
+	@echo
+	@echo "==============================================="
+	@echo "Current version is : $(VERSION)"
+	@echo "Current prefix is  : $(DISTRO)"
+	@echo "==============================================="
+	@echo
+
+distro-url:
+	@echo $(GIT_URL)
+	-@explorer.exe $(DISTRO_URL)
+	
+distro-update: distro-current
+	git pull
+	git tag -d $(VERSION)
+	make distro-create-$(VERSION)
+	-explorer.exe $(DISTRO_URL)
+	
+distro-create-%:
+	-git commit -a -m "create $*"
+	git push
+	git tag -a $* -m "$*"
+	git push --force origin tag $*
 
 distro: $(DISTRO) 
 	zip --help >/dev/null || apt-cyg install zip || sudo apt-get install zip
