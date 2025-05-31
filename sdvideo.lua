@@ -3660,10 +3660,10 @@ function OUT:open()
 
 	self.stream = assert(io.open(self.file, 'wb'))
     self.stream:write(file_content( 1*512, raw('bootblk', 'asm/bootblk.ass')))
-    self.stream:write(file_content(10*512, raw('player4'..asm_mode, 
+    self.stream:write(file_content(11*512, raw('player4'..asm_mode, 
 											  '-dMODE='..asm_mode..' asm/player4.ass'),
 					                          PALETTE:file_content()..
-											  string.char(0<COLOR and COLOR<255 and COLOR
+											  string.char(0<=COLOR and COLOR<=255 and COLOR
 											              or 0x70)))
 end
 function OUT:frame(buf0,buf1,buf2,audio)

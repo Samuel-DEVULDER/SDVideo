@@ -1085,10 +1085,6 @@ ERRORMSG
   FCB   $7            beep
   FCB   0
   
-* pile permettant de boucler 170 trames
-  RMB   2*170-(*-ERRORMSG),0
-STACK
-
 PALDATA
 *  FDB   $000,$00F,$0F0,$0FF
 *  FDB   $F00,$F0F,$FF0,$FFF
@@ -1096,6 +1092,9 @@ PALDATA
 *  FDB   $600,$606,$660,$666
 
 COLOR set PALDATA+32
+
+* pile permettant de boucler 170 trames
+STACK set *+2*170-(*-ERRORMSG)
 
   ECHO *************************************
   ECHO * MODE &MODE
