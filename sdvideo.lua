@@ -119,7 +119,7 @@ local MODE          = env('MODE',MODE_DITH)
 local FPS           = env('FPS',16)
 local COLOR         = env('COLOR',-1)
 local GAMMA         = env('GAMMA',-1)
-local SCROLL        = env('SCROLL', 'true')
+local SCROLL        = env('SCROLL', -1)
 local FFMPEG        = locate('ffmpeg', 'tools')
 local YT_DL         = locate('yt-dlp', 'tools')
 local BIN           = locate('bin/')
@@ -3164,56 +3164,71 @@ function CONVERTER:_compress(pos, prev, curr, indices_fcn, out_fcn)
 			if k<0 or k>257 then -- deplacement arbitraire
 				pos,b0,b1,b2 = i,3,128+math.floor(i/256),i%256
 			else
+--[[
+budget = 107 / 31
+RP5 RP4 RP3
+CP1-0,5,5 
+
+budget = 41
+CP2-N,8,8
+
+budget = 38
+CP1-1,6,6
+
+budger = 35
+CP1-1,4,4 CP2-N,6,6 CP4-N,4,4
+
+budget = 32
+CP1,-1,3 CP2,-N,4 CP4-N,4,0 CP2-N,6,0
+]]--
+			
 				c0,c1,c2,c3 = curr[pos],curr[pos+1],curr[pos+2],curr[pos+3]
-				if  k<8 and c0==c2 and c1==c3 
-				and c0==curr[pos-40] and c1==curr[pos-39]
+				if  k<8 
+				and c0==c2          and c1==c3 
+				and c0==curr[pos-2] and c1==curr[pos-1]
 				and c0==curr[pos+4] and c1==curr[pos+5] 
 				and c0==curr[pos+6] and c1==curr[pos+7] 
-				then --  LZ-2,8,2
+				then -- 2,8,-2
 					pos,b0,b1,b2,
 					prev[pos],prev[pos+1],prev[pos+2],prev[pos+3],
 					prev[pos+4],prev[pos+5],prev[pos+6],prev[pos+7]
 					= 
 					pos+8,3,128+64,0,
-					c0,c1,c0,c1,c0,c1,c0,c1
-				elseif k<6 and c0==curr[pos-1]
-				and    c0==c1 and c0==c2 and c0==c3
-				and    c0==curr[pos+4] 
-				and    c0==curr[pos+5]
-				then -- LZ-1,6
+					c0,c1,c2,c3,c0,c1,c2,c3
+				elseif k<5 
+				and c0==c1 and c0==c2 and c0==c3 and c0==curr[pos+4]
+				then -- 1,5
 					pos,b0,b1,b2,
-					prev[pos],prev[pos+1],prev[pos+2],prev[pos+3],
-					prev[pos+4],prev[pos+5]
+					prev[pos],prev[pos+1],prev[pos+2],prev[pos+3],prev[pos+4]
 					= 
-					pos+6,3,128+64+32,0,
-					c0,c0,c0,c0,c0,c0
-				elseif k<6 and c0==0 
-				and    c0==c1 and c0==c2 and c0==c3
-				and    c0==curr[pos+4] 
-				and    c0==curr[pos+5]
-				then -- LZ6
-					pos,b0,b1,b2,
-					prev[pos],prev[pos+1],prev[pos+2],prev[pos+3],
-					prev[pos+4],prev[pos+5]
-					= 
-					pos+6,3,128+64+32+16+8,0,
-					c0,c0,c0,c0,c0,c0
+					pos+5,3,0,c0,
+					c0,c1,c2,c3,c0
 				elseif k<4 
-				and    c0==curr[pos-40] and c1==curr[pos-39] 
-				and    c2==curr[pos-38] and c3==curr[pos-37]
-			    then -- LZ-40,4
+				and c0==c2          and c1==c3 
+				and c0==curr[pos-2] and c1==curr[pos-1]
+				then -- 2,4,-2
+					pos,b0,b1,b2,
+					prev[pos],prev[pos+1],prev[pos+2],prev[pos+3]
+					= 
+					pos+4,3,128+64+32+16+8,0,
+					c0,c1,c2,c3
+				elseif k<4
+				and c0==curr[pos-40] and c1==curr[pos-39]
+				and c2==curr[pos-38] and c3==curr[pos-37]
+				then --  4,4,-40
 					pos,b0,b1,b2,
 					prev[pos],prev[pos+1],prev[pos+2],prev[pos+3]
 					= 
 					pos+4,3,128+64+32+16,0,
 					c0,c1,c2,c3
-				elseif k<4 and c0==c1 and c0==c2 and c0==c3
-				then -- CP4
+				elseif k<3 
+				and c0==c1 and c0==c2 and c0==c3
+				then -- 1,3
 					pos,b0,b1,b2,
-					prev[pos],prev[pos+1],prev[pos+2],prev[pos+3]
+					prev[pos],prev[pos+1],prev[pos+2]
 					= 
-					pos+4,3,0,c0,
-					c0,c0,c0,c0
+					pos+3,3,128+64+32,c0,
+					c0,c1,c2
 				elseif k==0 and c1==prev[pos+1] then
 					pos,b0,b1,b2,
 					prev[pos],prev[pos+1],prev[pos+2]
@@ -3230,9 +3245,9 @@ function CONVERTER:_compress(pos, prev, curr, indices_fcn, out_fcn)
 					pos,b0,b1,b2,prev[i] = i+1,1,k-2,curr[i],curr[i]
 				end
 			end
-			-- print(zz, b0, b1, b2, '-->', pos)
+			-- print(zz, b0, b1, b2, '-²->', pos)
 			-- if b2==nil then print() print(i, b0, b1, b2, curr[i+1]) end
-			if b1<0 or b1>255 then error(b0..' '..b1..' '..b2) end
+			-- if b1<0 or b1>255 then error(b0..' '..b1..' '..b2) end
 			out_fcn(b0,b1,b2)
 		end
 	end
@@ -3294,12 +3309,14 @@ function CONVERTER:_stat()
 		end)
     end
 
+	local SC = SCROLL; SCROLL=false
     while stat.running do
         stat:next_image()
         stat:count_trames()
     end
     io.stderr:write(string.rep(' ',79)..'\r')
     io.stderr:flush()
+	SCROLL = SC
 	
 	-- nb de trames vidéos par image
 	local avg_trames = (stat.trames/stat.cpt) -- * 1.15 -- 15% safety margin*
@@ -3313,8 +3330,9 @@ function CONVERTER:_stat()
 		self.fps = FPS_MAX
 	elseif ratio>1 or neg_fps then
 		self.fps = math.min(round(self.fps*ratio),FPS_MAX)
-	elseif ratio<1 then
+	elseif ratio<=1 then
 		local zoom = ratio^.5
+		if SCROLL==-1 then SCROLL=false end
 		self.w=round(self.w*zoom)
 		self.h=round(self.h*zoom)
 	end
@@ -3544,7 +3562,9 @@ function CONVERTER:process()
 			end)
 			
 			-- adapt filtering
-			if cycles >= filter_s*cycles_per_img then
+			if cycles >= video.fps*cycles_per_img/4 then
+				video.filter_a = 0
+			elseif cycles >= filter_s*cycles_per_img then
 				local t = cycles
 				repeat
 					video.filter.a = video.filter.a*filter_a + (1-filter_a)*.85
@@ -3668,7 +3688,7 @@ function OUT:open()
 end
 function OUT:frame(buf0,buf1,buf2,audio)
 	if not self.stream then self:open() end
-    local ret = 1
+    local ret = CYCLES + (buf0==3 and buf1==0xE0 and 1 or 0)
     self.buf = self.buf .. string.char(buf0+audio:next_sample()*4,buf1,buf2)
     if self.buf:len()==3*170 then
         local s1 = audio:next_sample()
@@ -3677,9 +3697,9 @@ function OUT:frame(buf0,buf1,buf2,audio)
         local t = s1*1024 + math.floor(s2/2)*32 + math.floor(s3/2)
         self.stream:write(self.buf .. string.char(math.floor(t/256), t%256))
         self.buf = ''
-        ret = ret + 3
+        ret = ret + 3*CYCLES
     end
-    return ret*CYCLES
+    return ret
 end
 function OUT:close()
 	if self.stream then

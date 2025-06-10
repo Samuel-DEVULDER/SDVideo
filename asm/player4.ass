@@ -771,19 +771,19 @@ TRAME_11
   BCS   TRAME_11_1                                 (3)
 
 *-----------------------------------------------------
-* Trame de CP4
+* Trame 1,5
 * s6 1 1 | 0X XX XX XX | PP PP PP PP             (114)
 *-----------------------------------------------------
-TRAME_CP4
+TRAME_1_5
   REPT  7,GET_BIT                                 (28)
   REPT  8,READ_BIT                                (48)
 * budget = 31
   STB   ,X                                         (4)
-  STB   1,X                                        (5)
-  STB   2,X                                        (5)
-  STB   3,X                                        (5)
-  LEAX  4,X                                        (5)
-  NOP                                              (2)
+  LDA   ,X                                         (4)
+  STD   1,X                                        (6)
+  STD   3,X                                        (6)
+  LDD   #$7F05                                     (3)
+  ABX                                              (3)
   RTS                                              (5)
 
 TRAME_11_1
@@ -801,9 +801,9 @@ TRAME_11_10
   VAR   PATCH_POS,-1
   REPT  5,READ_BIT    lecture bits poids fort     (30)
   STB   <POS,PCR      debut nouvelle addr video    (5)
+  REPT  8,READ_BIT    lecture bits poids faible   (48)
   LDX   #$0000        chargement poids fort        (3)
   VAR   POS,-2
-  REPT  8,READ_BIT    lecture bits poids faible   (48)
   ABX                 ajout poids faible           (3)
   RTS                 nouvelle trame               (5)
 
@@ -812,13 +812,13 @@ TRAME_11_11
   BCS   TRAME_11_111                               (3)
 
 *-----------------------------------------------------
-* Trame LZ-40,8,2
+* Trame 2,8,-2
 * s6 1 1 | 11 0X XX XX | XX XX XX XX             (114)
 *-----------------------------------------------------
-TRAME_LZ_2_8_2
+TRAME_2_8_2
   REPT  13,GET_BIT                                (52)
 * budget = 41
-  LDU   -40,X                                       (6)
+  LDU   -2,X                                       (6)
   STU   ,X                                         (5)
   STU   2,X                                        (6)
   STU   4,X                                        (6)
@@ -832,36 +832,35 @@ TRAME_11_111
   BCS   TRAME_11_1111                              (3)
 
 *-----------------------------------------------------
-* Trame LZ-1,6
+* Trame 1,3
 * s6 1 1 | 11 10 XX XX | XX XX XX XX             (114)
 *-----------------------------------------------------
-TRAME_LZ_1_6
-  REPT  12,GET_BIT                                (48)
-* budget = 38
-  LDB  -1,X                                        (5)
-  LDA  -1,X                                        (5)
-  STD  ,X                                          (5)
-  STD  2,X                                         (6)
-  STD  4,X                                         (6)
-  LDD  #$7F06                                      (3)
-  ABX                                              (3)
-  RTS                                              (5)
+TRAME_1_3
+* budget = 86
+  REPT  4,GET_BIT                                 (16)
+  REPT  8,READ_BIT                                (48)
+* budget  = 22  
+  STB   ,X+                                        (6)
+  STB   ,X+                                        (6)
+  STB   ,X+                                        (6)
+  RTS          overflow 1                          (5)
 
 TRAME_11_1111
   GET_BIT                                          (4)
   BCS   TRAME_11_11111                             (3)
 
 *-----------------------------------------------------
-* Trame LZ-40,4
+* Trame 4,4,-40
 * s6 1 1 | 11 11 0X XX | XX XX XX XX             (114)
 *-----------------------------------------------------
-TRAME_LZ_40_4
+TRAME_4_4_40
   REPT  11,GET_BIT                                (44)
-* budget 35
+* budget = 35
   LDU   -40,X                                      (6)
-  STU   ,X++                                       (8)
-  LDU   -40,X                                      (6)
-  STU   ,X++                                       (8)
+  STU   ,X                                           (5)
+  LDU   -38,X                                      (6)
+  STU   2,X                                        (6)
+  LEAX  4,X                                        (5)
   NOP                                              (2)
   RTS                                              (5)
 
@@ -870,19 +869,20 @@ TRAME_11_11111
   BCS   TRAME_11_111111                            (3)
 
 *-----------------------------------------------------
+* Trame 2,4,-2
 * s6 1 1 | 11 11 10 XX | XX XX XX XX             (114)
 *-----------------------------------------------------
-TRAME_LZ_6
-  REPT  10,READ_BIT                               (40)
+TRAME_2_4_2
+* budget = 72
+  REPT  10,GET_BIT                                (40)
 * budget = 32
-  LDU   #0                                         (3)
+  LDU   -2,X                                       (6)
   STU   ,X                                         (5)
   STU   2,X                                        (6)
-  STU   4,X                                        (6)
-  LEAX  6,X                                        (5)
-  NOP                                              (2)
+  LEAX  4,X                                        (5)
+  CMPA  1,X                                        (5)
   RTS                                              (5)
-
+  
 TRAME_11_111111
   GET_BIT                                          (4)
   BCS   TRAME_11_1111111                           (3)
