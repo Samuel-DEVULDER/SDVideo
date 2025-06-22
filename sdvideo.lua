@@ -2338,7 +2338,7 @@ elseif MODE==MODE_BM59 then -- BM59
 				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
 				t[i] = k-1 + f
 				if histo then
-					local DIV=4
+					local DIV=#vals+1
 					f = round(f*DIV)/DIV
 					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
 				end
@@ -2439,8 +2439,8 @@ elseif MODE==MODE_C345 then
 	CONFIG.asm_mode	 = 3
     CONFIG.px_size   = {4,2}
     CONFIG.dither    = 
-		-- compo(norm,double){{1,4},{5,8},{3,2},{7,6}}
-		compo(norm){{1,4},{5,8},{3,2},{7,6}}
+		compo(norm,double){{1,4},{5,8},{3,2},{7,6}}
+		-- compo(norm){{1,4},{5,8},{3,2},{7,6}}
 	CONFIG.palette   = function(CONVERTER,VIDEO)
 		local H = {r={},g={},b={}}
 		for i=0,255 do H.r[i]=0; H.g[i]=0; H.b[i]=0 end	
@@ -2458,7 +2458,7 @@ elseif MODE==MODE_C345 then
 				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
 				t[i] = k-1 + f
 				if histo then
-					local DIV=4 -- 2
+					local DIV=#vals+1
 					f = round(f*DIV)/DIV
 					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
 				end
@@ -2576,15 +2576,15 @@ elseif MODE==MODE_C345 then
 			r = math.floor(r) +
 			-- (r%1>self.dither:get(x,3*y+0) and 1 or 0)
 			-- (r%1>=(r>=1 and d or self.dither:get(x,3*y+0)) and 1 or 0)
-			(r%1>d and 1 or 0)
+			(r%1>=d and 1 or 0)
 			g = math.floor(g) +
 			-- (g%1>self.dither:get(x,3*y+1) and 1 or 0)
 			-- (g%1>=(g>=1 and d or self.dither:get(x,3*y+1)) and 1 or 0)
-			(g%1>d and 1 or 0)
+			(g%1>=d and 1 or 0)
 			b = math.floor(b) +
 			-- (b%1>self.dither:get(x,3*y+2) and 1 or 0)
 			-- (b%1>=(b>=1 and d or self.dither:get(x,3*y+2)) and 1 or 0)
-			(b%1>d and 1 or 0)
+			(b%1>=d and 1 or 0)
 			else
 			r = math.floor(r) +
 			-- (r%1>self.dither:get(x,3*y+0) and 1 or 0)
@@ -2607,7 +2607,7 @@ elseif MODE==MODE_C345 then
 elseif MODE==MODE_RGB6 then -- RGB6
     CONFIG.asm_mode	 = 3
     CONFIG.px_size   = {4,3}
-	CONFIG.dither    = compo(norm,bayer){{1}}
+	CONFIG.dither    = compo(norm,double,bayer){{1}}
 	CONFIG.palette   = function(CONVERTER,VIDEO)
 		local H = {r={},g={},b={}}
 		for i=0,255 do H.r[i]=0; H.g[i]=0; H.b[i]=0 end	
@@ -2625,7 +2625,7 @@ elseif MODE==MODE_RGB6 then -- RGB6
 				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
 				t[i] = k-1 + f
 				if histo then
-					local DIV=4--2
+					local DIV=#vals+1
 					f = round(f*DIV)/DIV
 					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
 				end
@@ -2697,15 +2697,15 @@ elseif MODE==MODE_RGB6 then -- RGB6
 		local f,d,int = self._linear,self.dither:get(x,y),math.floor
         r,g,b = f[r],f[g],f[b]
         r = int(r) + 
-			(r%1>d and 1 or 0)
+			(r%1>=d and 1 or 0)
 			-- (r%1>(r>=1 and d or self.dither:get(x,3*y+0)) and 1 or 0)
 			-- (r%1>self.dither:get(x,3*y+0) and 1 or 0)
         g = int(g) + 
-			(g%1>d and 1 or 0)
+			(g%1>=d and 1 or 0)
 			-- (g%1>(g>=1 and d or self.dither:get(x,3*y+1)) and 1 or 0)
 			-- (g%1>self.dither:get(x,3*y+1) and 1 or 0)
         b = int(b) + 
-			(b%1>d and 1 or 0)
+			(b%1>=d and 1 or 0)
 			-- (b%1>(b>=1 and d or self.dither:get(x,3*y+2)) and 1 or 0)
 			-- (b%1>self.dither:get(x,3*y+2) and 1 or 0)
         if g>0 then g=g+5  end
@@ -2837,7 +2837,7 @@ elseif MODE==MODE_RGB4 then --
 				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
 				t[i] = k-1 + f
 				if histo then
-					local DIV=4
+					local DIV=#vals+1
 					f = round(f*DIV)/DIV
 					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
 				end
@@ -2910,7 +2910,8 @@ elseif MODE==MODE_RGB5 then
 		bayer{{3},{1},{2},{4}}
 	CONFIG.palette   = function(CONVERTER,VIDEO)
 		local H = {r={},g={},b={},w={}}
-		for i=0,255 do H.r[i]=0; H.g[i]=0; H.b[i]=0; H.w[i]=0 end		local function map(vals, histo)
+		for i=0,255 do H.r[i]=0; H.g[i]=0; H.b[i]=0; H.w[i]=0 end		
+		local function map(vals, histo)
 			local t={}; t[0] = 0
 			local k,v0,v1=1,0,PALETTE.linear(vals[1])
 			local e,h=0,{}
@@ -2924,7 +2925,7 @@ elseif MODE==MODE_RGB5 then
 				local f = (v-v0)/(v1-v0); if f>=1 then f=1 end
 				t[i] = k-1 + f
 				if histo then
-					local DIV=8
+					local DIV=#vals+1
 					f = round(f*DIV)/DIV
 					e = e + h[i]*math.abs(v0 + f*(v1-v0) - v)^2
 				end
@@ -3195,6 +3196,16 @@ CP1,-1,3 CP2,-N,4 CP4-N,4,0 CP2-N,6,0
 					= 
 					pos+8,3,128+64,0,
 					c0,c1,c2,c3,c0,c1,c2,c3
+				elseif k<6 
+				and c0==c2           and c1==c3 
+				and c0==curr[pos-2] and c1==curr[pos-1]
+				and c0==curr[pos+4]  and c1==curr[pos+5]
+				then -- 2,6,-2
+					pos,b0,b1,b2,
+					prev[pos],prev[pos+1],prev[pos+2],prev[pos+3],prev[pos+4],prev[pos+5]
+					= 
+					pos+6,3,128+64+32+16+8,0,
+					c0,c1,c0,c1,c0,c1
 				elseif k<5 
 				and c0==c1 and c0==c2 and c0==c3 and c0==curr[pos+4]
 				then -- 1,5
@@ -3203,15 +3214,6 @@ CP1,-1,3 CP2,-N,4 CP4-N,4,0 CP2-N,6,0
 					= 
 					pos+5,3,0,c0,
 					c0,c1,c2,c3,c0
-				elseif k<4 
-				and c0==c2          and c1==c3 
-				and c0==curr[pos-2] and c1==curr[pos-1]
-				then -- 2,4,-2
-					pos,b0,b1,b2,
-					prev[pos],prev[pos+1],prev[pos+2],prev[pos+3]
-					= 
-					pos+4,3,128+64+32+16+8,0,
-					c0,c1,c2,c3
 				elseif k<4
 				and c0==curr[pos-40] and c1==curr[pos-39]
 				and c2==curr[pos-38] and c3==curr[pos-37]
@@ -3221,6 +3223,15 @@ CP1,-1,3 CP2,-N,4 CP4-N,4,0 CP2-N,6,0
 					= 
 					pos+4,3,128+64+32+16,0,
 					c0,c1,c2,c3
+				elseif k<4
+				and c0==c2           and c1==c3 
+				and c0==curr[pos-2] and c1==curr[pos-1]
+				then -- 2,4,-2
+					pos,b0,b1,b2,
+					prev[pos],prev[pos+1],prev[pos+2],prev[pos+3]
+					= 
+					pos+4,3,128+64+32+16+8+4+2,0,
+					c0,c1,c0,c1
 				elseif k<3 
 				and c0==c1 and c0==c2 and c0==c3
 				then -- 1,3
@@ -3228,6 +3239,14 @@ CP1,-1,3 CP2,-N,4 CP4-N,4,0 CP2-N,6,0
 					prev[pos],prev[pos+1],prev[pos+2]
 					= 
 					pos+3,3,128+64+32,c0,
+					c0,c1,c2
+				elseif k<3 
+				and c0==c1 and c0==c2 and c0==curr[pos-1]
+				then -- 1,3,-1
+					pos,b0,b1,b2,
+					prev[pos],prev[pos+1],prev[pos+2]
+					= 
+					pos+3,3,128+64+32+16+8+4,c0,
 					c0,c1,c2
 				elseif k==0 and c1==prev[pos+1] then
 					pos,b0,b1,b2,
@@ -3270,22 +3289,23 @@ function CONVERTER:_stat()
 	stat:pset(0,0,0,0,0)
     stat.super_pset = stat.pset
     stat.histo = {}; for i=0,255 do stat.histo[i]=0 end
-	function stat:pset(x,y, r,g,b)
+	function self:pset(x,y, r,g,b)
 		self:super_pset(x,y,r,g,b)
 		x = self.histo
-		x[r],x[g],x[b] = x[r]+1,x[g]+1,x[b]+1
-	end	
+		x[r] = x[r]+1
+		x[g] = x[g]+1
+		x[b] = x[b]+1
+	end
+	stat.overwrite = function(self, bool)		
+		self._overwrite = bool
+	end
 	local chg_color = COLOR<0 and CONFIG.asm_mode==0
 	if chg_color then
 		stat.n,stat.r,stat.g,stat.b,stat._pset_ = 0,0,0,0,stat.pset
-		local function pset(self, x,y, r,g,b)
+		function stat:pset(x,y, r,g,b)
 			self:_pset_(x,y,r,g,b)
 			local l = PALETTE.linear
 			stat.n,stat.r,stat.g,stat.b = stat.n+1,stat.r+l(r),stat.g+l(g),stat.b+l(b)
-		end
-		stat.pset = pset
-		stat.overwrite = function(self, bool)
-			self._overwrite, self.pset = bool, pset
 		end
 	end
     stat.super_next_image = stat.next_image
@@ -3433,15 +3453,23 @@ function CONVERTER:process()
 	-- print(self.video_cor[1],self.video_cor[2])
     if self.video_cor[1]~=0 or self.video_cor[2]~=1 then
         local cor = self.video_cor
-	-- print('min/max corr', cor[1],cor[2])
+	print('min/max corr', cor[1],cor[2])
         local super_pset = video.pset
-        function video:pset(x,y, r,g,b)
+		local _ovr = video.overwrite
+		local _pset = function(self, x,y, r,g,b)
             local function f(x)
                 x = round((x-cor[1])*cor[2])
                 return x<0 and 0 or x>255 and 255 or x
             end
             super_pset(self, x,y, f(r),f(g),f(b))
         end
+		video.pset  = pset
+		--- overwrite
+		video.overwrite = function(self, ovr) 
+			_ovr(self,ovr)
+			super_pset = self.pset
+			video.pset = _pset
+		end
     end
 
     -- vars pour la conversion
@@ -3688,7 +3716,7 @@ function OUT:open()
 end
 function OUT:frame(buf0,buf1,buf2,audio)
 	if not self.stream then self:open() end
-    local ret = CYCLES + (buf0==3 and buf1==0xE0 and 1 or 0)
+    local ret = CYCLES + (buf0==3 and (buf1==0xE0 or buf1==0xF8 or buf1==0xFE) and 1 or 0)
     self.buf = self.buf .. string.char(buf0+audio:next_sample()*4,buf1,buf2)
     if self.buf:len()==3*170 then
         local s1 = audio:next_sample()

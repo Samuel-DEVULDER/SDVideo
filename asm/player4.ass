@@ -181,9 +181,6 @@ INIT
 
   LDD   #$E7C3        Valeur espace I/O
   STA   PATCH_CYC     pour compenser 1 cycle
-  STB   TRAME_SWAP_PATCH1
-  STB   TRAME_SWAP_PATCH2
-  STD   TRAME_FONDFORME_PATCH
   
   STB   <$5F          change le mode gfx pour reset
   CLR   <$D1          force reset basic
@@ -686,7 +683,7 @@ FORME_MO
 *------------------------------------------------------
 COLCONV
   PSHS  D
-  LDA   MACHINE      deviendra CMPA #nn sur TO
+  LDA   MACHINE      
   BMI   COLCONV2
   LDA   1,S
   ANDA  #$F0
@@ -857,7 +854,7 @@ TRAME_4_4_40
   REPT  11,GET_BIT                                (44)
 * budget = 35
   LDU   -40,X                                      (6)
-  STU   ,X                                           (5)
+  STU   ,X                                         (5)
   LDU   -38,X                                      (6)
   STU   2,X                                        (6)
   LEAX  4,X                                        (5)
@@ -869,42 +866,36 @@ TRAME_11_11111
   BCS   TRAME_11_111111                            (3)
 
 *-----------------------------------------------------
-* Trame 2,4,-2
+* Trame 2,6,-2
 * s6 1 1 | 11 11 10 XX | XX XX XX XX             (114)
 *-----------------------------------------------------
-TRAME_2_4_2
+TRAME_2_6_2
 * budget = 72
   REPT  10,GET_BIT                                (40)
 * budget = 32
   LDU   -2,X                                       (6)
   STU   ,X                                         (5)
   STU   2,X                                        (6)
-  LEAX  4,X                                        (5)
-  CMPA  1,X                                        (5)
-  RTS                                              (5)
+  STU   4,X                                        (6)
+  LEAX  6,X                                        (5)
+  RTS         overflow 1                           (5)
   
 TRAME_11_111111
   GET_BIT                                          (4)
   BCS   TRAME_11_1111111                           (3)
 
 *-----------------------------------------------------
-* s6 1 1 | 11 11 11 0X | XX XX XX Xf             (114)
+* Trame 1,3,-1
+* s6 1 1 | 11 11 11 0X | XX XX XX XX             (114)
 *-----------------------------------------------------
-TRAME_FONDFORME
-* budget = 65
-  LDU   #$A7C0                                     (3)
-  VAR   TRAME_FONDFORME_PATCH,-2 
-  EXG   X,X                                        (8)
+TRAME_1_3_1
   REPT  9,GET_BIT                                 (36)
-  BCC   TRAME_FOND                                 (3)
-  LDB   #1                                         (2)
-  ORB   ,U                                         (4)
-  STB   ,U                                         (4)
-  RTS                                              (5)
-TRAME_FOND  
-  LDB   #254                                       (2)
-  ANDB  ,U                                         (4)
-  STB   ,U                                         (4)
+* budget 29
+  LDB   -1,X                                       (5)
+  STB   ,X                                         (4)
+  STB   1,X                                        (5)
+  STB   2,X                                        (5)
+  LEAX  3,X                                        (5)
   RTS                                              (5)
 
 TRAME_11_1111111
@@ -912,20 +903,17 @@ TRAME_11_1111111
   BCS   TRAME_11_11111111                          (3)
 
 *-----------------------------------------------------
-* Permute RAMA/RAMB
+* Trame 2,4,-2
 * s6 1 1 | 11 11 11 10 | XX XX XX XX             (114)
 *-----------------------------------------------------
-TRAME_SWAP
+TRAME_2_4_2
   REPT  8,GET_BIT                                 (32)
 * budget = 26
-  EXG   X,Y                                        (8)
-  LDB   #$01                                       (2)
-  EORB  <$C0                                       (4)
-  VAR   TRAME_SWAP_PATCH1,-1
-  STB   <$C0                                       (4)
-  VAR   TRAME_SWAP_PATCH2,-1
-  BRN   *                                          (3)
-  RTS                                              (5)
+  LDU  -2,X                                        (6)
+  STU  ,X                                          (5)
+  STU  2,X                                         (6)
+  LEAX 4,X                                         (5)
+  RTS        overflow 1                            (5)
 
 *-----------------------------------------------------
 * Trame de fin 
