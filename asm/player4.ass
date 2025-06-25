@@ -686,14 +686,14 @@ COLCONV
   LDA   MACHINE      
   BMI   COLCONV2
   LDA   1,S
+  EORA  #128          inversion bit pastel
   ANDA  #$F0
   LSRA
   STA   1,S  
-  ORB   #$70
+  ORB   #$F0
   ADDB  #$08
   ANDB  #$87
   ORB   1,S
-  EORB  #%11000000    inversion bit pastel
   STB   1,S
 COLCONV2
   PULS  D,PC
